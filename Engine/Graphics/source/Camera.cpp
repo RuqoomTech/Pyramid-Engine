@@ -1,6 +1,8 @@
 #include <Pyramid/Graphics/Camera.hpp>
 #include <Pyramid/Math/Math.hpp>
 
+#include <cmath>
+
 namespace Pyramid
 {
 
@@ -10,7 +12,7 @@ namespace Pyramid
     }
 
     Camera::Camera(f32 fov, f32 aspectRatio, f32 nearPlane, f32 farPlane, ProjectionType type)
-        : m_fov(fov), m_aspectRatio(aspectRatio), m_nearPlane(nearPlane), m_farPlane(farPlane), m_projectionType(type)
+        : m_projectionType(type), m_fov(fov), m_aspectRatio(aspectRatio), m_nearPlane(nearPlane), m_farPlane(farPlane)
     {
         UpdateViewMatrix();
         UpdateProjectionMatrix();
@@ -101,6 +103,40 @@ namespace Pyramid
         m_frustumPlanesDirty = true;
     }
 
+    bool Camera::SetViewportSize(u32 width, u32 height)
+    {
+        if (width == 0 || height == 0)
+        {
+            return false;
+        }
+
+        const f32 aspectRatio = static_cast<f32>(width) / static_cast<f32>(height);
+        if (std::abs(m_aspectRatio - aspectRatio) <= Math::EPSILON)
+        {
+            return true;
+        }
+
+        m_aspectRatio = aspectRatio;
+
+        if (m_projectionType == ProjectionType::Orthographic)
+        {
+            const f32 centerX = (m_orthoLeft + m_orthoRight) * 0.5f;
+            const f32 centerY = (m_orthoBottom + m_orthoTop) * 0.5f;
+            const f32 halfHeight = (m_orthoTop - m_orthoBottom) * 0.5f;
+            const f32 halfWidth = halfHeight * aspectRatio;
+
+            m_orthoLeft = centerX - halfWidth;
+            m_orthoRight = centerX + halfWidth;
+            m_orthoBottom = centerY - halfHeight;
+            m_orthoTop = centerY + halfHeight;
+        }
+
+        m_projectionMatrixDirty = true;
+        m_viewProjectionMatrixDirty = true;
+        m_frustumPlanesDirty = true;
+        return true;
+    }
+
     void Camera::SetPerspective(f32 fov, f32 aspectRatio, f32 nearPlane, f32 farPlane)
     {
         m_projectionType = ProjectionType::Perspective;
@@ -121,6 +157,13 @@ namespace Pyramid
         m_orthoRight = right;
         m_orthoBottom = bottom;
         m_orthoTop = top;
+
+        const f32 height = top - bottom;
+        if (std::abs(height) > Math::EPSILON)
+        {
+            m_aspectRatio = (right - left) / height;
+        }
+
         m_nearPlane = nearPlane;
         m_farPlane = farPlane;
 

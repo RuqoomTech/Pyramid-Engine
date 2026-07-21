@@ -13,7 +13,7 @@ The current `0.6.0-pre-alpha` baseline includes:
 - strict required window operations with Win32 implementations;
 - relocatable install/export package and external-consumer test;
 - Windows Debug/Release CI for build, CTest, install, and package consumption;
-- 13 registered tests, including PNG/JPEG parsers, OpenGL diagnostics, and platform-neutral resize-event coverage;
+- 14 registered tests, including PNG/JPEG parsers, OpenGL diagnostics, window events, and camera-resize coverage;
 - corrected standards-invalid PNG, zlib, and JPEG test fixtures;
 - public texture convenience definitions and explicit depth-target failure;
 - definitions for scene events, box queries, visibility statistics, spatial test scenes, and octree operations;
@@ -21,7 +21,8 @@ The current `0.6.0-pre-alpha` baseline includes:
 - whole-object non-Windows static linkage validation with no unresolved symbols;
 - a missing `<cstring>` dependency fixed in the image loader;
 - Debug-context negotiation and OpenGL driver callback diagnostics;
-- platform-neutral resize events delivered from Win32 `WM_SIZE` through `Game::onWindowResize()`.
+- platform-neutral resize events delivered from Win32 `WM_SIZE` through `Game::onWindowResize()`;
+- automatic default-viewport updates, active-camera projection synchronization, and minimized-window render suspension.
 
 ## P0 — verify and finish the current vertical slice
 
@@ -38,7 +39,8 @@ The current `0.6.0-pre-alpha` baseline includes:
 - Implement compute dispatch or remove it from the command model.
 - Complete backend-neutral framebuffer binding.
 - [x] Add platform-neutral window resize events.
-- Remove fixed deferred target dimensions and propagate resize events into viewport, camera, and render targets.
+- [x] Propagate renderable resize events into the default viewport and active camera.
+- Remove fixed deferred target dimensions and propagate resize events into framebuffer/render-pass targets.
 - Complete deferred shadow-map-array binding.
 - Verify multisampled targets, resolve behavior, and attachment ownership.
 - [x] Add OpenGL debug-callback handling.

@@ -102,6 +102,18 @@ namespace Pyramid
 
         // Projection settings
         /**
+         * @brief Update projection state for a render-surface size.
+         * @param width Renderable surface width in pixels.
+         * @param height Renderable surface height in pixels.
+         * @return true when the dimensions are valid and projection state was updated.
+         *
+         * Perspective cameras update their aspect ratio. Orthographic cameras
+         * preserve their vertical span and adjust the horizontal span. Zero-sized
+         * surfaces are rejected so minimize events cannot corrupt projection state.
+         */
+        bool SetViewportSize(u32 width, u32 height);
+
+        /**
          * @brief Set perspective projection parameters
          * @param fov Field of view in radians
          * @param aspectRatio Aspect ratio (width/height)

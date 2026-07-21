@@ -1,9 +1,11 @@
 #include "Pyramid/Core/Game.hpp"
 #include "Pyramid/Platform/Windows/Win32OpenGLWindow.hpp"
+#include <Pyramid/Graphics/Camera.hpp>
 #include <Pyramid/Util/Log.hpp>
 #include <memory>
 #include <chrono>
 #include <algorithm>
+#include <thread>
 
 namespace Pyramid
 {
@@ -11,8 +13,10 @@ namespace Pyramid
     Game::Game(GraphicsAPI api)
         : m_window(nullptr)
         , m_graphicsDevice(nullptr)
+        , m_activeCamera(nullptr)
         , m_isRunning(false)
         , m_initialized(false)
+        , m_renderSurfaceAvailable(false)
     {
         PYRAMID_LOG_INFO("Initializing Pyramid Game Engine...");
         
@@ -52,8 +56,10 @@ namespace Pyramid
         m_window->SetResizeCallback(
             [this](const WindowResizeEvent& event)
             {
-                onWindowResize(event);
+                HandleWindowResize(event);
             });
+
+        m_renderSurfaceAvailable = m_window->GetWidth() > 0 && m_window->GetHeight() > 0;
 
         PYRAMID_LOG_INFO("Game engine initialized successfully");
         m_initialized = true;
@@ -129,6 +135,47 @@ namespace Pyramid
         }
     }
 
+    void Game::SetActiveCamera(Camera* camera)
+    {
+        m_activeCamera = camera;
+        if (!m_activeCamera || !m_window)
+        {
+            return;
+        }
+
+        const int width = m_window->GetWidth();
+        const int height = m_window->GetHeight();
+        if (width > 0 && height > 0)
+        {
+            m_activeCamera->SetViewportSize(
+                static_cast<u32>(width),
+                static_cast<u32>(height));
+        }
+    }
+
+    void Game::HandleWindowResize(const WindowResizeEvent& event)
+    {
+        m_renderSurfaceAvailable = event.HasRenderableArea();
+
+        if (m_renderSurfaceAvailable)
+        {
+            const u32 width = static_cast<u32>(event.width);
+            const u32 height = static_cast<u32>(event.height);
+
+            if (m_graphicsDevice && m_graphicsDevice->IsValid())
+            {
+                m_graphicsDevice->SetViewport(0, 0, width, height);
+            }
+
+            if (m_activeCamera)
+            {
+                m_activeCamera->SetViewportSize(width, height);
+            }
+        }
+
+        onWindowResize(event);
+    }
+
     void Game::onWindowResize(const WindowResizeEvent& event)
     {
         if (event.state == WindowResizeState::Minimized)
@@ -190,8 +237,17 @@ namespace Pyramid
             // Update game logic
             onUpdate(deltaTime);
             
-            // Render frame
-            onRender();
+            // Render only while the client area is valid. Minimized Win32
+            // windows report a zero-sized surface; skipping presentation avoids
+            // invalid viewport/projection work and prevents a busy render loop.
+            if (m_renderSurfaceAvailable)
+            {
+                onRender();
+            }
+            else
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(16));
+            }
         }
 
         PYRAMID_LOG_INFO("Game loop ended");

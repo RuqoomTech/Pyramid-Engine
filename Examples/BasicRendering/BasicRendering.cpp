@@ -257,6 +257,7 @@ void BasicRendering::SetupCamera()
     // Set initial camera position
     m_camera->SetPosition(Vec3(0.0f, 2.0f, 5.0f));
     m_camera->LookAt(Vec3::Zero, Vec3::Up);
+    SetActiveCamera(m_camera.get());
 
     PYRAMID_LOG_INFO("Camera setup completed");
 }

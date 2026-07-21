@@ -54,13 +54,13 @@ Utility tests live under `Engine/Utils/test` and are registered by `add_utils_te
 - clean up temporary files;
 - print enough context to diagnose a failure.
 
-`API.PublicApiLinkage` verifies selected exported symbols. `Platform.WindowResizeEvents` verifies the platform-neutral callback contract without requiring a Win32 window. Windows CI validates GCC and Clang in Debug and Release, plus installation and an external `find_package` consumer.
+`API.PublicApiLinkage` verifies selected exported symbols. `Platform.WindowResizeEvents` verifies the platform-neutral callback contract without requiring a Win32 window. `Graphics.CameraViewportResize` verifies perspective/orthographic resize behavior and zero-area rejection. Windows CI validates GCC and Clang in Debug and Release, plus installation and an external `find_package` consumer.
 
 Renderer changes require manual visual validation until image-regression tests exist.
 
 Debug builds request an OpenGL debug context and attach a synchronous driver callback when supported. Driver warnings and errors are routed through `PYRAMID_LOG_*`; notification-level messages are suppressed. Release builds do not enable the callback.
 
-Window resize callbacks run synchronously on the game thread while `ProcessMessages()` dispatches native events. Keep handlers lightweight, reject `!event.HasRenderableArea()`, and avoid retaining references to the callback argument.
+Window resize callbacks run synchronously on the game thread while `ProcessMessages()` dispatches native events. Before the virtual hook runs, `Game` updates the default viewport, synchronizes the camera registered through `SetActiveCamera()`, and marks zero-sized/minimized surfaces non-renderable. Keep custom handlers lightweight, reject `!event.HasRenderableArea()`, resize only custom render targets there, and avoid retaining references to the callback argument.
 
 ## CMake and package changes
 

@@ -21,6 +21,9 @@ protected:
     virtual void onRender();
     virtual void onWindowResize(const WindowResizeEvent& event);
     IGraphicsDevice* GetGraphicsDevice() const;
+    void SetActiveCamera(Camera* camera);
+    Camera* GetActiveCamera() const;
+    bool IsRenderSurfaceAvailable() const;
 };
 ```
 
@@ -32,7 +35,7 @@ Header: `Pyramid/Platform/Window.hpp`
 
 The window interface requires initialization, presentation, context activation, message processing, close-state reporting, title/size/position/visibility mutation, and minimized/maximized queries. The checked-in implementation is `Win32OpenGLWindow`.
 
-`Window::SetResizeCallback()` receives platform-neutral `WindowResizeEvent` values while `ProcessMessages()` dispatches native messages. Each event includes client width, client height, and a `Restored`, `Minimized`, or `Maximized` state. `WindowResizeEvent::HasRenderableArea()` is false for minimized or zero-sized windows. `Game` installs this callback and forwards it to the overridable `onWindowResize()` hook.
+`Window::SetResizeCallback()` receives platform-neutral `WindowResizeEvent` values while `ProcessMessages()` dispatches native messages. Each event includes client width, client height, and a `Restored`, `Minimized`, or `Maximized` state. `WindowResizeEvent::HasRenderableArea()` is false for minimized or zero-sized windows. `Game` installs this callback, updates the default graphics viewport, synchronizes the registered active camera, suspends rendering for non-renderable client areas, and then forwards the event to the overridable `onWindowResize()` hook.
 
 ```cpp
 void MyGame::onWindowResize(const Pyramid::WindowResizeEvent& event)
@@ -41,7 +44,8 @@ void MyGame::onWindowResize(const Pyramid::WindowResizeEvent& event)
     if (!event.HasRenderableArea())
         return;
 
-    // Update viewport, camera projection, and render targets.
+    // Default viewport and the camera registered with SetActiveCamera()
+    // are already synchronized. Resize custom framebuffers here.
 }
 ```
 
@@ -124,9 +128,14 @@ Pyramid::Camera camera(
 
 camera.SetPosition({0.0f, 2.5f, 6.0f});
 camera.LookAt(Pyramid::Math::Vec3::Zero);
+
+// Inside a Pyramid::Game-derived class:
+SetActiveCamera(&camera);
 ```
 
-The camera provides perspective/orthographic projection, quaternion/Euler rotation, local movement, view/projection matrices, coordinate conversion, and point/sphere visibility helpers.
+`Camera::SetViewportSize(width, height)` updates perspective aspect ratio or preserves an orthographic camera's vertical span while adjusting its horizontal span. It rejects zero-sized surfaces. `Game::SetActiveCamera()` stores a non-owning pointer and applies this update automatically for the current window and later resize events.
+
+The camera also provides quaternion/Euler rotation, local movement, view/projection matrices, coordinate conversion, and point/sphere visibility helpers.
 
 ## Scene
 

@@ -4,6 +4,15 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 
 ## [Unreleased]
 
+### Resize-safe rendering
+
+- Propagated renderable window resize events to the default OpenGL viewport.
+- Added `Camera::SetViewportSize()` for perspective and orthographic projection updates.
+- Added `Game::SetActiveCamera()` so one non-owning camera follows the window client size automatically.
+- Suspended rendering and presentation while the window is minimized or has a zero-sized client area.
+- Registered both examples with the active-camera resize path.
+- Added camera aspect, projection invalidation, orthographic resize, and zero-area tests.
+
 ### Window events
 
 - Added a platform-neutral `WindowResizeEvent` with restored, minimized, and maximized states.
@@ -23,7 +32,7 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 ### Next priorities
 
 - Windows runtime verification for Debug and Release.
-- Viewport, camera, and framebuffer resize propagation.
+- Framebuffer and render-pass attachment resize propagation.
 - Real JPEG block decoding.
 - Texture-format and depth-target completion.
 - Scene transform and culling correctness.

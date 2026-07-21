@@ -17,3 +17,8 @@ target_include_directories(WindowResizeEventTests
 )
 set_target_properties(WindowResizeEventTests PROPERTIES FOLDER "Tests/Platform")
 add_test(NAME Platform.WindowResizeEvents COMMAND $<TARGET_FILE:WindowResizeEventTests>)
+
+add_executable(CameraViewportTests CameraViewportTests.cpp)
+target_link_libraries(CameraViewportTests PRIVATE Pyramid::Engine)
+set_target_properties(CameraViewportTests PROPERTIES FOLDER "Tests/Graphics")
+add_test(NAME Graphics.CameraViewportResize COMMAND $<TARGET_FILE:CameraViewportTests>)

@@ -101,6 +101,7 @@ void BasicGame::onCreate()
 
     m_camera->SetPosition(Pyramid::Math::Vec3(0.0f, 2.5f, 6.0f));
     m_camera->LookAt(Pyramid::Math::Vec3::Zero);
+    SetActiveCamera(m_camera.get());
 
     m_shader = device->CreateShader();
     if (!m_shader || !m_shader->Compile(kForwardVertexShader, kForwardFragmentShader))

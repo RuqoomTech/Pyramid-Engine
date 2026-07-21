@@ -18,13 +18,13 @@ The project is intended for engine development and experimentation. It is not ye
 | Scene | Scene graph, render objects, lights, scene manager, and octree queries |
 | Math | Vectors, matrices, quaternions, geometry helpers, and SIMD-oriented utilities |
 | Images | TGA/BMP subsets, non-interlaced PNG, and experimental JPEG components |
-| Tests | 13 CTest targets: 10 utility tests plus API linkage, OpenGL diagnostics, and window-resize event coverage |
+| Tests | 14 CTest targets: 10 utility tests plus API linkage, OpenGL diagnostics, window events, and camera-resize coverage |
 | CI | GCC and Clang, Debug and Release, package install, and external-consumer validation |
 
 ## Implemented
 
 - Application lifecycle and frame loop through `Pyramid::Game`.
-- Win32 window creation, resize-event delivery, visibility, positioning, and WGL context management.
+- Win32 window creation, resize-event delivery, resize-safe viewport updates, visibility, positioning, and WGL context management.
 - OpenGL device, buffers, vertex arrays, shaders, textures, framebuffers, and state caching.
 - Forward, cascaded-shadow, deferred-geometry, and deferred-lighting passes.
 - Perspective and orthographic cameras.
@@ -135,7 +135,9 @@ protected:
         if (!event.HasRenderableArea())
             return;
 
-        // Step 3 will update the viewport, camera, and render targets here.
+        // The engine updates the default viewport automatically. Register a
+        // camera with SetActiveCamera() to keep its projection synchronized.
+        // Custom framebuffers still need explicit resize handling.
     }
 };
 

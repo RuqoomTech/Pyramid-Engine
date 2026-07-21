@@ -14,6 +14,7 @@ Demonstrates:
 - vertex/index buffer and vertex-array setup;
 - texture loading;
 - frame update and rendering;
+- automatic default-viewport updates and active-camera projection resizing;
 - platform-neutral resize-event logging through `Game::onWindowResize()`;
 - logging configuration.
 
@@ -40,7 +41,7 @@ This is the lower-level reference rendering path. It demonstrates:
 - inline GLSL 3.30 shaders;
 - cube geometry with position, normal, texture-coordinate, and color attributes;
 - scene and material uniform buffers;
-- perspective camera setup;
+- perspective camera setup registered through `Game::SetActiveCamera()`;
 - indexed rendering and basic lighting.
 
 Run:
@@ -61,6 +62,8 @@ A successful timed process run proves that startup did not immediately fail. Aft
 - shader compilation reports no errors;
 - geometry is visible;
 - resize, maximize, minimize, and restore messages appear in the log;
+- the cube keeps the correct proportions after resizing;
+- minimizing suspends rendering until a renderable client area is restored;
 - resizing does not crash;
 - closing exits cleanly;
 - the OpenGL debug/error log remains clean.

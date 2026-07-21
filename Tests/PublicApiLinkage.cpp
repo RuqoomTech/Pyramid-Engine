@@ -1,5 +1,6 @@
 #include <Pyramid/Graphics/Texture.hpp>
 #include <Pyramid/Graphics/Scene/SceneManager.hpp>
+#include <Pyramid/Graphics/Camera.hpp>
 
 #include <memory>
 #include <string>
@@ -33,6 +34,8 @@ namespace
     volatile decltype(&SceneManager::RegisterEventCallback) g_registerEvent = &SceneManager::RegisterEventCallback;
     volatile decltype(&SceneManager::TriggerEvent) g_triggerEvent = &SceneManager::TriggerEvent;
     volatile decltype(&SceneManager::DrawDebugInfo) g_drawDebugInfo = &SceneManager::DrawDebugInfo;
+    volatile decltype(&Pyramid::Camera::SetViewportSize) g_setCameraViewport =
+        &Pyramid::Camera::SetViewportSize;
 }
 
 int main()
@@ -49,7 +52,8 @@ int main()
                    g_updateVisibility &&
                    g_registerEvent &&
                    g_triggerEvent &&
-                   g_drawDebugInfo
+                   g_drawDebugInfo &&
+                   g_setCameraViewport
                ? 0
                : 1;
 }

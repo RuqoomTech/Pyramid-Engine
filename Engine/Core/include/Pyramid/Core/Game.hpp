@@ -5,6 +5,8 @@
 
 namespace Pyramid {
 
+class Camera;
+
 /**
  * @file Game.hpp
  * @brief Main game engine class that manages the graphics device and game loop
@@ -88,11 +90,34 @@ protected:
      */
     IGraphicsDevice* GetGraphicsDevice() const { return m_graphicsDevice.get(); }
 
+    /**
+     * @brief Register the camera whose projection follows the window client size.
+     * @param camera Non-owning camera pointer, or nullptr to detach it.
+     *
+     * The camera is immediately synchronized to the current renderable client
+     * area and remains synchronized across restore/maximize resize events.
+     */
+    void SetActiveCamera(Camera* camera);
+
+    /**
+     * @brief Get the camera currently synchronized with the render surface.
+     */
+    Camera* GetActiveCamera() const { return m_activeCamera; }
+
+    /**
+     * @brief Whether the window currently has a non-zero renderable client area.
+     */
+    bool IsRenderSurfaceAvailable() const { return m_renderSurfaceAvailable; }
+
 private:
+    void HandleWindowResize(const WindowResizeEvent& event);
+
     std::unique_ptr<Window> m_window;
     std::unique_ptr<IGraphicsDevice> m_graphicsDevice;
+    Camera* m_activeCamera;
     bool m_isRunning;
     bool m_initialized; // Track if initialization was successful
+    bool m_renderSurfaceAvailable;
 };
 
 } // namespace Pyramid
