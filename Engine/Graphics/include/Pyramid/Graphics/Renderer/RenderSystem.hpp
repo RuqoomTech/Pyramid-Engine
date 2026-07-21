@@ -16,6 +16,7 @@ namespace Pyramid
     class ITexture2D;
     class IUniformBuffer;
     class IVertexArray;
+    class OpenGLFramebuffer;
     class Camera;
     class Scene;
 
@@ -153,25 +154,29 @@ namespace Pyramid
         class RenderTarget
         {
         public:
-            RenderTarget(const RenderTargetSpec& spec);
+            explicit RenderTarget(const RenderTargetSpec& spec);
             ~RenderTarget();
 
+            RenderTarget(const RenderTarget&) = delete;
+            RenderTarget& operator=(const RenderTarget&) = delete;
+
             bool Initialize(IGraphicsDevice* device);
+            bool Resize(u32 width, u32 height);
             void Bind();
             void Unbind();
             void Clear(f32 r = 0.0f, f32 g = 0.0f, f32 b = 0.0f, f32 a = 1.0f);
 
-            // Accessors
+            bool IsInitialized() const { return m_initialized; }
+            bool IsComplete() const;
             u32 GetWidth() const { return m_spec.width; }
             u32 GetHeight() const { return m_spec.height; }
             u32 GetColorTexture(u32 index = 0) const;
             u32 GetDepthTexture() const;
+            const RenderTargetSpec& GetSpecification() const { return m_spec; }
 
         private:
             RenderTargetSpec m_spec;
-            u32 m_framebuffer = 0;
-            std::vector<u32> m_colorTextures;
-            u32 m_depthTexture = 0;
+            std::unique_ptr<OpenGLFramebuffer> m_framebuffer;
             bool m_initialized = false;
         };
 
@@ -188,6 +193,9 @@ namespace Pyramid
             virtual void Begin(CommandBuffer& cmd) = 0;
             virtual void Execute(CommandBuffer& cmd, const Scene& scene, const Camera& camera) = 0;
             virtual void End(CommandBuffer& cmd) = 0;
+
+            /** Resize window-sized attachments. Zero-sized extents are ignored. */
+            virtual bool Resize(u32 width, u32 height);
 
             // Configuration
             void SetRenderTarget(std::shared_ptr<RenderTarget> target) { m_renderTarget = target; }
@@ -255,6 +263,9 @@ namespace Pyramid
             void Render(const Scene& scene, const Camera& camera);
             void EndFrame();
 
+            /** Resize managed window-sized render targets and passes. */
+            bool Resize(u32 width, u32 height);
+
             // Render pass management
             void AddRenderPass(std::shared_ptr<RenderPass> pass);
             void RemoveRenderPass(RenderPassType type);
@@ -304,6 +315,8 @@ namespace Pyramid
             bool m_hdrEnabled = false;
             bool m_multisamplingEnabled = false;
             u32 m_msaaSamples = 4;
+            u32 m_width = 1280;
+            u32 m_height = 720;
             
             // Statistics
             RenderStats m_stats;

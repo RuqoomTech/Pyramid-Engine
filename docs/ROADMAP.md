@@ -13,7 +13,7 @@ The current `0.6.0-pre-alpha` baseline includes:
 - strict required window operations with Win32 implementations;
 - relocatable install/export package and external-consumer test;
 - Windows Debug/Release CI for build, CTest, install, and package consumption;
-- 14 registered tests, including PNG/JPEG parsers, OpenGL diagnostics, window events, and camera-resize coverage;
+- 15 registered tests, including PNG/JPEG parsers, OpenGL diagnostics, window events, camera resize, and framebuffer-resize coverage;
 - corrected standards-invalid PNG, zlib, and JPEG test fixtures;
 - public texture convenience definitions and explicit depth-target failure;
 - definitions for scene events, box queries, visibility statistics, spatial test scenes, and octree operations;
@@ -23,6 +23,7 @@ The current `0.6.0-pre-alpha` baseline includes:
 - Debug-context negotiation and OpenGL driver callback diagnostics;
 - platform-neutral resize events delivered from Win32 `WM_SIZE` through `Game::onWindowResize()`;
 - automatic default-viewport updates, active-camera projection synchronization, and minimized-window render suspension.
+- transactional framebuffer recreation, unified render-target ownership, and render-system resize propagation.
 
 ## P0 — verify and finish the current vertical slice
 
@@ -40,9 +41,9 @@ The current `0.6.0-pre-alpha` baseline includes:
 - Complete backend-neutral framebuffer binding.
 - [x] Add platform-neutral window resize events.
 - [x] Propagate renderable resize events into the default viewport and active camera.
-- Remove fixed deferred target dimensions and propagate resize events into framebuffer/render-pass targets.
+- [x] Remove fixed deferred target dimensions and propagate resize events into framebuffer/render-pass targets.
 - Complete deferred shadow-map-array binding.
-- Verify multisampled targets, resolve behavior, and attachment ownership.
+- Verify multisampled targets and resolve behavior across supported drivers; attachment ownership and resize preservation are now centralized.
 - [x] Add OpenGL debug-callback handling.
 - [ ] Add render-state transition tests.
 

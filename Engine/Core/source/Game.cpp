@@ -1,6 +1,7 @@
 #include "Pyramid/Core/Game.hpp"
 #include "Pyramid/Platform/Windows/Win32OpenGLWindow.hpp"
 #include <Pyramid/Graphics/Camera.hpp>
+#include <Pyramid/Graphics/Renderer/RenderSystem.hpp>
 #include <Pyramid/Util/Log.hpp>
 #include <memory>
 #include <chrono>
@@ -14,6 +15,7 @@ namespace Pyramid
         : m_window(nullptr)
         , m_graphicsDevice(nullptr)
         , m_activeCamera(nullptr)
+        , m_renderSystem(nullptr)
         , m_isRunning(false)
         , m_initialized(false)
         , m_renderSurfaceAvailable(false)
@@ -153,6 +155,24 @@ namespace Pyramid
         }
     }
 
+    void Game::SetRenderSystem(Renderer::RenderSystem* renderSystem)
+    {
+        m_renderSystem = renderSystem;
+        if (!m_renderSystem || !m_window)
+        {
+            return;
+        }
+
+        const int width = m_window->GetWidth();
+        const int height = m_window->GetHeight();
+        if (width > 0 && height > 0)
+        {
+            m_renderSystem->Resize(
+                static_cast<u32>(width),
+                static_cast<u32>(height));
+        }
+    }
+
     void Game::HandleWindowResize(const WindowResizeEvent& event)
     {
         m_renderSurfaceAvailable = event.HasRenderableArea();
@@ -170,6 +190,11 @@ namespace Pyramid
             if (m_activeCamera)
             {
                 m_activeCamera->SetViewportSize(width, height);
+            }
+
+            if (m_renderSystem)
+            {
+                m_renderSystem->Resize(width, height);
             }
         }
 

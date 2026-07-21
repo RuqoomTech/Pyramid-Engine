@@ -4,6 +4,18 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 
 ## [Unreleased]
 
+### Framebuffer resize safety
+
+- Made `OpenGLFramebuffer::Resize()` transactional so failed replacement creation preserves the last valid framebuffer and attachments.
+- Added zero-sized extent guards, structural specification validation, duplicate attachment detection, and consistent multisample validation.
+- Centralized framebuffer resource cleanup and fixed leaked depth/stencil attachment objects during invalidation.
+- Applied each attachment's declared filtering and wrapping parameters during texture creation.
+- Replaced the renderer's duplicate raw `RenderTarget` framebuffer implementation with the shared `OpenGLFramebuffer` lifecycle.
+- Added `RenderTarget::Resize()`, `RenderPass::Resize()`, and `RenderSystem::Resize()` propagation.
+- Added `Game::SetRenderSystem()` so registered window-sized render targets follow valid window resize events automatically.
+- Updated deferred G-buffer resizing to preserve the existing buffer if replacement fails.
+- Added framebuffer specification and zero-area resize coverage.
+
 ### Resize-safe rendering
 
 - Propagated renderable window resize events to the default OpenGL viewport.
@@ -32,7 +44,6 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 ### Next priorities
 
 - Windows runtime verification for Debug and Release.
-- Framebuffer and render-pass attachment resize propagation.
 - Real JPEG block decoding.
 - Texture-format and depth-target completion.
 - Scene transform and culling correctness.

@@ -6,6 +6,7 @@
 #include <Pyramid/Graphics/Texture.hpp>
 #include <Pyramid/Graphics/Buffer/UniformBuffer.hpp>
 #include <Pyramid/Graphics/Buffer/VertexArray.hpp>
+#include <Pyramid/Graphics/OpenGL/OpenGLFramebuffer.hpp>
 #include <Pyramid/Graphics/OpenGL/OpenGLStateManager.hpp>
 #include <Pyramid/Util/Log.hpp>
 #include <glad/glad.h>
@@ -370,23 +371,7 @@ namespace Pyramid
         {
         }
 
-        RenderTarget::~RenderTarget()
-        {
-            if (m_framebuffer != 0)
-            {
-                glDeleteFramebuffers(1, &m_framebuffer);
-            }
-            
-            if (!m_colorTextures.empty())
-            {
-                glDeleteTextures(static_cast<GLsizei>(m_colorTextures.size()), m_colorTextures.data());
-            }
-            
-            if (m_depthTexture != 0)
-            {
-                glDeleteTextures(1, &m_depthTexture);
-            }
-        }
+        RenderTarget::~RenderTarget() = default;
 
         bool RenderTarget::Initialize(IGraphicsDevice* device)
         {
@@ -396,107 +381,157 @@ namespace Pyramid
                 return false;
             }
 
-            // Generate framebuffer
-            glGenFramebuffers(1, &m_framebuffer);
-            OpenGLStateManager::GetInstance().BindFramebuffer(GL_FRAMEBUFFER, m_framebuffer);
-
-            // Create color attachments
-            m_colorTextures.resize(m_spec.colorAttachments);
-            glGenTextures(m_spec.colorAttachments, m_colorTextures.data());
-
-            for (u32 i = 0; i < m_spec.colorAttachments; i++)
+            if (m_initialized)
             {
-                glBindTexture(GL_TEXTURE_2D, m_colorTextures[i]);
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, m_spec.width, m_spec.height, 0, GL_RGBA, GL_FLOAT, nullptr);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-                
-                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_2D, m_colorTextures[i], 0);
+                return true;
             }
 
-            // Create depth-stencil attachment if needed
-            if (m_spec.hasDepthStencil)
+            if (!FramebufferUtils::IsValidExtent(m_spec.width, m_spec.height))
             {
-                glGenTextures(1, &m_depthTexture);
-                glBindTexture(GL_TEXTURE_2D, m_depthTexture);
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, m_spec.width, m_spec.height, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, nullptr);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-                
-                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, m_depthTexture, 0);
-            }
-
-            // Set draw buffers
-            if (m_spec.colorAttachments > 0)
-            {
-                std::vector<GLenum> drawBuffers;
-                for (u32 i = 0; i < m_spec.colorAttachments; i++)
-                {
-                    drawBuffers.push_back(GL_COLOR_ATTACHMENT0 + i);
-                }
-                glDrawBuffers(static_cast<GLsizei>(drawBuffers.size()), drawBuffers.data());
-            }
-
-            // Check framebuffer completeness
-            GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-            if (status != GL_FRAMEBUFFER_COMPLETE)
-            {
-                PYRAMID_LOG_ERROR("Render target framebuffer not complete: ", status);
-                OpenGLStateManager::GetInstance().BindFramebuffer(GL_FRAMEBUFFER, 0);
+                PYRAMID_LOG_ERROR(
+                    "Cannot initialize render target with non-renderable extent ",
+                    m_spec.width, "x", m_spec.height);
                 return false;
             }
 
-            OpenGLStateManager::GetInstance().BindFramebuffer(GL_FRAMEBUFFER, 0);
+            FramebufferSpec framebufferSpec;
+            framebufferSpec.width = m_spec.width;
+            framebufferSpec.height = m_spec.height;
+            framebufferSpec.samples = m_spec.multisampled ? m_spec.samples : 1;
+
+            for (u32 index = 0; index < m_spec.colorAttachments; ++index)
+            {
+                FramebufferAttachmentSpec colorAttachment;
+                colorAttachment.type = FramebufferAttachmentType::Color;
+                colorAttachment.internalFormat = GL_RGBA16F;
+                colorAttachment.format = GL_RGBA;
+                colorAttachment.dataType = GL_FLOAT;
+                colorAttachment.colorAttachmentIndex = index;
+                colorAttachment.multisampled = m_spec.multisampled;
+                colorAttachment.samples = framebufferSpec.samples;
+                framebufferSpec.attachments.push_back(colorAttachment);
+            }
+
+            if (m_spec.hasDepthStencil)
+            {
+                FramebufferAttachmentSpec depthStencilAttachment;
+                depthStencilAttachment.type = FramebufferAttachmentType::DepthStencil;
+                depthStencilAttachment.internalFormat = GL_DEPTH24_STENCIL8;
+                depthStencilAttachment.format = GL_DEPTH_STENCIL;
+                depthStencilAttachment.dataType = GL_UNSIGNED_INT_24_8;
+                depthStencilAttachment.minFilter = GL_NEAREST;
+                depthStencilAttachment.magFilter = GL_NEAREST;
+                depthStencilAttachment.multisampled = m_spec.multisampled;
+                depthStencilAttachment.samples = framebufferSpec.samples;
+                framebufferSpec.attachments.push_back(depthStencilAttachment);
+            }
+
+            m_framebuffer = std::make_unique<OpenGLFramebuffer>(framebufferSpec);
+            if (!m_framebuffer->Initialize())
+            {
+                PYRAMID_LOG_ERROR("Failed to initialize render target framebuffer");
+                m_framebuffer.reset();
+                return false;
+            }
+
             m_initialized = true;
-            
-            PYRAMID_LOG_INFO("Render target initialized: ", m_spec.width, "x", m_spec.height,
-                           " with ", m_spec.colorAttachments, " color attachments");
+            PYRAMID_LOG_INFO(
+                "Render target initialized: ", m_spec.width, "x", m_spec.height,
+                " with ", m_spec.colorAttachments, " color attachments");
+            return true;
+        }
+
+        bool RenderTarget::Resize(u32 width, u32 height)
+        {
+            if (!FramebufferUtils::IsValidExtent(width, height))
+            {
+                PYRAMID_LOG_WARN(
+                    "Ignoring render target resize to non-renderable extent ",
+                    width, "x", height);
+                return false;
+            }
+
+            if (m_spec.width == width && m_spec.height == height)
+            {
+                return true;
+            }
+
+            if (!m_initialized || !m_framebuffer)
+            {
+                m_spec.width = width;
+                m_spec.height = height;
+                return true;
+            }
+
+            if (!m_framebuffer->Resize(width, height))
+            {
+                PYRAMID_LOG_ERROR(
+                    "Render target resize failed; preserving ",
+                    m_spec.width, "x", m_spec.height);
+                return false;
+            }
+
+            m_spec.width = width;
+            m_spec.height = height;
             return true;
         }
 
         void RenderTarget::Bind()
         {
-            OpenGLStateManager::GetInstance().BindFramebuffer(GL_FRAMEBUFFER, m_framebuffer);
-            OpenGLStateManager::GetInstance().SetViewport(0, 0, static_cast<i32>(m_spec.width), static_cast<i32>(m_spec.height));
+            if (!m_framebuffer)
+            {
+                PYRAMID_LOG_ERROR("Cannot bind an uninitialized render target");
+                return;
+            }
+            m_framebuffer->Bind();
         }
 
         void RenderTarget::Unbind()
         {
-            OpenGLStateManager::GetInstance().BindFramebuffer(GL_FRAMEBUFFER, 0);
+            if (m_framebuffer)
+            {
+                m_framebuffer->Unbind();
+            }
         }
 
         void RenderTarget::Clear(f32 r, f32 g, f32 b, f32 a)
         {
-            Bind();
-            OpenGLStateManager::GetInstance().SetClearColor(r, g, b, a);
-            GLbitfield clearMask = GL_COLOR_BUFFER_BIT;
-            if (m_spec.hasDepthStencil)
+            if (!m_framebuffer)
             {
-                clearMask |= GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT;
+                PYRAMID_LOG_ERROR("Cannot clear an uninitialized render target");
+                return;
             }
-            glClear(clearMask);
+            m_framebuffer->Clear(r, g, b, a);
+        }
+
+        bool RenderTarget::IsComplete() const
+        {
+            return m_framebuffer && m_framebuffer->IsComplete();
         }
 
         u32 RenderTarget::GetColorTexture(u32 index) const
         {
-            if (index < m_colorTextures.size())
-            {
-                return m_colorTextures[index];
-            }
-            return 0;
+            return m_framebuffer ? m_framebuffer->GetColorAttachmentTexture(index) : 0;
         }
 
         u32 RenderTarget::GetDepthTexture() const
         {
-            return m_depthTexture;
+            return m_framebuffer ? m_framebuffer->GetDepthAttachmentTexture() : 0;
         }
 
         // RenderPass Implementation
         RenderPass::RenderPass(RenderPassType type, const std::string& name)
             : m_type(type), m_name(name)
         {
+        }
+
+        bool RenderPass::Resize(u32 width, u32 height)
+        {
+            if (!m_renderTarget)
+            {
+                return true;
+            }
+            return m_renderTarget->Resize(width, height);
         }
 
         // RenderSystem Implementation
@@ -630,6 +665,51 @@ namespace Pyramid
             m_mainCommandBuffer->Reset();
         }
 
+        bool RenderSystem::Resize(u32 width, u32 height)
+        {
+            if (!FramebufferUtils::IsValidExtent(width, height))
+            {
+                PYRAMID_LOG_WARN(
+                    "Ignoring render system resize to non-renderable extent ",
+                    width, "x", height);
+                return false;
+            }
+
+            bool success = true;
+            for (auto& [id, target] : m_renderTargets)
+            {
+                if (target && !target->Resize(width, height))
+                {
+                    PYRAMID_LOG_ERROR("Failed to resize render target id=", id);
+                    success = false;
+                }
+            }
+
+            for (auto& pass : m_renderPasses)
+            {
+                if (pass && !pass->Resize(width, height))
+                {
+                    PYRAMID_LOG_ERROR("Failed to resize render pass: ", pass->GetName());
+                    success = false;
+                }
+            }
+
+            m_width = width;
+            m_height = height;
+
+            if (success)
+            {
+                PYRAMID_LOG_INFO("Render system resized to ", width, "x", height);
+            }
+            else
+            {
+                PYRAMID_LOG_ERROR(
+                    "Render system resize was incomplete; failed targets preserved their previous attachments");
+            }
+
+            return success;
+        }
+
         u32 RenderSystem::CreateRenderTarget(const RenderTargetSpec& spec)
         {
             if (!m_device)
@@ -730,9 +810,8 @@ namespace Pyramid
             // Clear existing render passes
             m_renderPasses.clear();
             
-            // Get viewport dimensions (assuming 1920x1080 default, should be updated dynamically)
-            u32 width = 1920;
-            u32 height = 1080;
+            const u32 width = m_width;
+            const u32 height = m_height;
             
             // Shadow pass
             auto shadowPass = std::make_shared<ShadowMapPass>("Shadow", m_device, 4);

@@ -6,6 +6,7 @@
 namespace Pyramid {
 
 class Camera;
+namespace Renderer { class RenderSystem; }
 
 /**
  * @file Game.hpp
@@ -105,6 +106,17 @@ protected:
     Camera* GetActiveCamera() const { return m_activeCamera; }
 
     /**
+     * @brief Register the render system whose window-sized targets follow the client area.
+     * @param renderSystem Non-owning pointer, or nullptr to detach it.
+     *
+     * The render system is immediately synchronized to the current renderable
+     * client area and receives subsequent restore/maximize resize events.
+     */
+    void SetRenderSystem(Renderer::RenderSystem* renderSystem);
+
+    Renderer::RenderSystem* GetRenderSystem() const { return m_renderSystem; }
+
+    /**
      * @brief Whether the window currently has a non-zero renderable client area.
      */
     bool IsRenderSurfaceAvailable() const { return m_renderSurfaceAvailable; }
@@ -115,6 +127,7 @@ private:
     std::unique_ptr<Window> m_window;
     std::unique_ptr<IGraphicsDevice> m_graphicsDevice;
     Camera* m_activeCamera;
+    Renderer::RenderSystem* m_renderSystem;
     bool m_isRunning;
     bool m_initialized; // Track if initialization was successful
     bool m_renderSurfaceAvailable;

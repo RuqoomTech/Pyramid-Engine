@@ -3,69 +3,21 @@
 #include <Pyramid/Util/Log.hpp>
 #include <algorithm>
 #include <fstream>
+#include <unordered_set>
 
 namespace Pyramid
 {
 
-    OpenGLFramebuffer::OpenGLFramebuffer(const FramebufferSpec &spec)
+    OpenGLFramebuffer::OpenGLFramebuffer(const FramebufferSpec& spec)
         : m_spec(spec)
     {
-        // Validate specification
-        if (!FramebufferUtils::ValidateSpec(m_spec))
-        {
-            PYRAMID_LOG_ERROR("Invalid framebuffer specification");
-            return;
-        }
-
-        // Reserve space for attachments
-        m_colorAttachmentTextures.reserve(8); // OpenGL guarantees at least 8 color attachments
+        m_colorAttachmentTextures.reserve(8);
         m_colorAttachmentRenderbuffers.reserve(8);
     }
 
     OpenGLFramebuffer::~OpenGLFramebuffer()
     {
-        if (m_framebufferID != 0)
-        {
-            glDeleteFramebuffers(1, &m_framebufferID);
-        }
-
-        // Clean up color attachments
-        if (!m_colorAttachmentTextures.empty())
-        {
-            glDeleteTextures(static_cast<GLsizei>(m_colorAttachmentTextures.size()),
-                             m_colorAttachmentTextures.data());
-        }
-        if (!m_colorAttachmentRenderbuffers.empty())
-        {
-            glDeleteRenderbuffers(static_cast<GLsizei>(m_colorAttachmentRenderbuffers.size()),
-                                  m_colorAttachmentRenderbuffers.data());
-        }
-
-        // Clean up depth/stencil attachments
-        if (m_depthAttachmentTexture != 0)
-        {
-            glDeleteTextures(1, &m_depthAttachmentTexture);
-        }
-        if (m_depthAttachmentRenderbuffer != 0)
-        {
-            glDeleteRenderbuffers(1, &m_depthAttachmentRenderbuffer);
-        }
-        if (m_stencilAttachmentTexture != 0)
-        {
-            glDeleteTextures(1, &m_stencilAttachmentTexture);
-        }
-        if (m_stencilAttachmentRenderbuffer != 0)
-        {
-            glDeleteRenderbuffers(1, &m_stencilAttachmentRenderbuffer);
-        }
-        if (m_depthStencilAttachmentTexture != 0)
-        {
-            glDeleteTextures(1, &m_depthStencilAttachmentTexture);
-        }
-        if (m_depthStencilAttachmentRenderbuffer != 0)
-        {
-            glDeleteRenderbuffers(1, &m_depthStencilAttachmentRenderbuffer);
-        }
+        ReleaseResources();
     }
 
     bool OpenGLFramebuffer::Initialize()
@@ -76,32 +28,30 @@ namespace Pyramid
             return true;
         }
 
-        // Don't create framebuffer for swap chain target
+        if (!FramebufferUtils::ValidateSpec(m_spec))
+        {
+            PYRAMID_LOG_ERROR("Invalid framebuffer specification");
+            return false;
+        }
+
         if (m_spec.swapChainTarget)
         {
             m_initialized = true;
             return true;
         }
 
-        // Generate framebuffer
         glGenFramebuffers(1, &m_framebufferID);
-        OpenGLStateManager::GetInstance().BindFramebuffer(GL_FRAMEBUFFER, m_framebufferID);
-
-        // Create attachments
-        CreateAttachments();
-
-        // Check framebuffer completeness
-        GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-        if (status != GL_FRAMEBUFFER_COMPLETE)
+        if (m_framebufferID == 0)
         {
-            PYRAMID_LOG_ERROR("Framebuffer not complete: ", GetFramebufferStatusString(status));
-            OpenGLStateManager::GetInstance().BindFramebuffer(GL_FRAMEBUFFER, 0);
+            PYRAMID_LOG_ERROR("Failed to allocate framebuffer object");
             return false;
         }
 
-        // Set up draw buffers for multiple render targets
+        OpenGLStateManager::GetInstance().BindFramebuffer(GL_FRAMEBUFFER, m_framebufferID);
+        CreateAttachments();
+
         std::vector<GLenum> drawBuffers;
-        for (const auto &attachment : m_spec.attachments)
+        for (const auto& attachment : m_spec.attachments)
         {
             if (attachment.type == FramebufferAttachmentType::Color)
             {
@@ -115,21 +65,38 @@ namespace Pyramid
         }
         else
         {
-            // No color attachments, disable color drawing
             glDrawBuffer(GL_NONE);
             glReadBuffer(GL_NONE);
+        }
+
+        const GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        if (status != GL_FRAMEBUFFER_COMPLETE)
+        {
+            PYRAMID_LOG_ERROR(
+                "Framebuffer not complete at ", m_spec.width, "x", m_spec.height,
+                ": ", GetFramebufferStatusString(status));
+            OpenGLStateManager::GetInstance().BindFramebuffer(GL_FRAMEBUFFER, 0);
+            ReleaseResources();
+            return false;
         }
 
         OpenGLStateManager::GetInstance().BindFramebuffer(GL_FRAMEBUFFER, 0);
 
         m_initialized = true;
-        PYRAMID_LOG_INFO("Framebuffer created successfully: ", m_spec.width, "x", m_spec.height,
-                         " with ", m_spec.attachments.size(), " attachments");
+        PYRAMID_LOG_INFO(
+            "Framebuffer created successfully: ", m_spec.width, "x", m_spec.height,
+            " with ", m_spec.attachments.size(), " attachments");
         return true;
     }
 
     void OpenGLFramebuffer::Bind() const
     {
+        if (!m_initialized)
+        {
+            PYRAMID_LOG_ERROR("Cannot bind an uninitialized framebuffer");
+            return;
+        }
+
         if (m_spec.swapChainTarget)
         {
             OpenGLStateManager::GetInstance().BindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -138,7 +105,12 @@ namespace Pyramid
         {
             OpenGLStateManager::GetInstance().BindFramebuffer(GL_FRAMEBUFFER, m_framebufferID);
         }
-        OpenGLStateManager::GetInstance().SetViewport(0, 0, static_cast<i32>(m_spec.width), static_cast<i32>(m_spec.height));
+
+        if (FramebufferUtils::IsValidExtent(m_spec.width, m_spec.height))
+        {
+            OpenGLStateManager::GetInstance().SetViewport(
+                0, 0, static_cast<i32>(m_spec.width), static_cast<i32>(m_spec.height));
+        }
     }
 
     void OpenGLFramebuffer::Unbind() const
@@ -148,13 +120,17 @@ namespace Pyramid
 
     void OpenGLFramebuffer::Clear(f32 r, f32 g, f32 b, f32 a) const
     {
+        if (!m_initialized)
+        {
+            PYRAMID_LOG_ERROR("Cannot clear an uninitialized framebuffer");
+            return;
+        }
+
         Bind();
         OpenGLStateManager::GetInstance().SetClearColor(r, g, b, a);
 
         GLbitfield clearMask = 0;
-
-        // Check what attachments we have
-        for (const auto &attachment : m_spec.attachments)
+        for (const auto& attachment : m_spec.attachments)
         {
             switch (attachment.type)
             {
@@ -162,11 +138,13 @@ namespace Pyramid
                 clearMask |= GL_COLOR_BUFFER_BIT;
                 break;
             case FramebufferAttachmentType::Depth:
-            case FramebufferAttachmentType::DepthStencil:
                 clearMask |= GL_DEPTH_BUFFER_BIT;
                 break;
             case FramebufferAttachmentType::Stencil:
                 clearMask |= GL_STENCIL_BUFFER_BIT;
+                break;
+            case FramebufferAttachmentType::DepthStencil:
+                clearMask |= GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT;
                 break;
             }
         }
@@ -177,8 +155,20 @@ namespace Pyramid
         }
     }
 
-    void OpenGLFramebuffer::ClearAttachment(u32 attachmentIndex, const void *value) const
+    void OpenGLFramebuffer::ClearAttachment(u32 attachmentIndex, const void* value) const
     {
+        if (!m_initialized)
+        {
+            PYRAMID_LOG_ERROR("Cannot clear an attachment on an uninitialized framebuffer");
+            return;
+        }
+
+        if (!value)
+        {
+            PYRAMID_LOG_ERROR("Cannot clear framebuffer attachment with a null value");
+            return;
+        }
+
         if (attachmentIndex >= m_spec.attachments.size())
         {
             PYRAMID_LOG_ERROR("Invalid attachment index: ", attachmentIndex);
@@ -187,48 +177,79 @@ namespace Pyramid
 
         Bind();
 
-        const auto &attachment = m_spec.attachments[attachmentIndex];
-        if (attachment.type == FramebufferAttachmentType::Color)
+        const auto& attachment = m_spec.attachments[attachmentIndex];
+        if (attachment.type != FramebufferAttachmentType::Color)
         {
-            GLenum drawBuffer = GetColorAttachmentEnum(attachment.colorAttachmentIndex);
+            PYRAMID_LOG_WARN("ClearAttachment currently supports color attachments only");
+            return;
+        }
 
-            // Determine clear value type based on format
-            if (attachment.dataType == GL_FLOAT)
-            {
-                glClearBufferfv(GL_COLOR, attachment.colorAttachmentIndex, static_cast<const GLfloat *>(value));
-            }
-            else if (attachment.dataType == GL_INT)
-            {
-                glClearBufferiv(GL_COLOR, attachment.colorAttachmentIndex, static_cast<const GLint *>(value));
-            }
-            else
-            {
-                glClearBufferuiv(GL_COLOR, attachment.colorAttachmentIndex, static_cast<const GLuint *>(value));
-            }
+        if (attachment.dataType == GL_FLOAT || attachment.dataType == GL_HALF_FLOAT)
+        {
+            glClearBufferfv(
+                GL_COLOR, attachment.colorAttachmentIndex,
+                static_cast<const GLfloat*>(value));
+        }
+        else if (attachment.dataType == GL_INT)
+        {
+            glClearBufferiv(
+                GL_COLOR, attachment.colorAttachmentIndex,
+                static_cast<const GLint*>(value));
+        }
+        else
+        {
+            glClearBufferuiv(
+                GL_COLOR, attachment.colorAttachmentIndex,
+                static_cast<const GLuint*>(value));
         }
     }
 
     bool OpenGLFramebuffer::Resize(u32 width, u32 height)
     {
-        if (m_spec.width == width && m_spec.height == height)
+        if (!FramebufferUtils::IsValidExtent(width, height))
         {
-            return true; // No change needed
+            PYRAMID_LOG_WARN(
+                "Ignoring framebuffer resize to non-renderable extent ",
+                width, "x", height);
+            return false;
         }
 
-        m_spec.width = width;
-        m_spec.height = height;
+        if (m_spec.width == width && m_spec.height == height)
+        {
+            return true;
+        }
 
         if (m_spec.swapChainTarget)
         {
-            return true; // Swap chain target doesn't need recreation
+            m_spec.width = width;
+            m_spec.height = height;
+            return true;
         }
 
-        // Recreate framebuffer with new size
-        Invalidate();
-        return Initialize();
+        FramebufferSpec replacementSpec = m_spec;
+        replacementSpec.width = width;
+        replacementSpec.height = height;
+
+        OpenGLFramebuffer replacement(replacementSpec);
+        if (!replacement.Initialize())
+        {
+            PYRAMID_LOG_ERROR(
+                "Framebuffer resize failed; preserving existing ",
+                m_spec.width, "x", m_spec.height, " attachments");
+            return false;
+        }
+
+        SwapState(replacement);
+        PYRAMID_LOG_INFO("Framebuffer resized to ", width, "x", height);
+        return true;
     }
 
     void OpenGLFramebuffer::Invalidate()
+    {
+        ReleaseResources();
+    }
+
+    void OpenGLFramebuffer::ReleaseResources()
     {
         if (m_framebufferID != 0)
         {
@@ -236,29 +257,70 @@ namespace Pyramid
             m_framebufferID = 0;
         }
 
-        // Clean up all attachments
         if (!m_colorAttachmentTextures.empty())
         {
-            glDeleteTextures(static_cast<GLsizei>(m_colorAttachmentTextures.size()),
-                             m_colorAttachmentTextures.data());
+            glDeleteTextures(
+                static_cast<GLsizei>(m_colorAttachmentTextures.size()),
+                m_colorAttachmentTextures.data());
             m_colorAttachmentTextures.clear();
         }
+
         if (!m_colorAttachmentRenderbuffers.empty())
         {
-            glDeleteRenderbuffers(static_cast<GLsizei>(m_colorAttachmentRenderbuffers.size()),
-                                  m_colorAttachmentRenderbuffers.data());
+            glDeleteRenderbuffers(
+                static_cast<GLsizei>(m_colorAttachmentRenderbuffers.size()),
+                m_colorAttachmentRenderbuffers.data());
             m_colorAttachmentRenderbuffers.clear();
         }
 
-        // Reset all attachment IDs
-        m_depthAttachmentTexture = 0;
-        m_depthAttachmentRenderbuffer = 0;
-        m_stencilAttachmentTexture = 0;
-        m_stencilAttachmentRenderbuffer = 0;
-        m_depthStencilAttachmentTexture = 0;
-        m_depthStencilAttachmentRenderbuffer = 0;
+        if (m_depthAttachmentTexture != 0)
+        {
+            glDeleteTextures(1, &m_depthAttachmentTexture);
+            m_depthAttachmentTexture = 0;
+        }
+        if (m_depthAttachmentRenderbuffer != 0)
+        {
+            glDeleteRenderbuffers(1, &m_depthAttachmentRenderbuffer);
+            m_depthAttachmentRenderbuffer = 0;
+        }
+        if (m_stencilAttachmentTexture != 0)
+        {
+            glDeleteTextures(1, &m_stencilAttachmentTexture);
+            m_stencilAttachmentTexture = 0;
+        }
+        if (m_stencilAttachmentRenderbuffer != 0)
+        {
+            glDeleteRenderbuffers(1, &m_stencilAttachmentRenderbuffer);
+            m_stencilAttachmentRenderbuffer = 0;
+        }
+        if (m_depthStencilAttachmentTexture != 0)
+        {
+            glDeleteTextures(1, &m_depthStencilAttachmentTexture);
+            m_depthStencilAttachmentTexture = 0;
+        }
+        if (m_depthStencilAttachmentRenderbuffer != 0)
+        {
+            glDeleteRenderbuffers(1, &m_depthStencilAttachmentRenderbuffer);
+            m_depthStencilAttachmentRenderbuffer = 0;
+        }
 
         m_initialized = false;
+    }
+
+    void OpenGLFramebuffer::SwapState(OpenGLFramebuffer& other) noexcept
+    {
+        using std::swap;
+        swap(m_spec, other.m_spec);
+        swap(m_framebufferID, other.m_framebufferID);
+        swap(m_colorAttachmentTextures, other.m_colorAttachmentTextures);
+        swap(m_colorAttachmentRenderbuffers, other.m_colorAttachmentRenderbuffers);
+        swap(m_depthAttachmentTexture, other.m_depthAttachmentTexture);
+        swap(m_depthAttachmentRenderbuffer, other.m_depthAttachmentRenderbuffer);
+        swap(m_stencilAttachmentTexture, other.m_stencilAttachmentTexture);
+        swap(m_stencilAttachmentRenderbuffer, other.m_stencilAttachmentRenderbuffer);
+        swap(m_depthStencilAttachmentTexture, other.m_depthStencilAttachmentTexture);
+        swap(m_depthStencilAttachmentRenderbuffer, other.m_depthStencilAttachmentRenderbuffer);
+        swap(m_initialized, other.m_initialized);
     }
 
     GLuint OpenGLFramebuffer::GetColorAttachmentTexture(u32 index) const
@@ -392,6 +454,11 @@ namespace Pyramid
 
     bool OpenGLFramebuffer::IsComplete() const
     {
+        if (!m_initialized)
+        {
+            return false;
+        }
+
         if (m_spec.swapChainTarget)
         {
             return true;
@@ -496,9 +563,7 @@ namespace Pyramid
 
     void OpenGLFramebuffer::CreateColorAttachment(const FramebufferAttachmentSpec &spec)
     {
-        GLuint texture = CreateTexture2D(m_spec.width, m_spec.height,
-                                         spec.internalFormat, spec.format, spec.dataType,
-                                         spec.multisampled, spec.samples);
+        GLuint texture = CreateTexture2D(m_spec.width, m_spec.height, spec);
 
         if (texture == 0)
         {
@@ -523,9 +588,7 @@ namespace Pyramid
 
     void OpenGLFramebuffer::CreateDepthAttachment(const FramebufferAttachmentSpec &spec)
     {
-        GLuint texture = CreateTexture2D(m_spec.width, m_spec.height,
-                                         spec.internalFormat, GL_DEPTH_COMPONENT, GL_FLOAT,
-                                         spec.multisampled, spec.samples);
+        GLuint texture = CreateTexture2D(m_spec.width, m_spec.height, spec);
 
         if (texture == 0)
         {
@@ -544,9 +607,7 @@ namespace Pyramid
 
     void OpenGLFramebuffer::CreateStencilAttachment(const FramebufferAttachmentSpec &spec)
     {
-        GLuint texture = CreateTexture2D(m_spec.width, m_spec.height,
-                                         spec.internalFormat, GL_STENCIL_INDEX, GL_UNSIGNED_BYTE,
-                                         spec.multisampled, spec.samples);
+        GLuint texture = CreateTexture2D(m_spec.width, m_spec.height, spec);
 
         if (texture == 0)
         {
@@ -565,9 +626,7 @@ namespace Pyramid
 
     void OpenGLFramebuffer::CreateDepthStencilAttachment(const FramebufferAttachmentSpec &spec)
     {
-        GLuint texture = CreateTexture2D(m_spec.width, m_spec.height,
-                                         spec.internalFormat, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8,
-                                         spec.multisampled, spec.samples);
+        GLuint texture = CreateTexture2D(m_spec.width, m_spec.height, spec);
 
         if (texture == 0)
         {
@@ -584,30 +643,50 @@ namespace Pyramid
         PYRAMID_LOG_DEBUG("Created depth-stencil attachment with texture ID ", texture);
     }
 
-    GLuint OpenGLFramebuffer::CreateTexture2D(u32 width, u32 height, GLenum internalFormat,
-                                              GLenum format, GLenum type, bool multisampled, u32 samples)
+    GLuint OpenGLFramebuffer::CreateTexture2D(
+        u32 width, u32 height, const FramebufferAttachmentSpec& spec)
     {
-        GLuint texture;
+        GLuint texture = 0;
         glGenTextures(1, &texture);
-
-        if (multisampled && samples > 1)
+        if (texture == 0)
         {
-            glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, texture);
-            glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, internalFormat, width, height, GL_TRUE);
+            return 0;
+        }
+
+        const bool multisampled = spec.multisampled && spec.samples > 1;
+        const GLenum target = multisampled ? GL_TEXTURE_2D_MULTISAMPLE : GL_TEXTURE_2D;
+        glBindTexture(target, texture);
+
+        if (multisampled)
+        {
+            glTexImage2DMultisample(
+                GL_TEXTURE_2D_MULTISAMPLE,
+                static_cast<GLsizei>(spec.samples),
+                spec.internalFormat,
+                static_cast<GLsizei>(width),
+                static_cast<GLsizei>(height),
+                GL_TRUE);
         }
         else
         {
-            glBindTexture(GL_TEXTURE_2D, texture);
-            glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, width, height, 0, format, type, nullptr);
+            glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                static_cast<GLint>(spec.internalFormat),
+                static_cast<GLsizei>(width),
+                static_cast<GLsizei>(height),
+                0,
+                spec.format,
+                spec.dataType,
+                nullptr);
 
-            // Set texture parameters
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, static_cast<GLint>(spec.minFilter));
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, static_cast<GLint>(spec.magFilter));
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, static_cast<GLint>(spec.wrapS));
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, static_cast<GLint>(spec.wrapT));
         }
 
-        glBindTexture(multisampled ? GL_TEXTURE_2D_MULTISAMPLE : GL_TEXTURE_2D, 0);
+        glBindTexture(target, 0);
         return texture;
     }
 
@@ -851,12 +930,23 @@ namespace Pyramid
             return spec;
         }
 
-        bool ValidateSpec(const FramebufferSpec &spec)
+        bool IsValidExtent(u32 width, u32 height)
         {
-            if (spec.width == 0 || spec.height == 0)
+            return width > 0 && height > 0;
+        }
+
+        bool ValidateSpecStructure(const FramebufferSpec& spec)
+        {
+            if (!IsValidExtent(spec.width, spec.height))
             {
-                PYRAMID_LOG_ERROR("Invalid framebuffer dimensions: ", spec.width, "x", spec.height);
+                PYRAMID_LOG_ERROR(
+                    "Invalid framebuffer dimensions: ", spec.width, "x", spec.height);
                 return false;
+            }
+
+            if (spec.swapChainTarget)
+            {
+                return true;
             }
 
             if (spec.attachments.empty())
@@ -865,29 +955,70 @@ namespace Pyramid
                 return false;
             }
 
-            u32 colorAttachmentCount = 0;
+            if (spec.samples == 0)
+            {
+                PYRAMID_LOG_ERROR("Framebuffer sample count cannot be zero");
+                return false;
+            }
+
             u32 depthAttachmentCount = 0;
             u32 stencilAttachmentCount = 0;
+            bool hasCombinedDepthStencil = false;
+            std::unordered_set<u32> colorAttachmentIndices;
 
-            for (const auto &attachment : spec.attachments)
+            for (const auto& attachment : spec.attachments)
             {
+                if (attachment.samples == 0)
+                {
+                    PYRAMID_LOG_ERROR("Framebuffer attachment sample count cannot be zero");
+                    return false;
+                }
+
+                const bool usesMultisampling = attachment.multisampled || attachment.samples > 1;
+                if (usesMultisampling)
+                {
+                    if (!attachment.multisampled || attachment.samples <= 1)
+                    {
+                        PYRAMID_LOG_ERROR(
+                            "Multisampled attachments must set multisampled=true and samples > 1");
+                        return false;
+                    }
+
+                    if (spec.samples <= 1 || attachment.samples != spec.samples)
+                    {
+                        PYRAMID_LOG_ERROR(
+                            "Framebuffer and attachment sample counts must match: framebuffer=",
+                            spec.samples, ", attachment=", attachment.samples);
+                        return false;
+                    }
+                }
+                else if (spec.samples > 1)
+                {
+                    PYRAMID_LOG_ERROR(
+                        "All attachments must be multisampled when framebuffer samples > 1");
+                    return false;
+                }
+
                 switch (attachment.type)
                 {
                 case FramebufferAttachmentType::Color:
-                    colorAttachmentCount++;
-                    if (attachment.colorAttachmentIndex >= GetMaxColorAttachments())
+                    if (!colorAttachmentIndices.insert(attachment.colorAttachmentIndex).second)
                     {
-                        PYRAMID_LOG_ERROR("Color attachment index exceeds maximum: ",
-                                          attachment.colorAttachmentIndex, " >= ", GetMaxColorAttachments());
+                        PYRAMID_LOG_ERROR(
+                            "Duplicate color attachment index: ", attachment.colorAttachmentIndex);
                         return false;
                     }
                     break;
                 case FramebufferAttachmentType::Depth:
-                case FramebufferAttachmentType::DepthStencil:
-                    depthAttachmentCount++;
+                    ++depthAttachmentCount;
                     break;
                 case FramebufferAttachmentType::Stencil:
-                    stencilAttachmentCount++;
+                    ++stencilAttachmentCount;
+                    break;
+                case FramebufferAttachmentType::DepthStencil:
+                    ++depthAttachmentCount;
+                    ++stencilAttachmentCount;
+                    hasCombinedDepthStencil = true;
                     break;
                 }
             }
@@ -902,6 +1033,52 @@ namespace Pyramid
             {
                 PYRAMID_LOG_ERROR("Framebuffer can only have one stencil attachment");
                 return false;
+            }
+
+            if (hasCombinedDepthStencil &&
+                (depthAttachmentCount != 1 || stencilAttachmentCount != 1))
+            {
+                PYRAMID_LOG_ERROR(
+                    "A combined depth-stencil attachment cannot be mixed with separate depth or stencil attachments");
+                return false;
+            }
+
+            return true;
+        }
+
+        bool ValidateSpec(const FramebufferSpec& spec)
+        {
+            if (!ValidateSpecStructure(spec))
+            {
+                return false;
+            }
+
+            if (spec.swapChainTarget)
+            {
+                return true;
+            }
+
+            const u32 maxColorAttachments = GetMaxColorAttachments();
+            const u32 maxSamples = GetMaxSamples();
+
+            if (spec.samples > maxSamples)
+            {
+                PYRAMID_LOG_ERROR(
+                    "Framebuffer sample count exceeds active-context maximum: ",
+                    spec.samples, " > ", maxSamples);
+                return false;
+            }
+
+            for (const auto& attachment : spec.attachments)
+            {
+                if (attachment.type == FramebufferAttachmentType::Color &&
+                    attachment.colorAttachmentIndex >= maxColorAttachments)
+                {
+                    PYRAMID_LOG_ERROR(
+                        "Color attachment index exceeds maximum: ",
+                        attachment.colorAttachmentIndex, " >= ", maxColorAttachments);
+                    return false;
+                }
             }
 
             return true;

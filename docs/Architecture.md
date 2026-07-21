@@ -35,7 +35,7 @@ Derived `onCreate()` implementations must call `Game::onCreate()` before creatin
 
 `Window` is a strict interface. Initialization, presentation, context activation, close state, title, size, position, visibility, and minimized/maximized queries are all required operations.
 
-The base interface owns a replaceable resize callback and emits platform-neutral `WindowResizeEvent` values. `Win32OpenGLWindow` maps `WM_SIZE` to restored, minimized, or maximized states, updates its cached client dimensions before delivery, and suppresses duplicate events. `Game` forwards delivery to `onWindowResize()` on the game thread during message processing. Graphics resize work is deliberately left for the next rendering milestone.
+The base interface owns a replaceable resize callback and emits platform-neutral `WindowResizeEvent` values. `Win32OpenGLWindow` maps `WM_SIZE` to restored, minimized, or maximized states, updates its cached client dimensions before delivery, and suppresses duplicate events. During message processing, `Game` updates the default viewport, active camera, and registered render system before forwarding delivery to `onWindowResize()` on the game thread. Minimized and zero-sized events suspend rendering without recreating GPU targets.
 
 ## Graphics device
 
@@ -57,8 +57,8 @@ The default pipeline uses shadow and forward rendering. The deferred setup uses 
 Known constraints:
 
 - compute `Dispatch` commands are logged but not executed;
-- deferred setup still uses fixed initial dimensions and needs complete resize propagation;
-- generic framebuffer binding and some attachment paths remain incomplete;
+- generic framebuffer binding outside the OpenGL renderer remains incomplete;
+- shadow-map resolution is intentionally independent of window size;
 - render statistics do not yet represent complete GPU execution metrics.
 
 ## Scene and spatial management
@@ -76,6 +76,8 @@ Frustum-plane extraction and occlusion culling remain placeholder algorithms and
 The basic specification and file constructors create `OpenGLTexture2D` instances. Size-based, render-target, and solid-color convenience factories are defined for the basic color-texture path.
 
 Depth formats are not mapped by `OpenGLTexture2D`; `CreateDepthTarget` therefore logs an error and returns `nullptr`. Depth attachments should be created through `OpenGLFramebuffer` until the texture-format mapping is completed.
+
+`OpenGLFramebuffer` owns one framebuffer and its attachments through a single cleanup path. Resizing creates and validates a replacement first, then swaps it into service; failed replacement creation leaves the previous framebuffer intact. `Renderer::RenderTarget` delegates to this same implementation rather than maintaining a second raw OpenGL lifecycle. `RenderSystem::Resize()` propagates window dimensions to managed targets and passes, while fixed-resolution shadow maps remain unchanged.
 
 ## Image loading
 

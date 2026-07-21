@@ -23,6 +23,8 @@ protected:
     IGraphicsDevice* GetGraphicsDevice() const;
     void SetActiveCamera(Camera* camera);
     Camera* GetActiveCamera() const;
+    void SetRenderSystem(Renderer::RenderSystem* renderSystem);
+    Renderer::RenderSystem* GetRenderSystem() const;
     bool IsRenderSurfaceAvailable() const;
 };
 ```
@@ -35,7 +37,7 @@ Header: `Pyramid/Platform/Window.hpp`
 
 The window interface requires initialization, presentation, context activation, message processing, close-state reporting, title/size/position/visibility mutation, and minimized/maximized queries. The checked-in implementation is `Win32OpenGLWindow`.
 
-`Window::SetResizeCallback()` receives platform-neutral `WindowResizeEvent` values while `ProcessMessages()` dispatches native messages. Each event includes client width, client height, and a `Restored`, `Minimized`, or `Maximized` state. `WindowResizeEvent::HasRenderableArea()` is false for minimized or zero-sized windows. `Game` installs this callback, updates the default graphics viewport, synchronizes the registered active camera, suspends rendering for non-renderable client areas, and then forwards the event to the overridable `onWindowResize()` hook.
+`Window::SetResizeCallback()` receives platform-neutral `WindowResizeEvent` values while `ProcessMessages()` dispatches native messages. Each event includes client width, client height, and a `Restored`, `Minimized`, or `Maximized` state. `WindowResizeEvent::HasRenderableArea()` is false for minimized or zero-sized windows. `Game` installs this callback, updates the default graphics viewport, synchronizes the registered active camera and render system, suspends rendering for non-renderable client areas, and then forwards the event to the overridable `onWindowResize()` hook.
 
 ```cpp
 void MyGame::onWindowResize(const Pyramid::WindowResizeEvent& event)
@@ -44,8 +46,9 @@ void MyGame::onWindowResize(const Pyramid::WindowResizeEvent& event)
     if (!event.HasRenderableArea())
         return;
 
-    // Default viewport and the camera registered with SetActiveCamera()
-    // are already synchronized. Resize custom framebuffers here.
+    // Default viewport, the camera registered with SetActiveCamera(), and the
+    // RenderSystem registered with SetRenderSystem() are already synchronized.
+    // Resize standalone framebuffers here.
 }
 ```
 
@@ -108,12 +111,15 @@ Pyramid::Renderer::RenderSystem renderer;
 if (!renderer.Initialize(device))
     return;
 
+// Inside a Pyramid::Game-derived class. The pointer is non-owning.
+SetRenderSystem(&renderer);
+
 renderer.BeginFrame();
 renderer.Render(scene, camera);
 renderer.EndFrame();
 ```
 
-Implemented public pass classes are `ForwardRenderPass`, `ShadowMapPass`, `DeferredGeometryPass`, and `DeferredLightingPass`. Compute dispatch is not operational.
+Implemented public pass classes are `ForwardRenderPass`, `ShadowMapPass`, `DeferredGeometryPass`, and `DeferredLightingPass`. `RenderSystem::Resize()` propagates valid dimensions through managed render targets and window-sized passes. Individual `RenderTarget` and `OpenGLFramebuffer` objects also expose `Resize()`. Resize operations reject zero-sized extents; framebuffer recreation is transactional, so a failed replacement preserves the previous valid attachments. Compute dispatch is not operational.
 
 ## Camera
 

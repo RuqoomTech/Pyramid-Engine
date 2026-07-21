@@ -46,7 +46,7 @@ namespace Pyramid
             void Execute(CommandBuffer& cmd, const Scene& scene, const Camera& camera) override;
             void End(CommandBuffer& cmd) override;
 
-            void Resize(u32 width, u32 height);
+            bool Resize(u32 width, u32 height) override;
             
             std::shared_ptr<Pyramid::OpenGLFramebuffer> GetGBuffer() const { return m_gBuffer; }
 

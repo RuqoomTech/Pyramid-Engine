@@ -110,16 +110,16 @@ namespace Pyramid
             depthSpec.dataType = GL_UNSIGNED_INT_24_8;
             spec.attachments.push_back(depthSpec);
             
-            m_gBuffer = std::make_shared<OpenGLFramebuffer>(spec);
-            if (!m_gBuffer->Initialize())
+            auto replacement = std::make_shared<OpenGLFramebuffer>(spec);
+            if (!replacement->Initialize())
             {
                 PYRAMID_LOG_ERROR("Failed to initialize G-Buffer");
+                return;
             }
-            else
-            {
-                m_gBuffer->SetDebugLabel("G-Buffer");
-                PYRAMID_LOG_INFO("G-Buffer created successfully");
-            }
+
+            replacement->SetDebugLabel("G-Buffer");
+            m_gBuffer = std::move(replacement);
+            PYRAMID_LOG_INFO("G-Buffer created successfully");
         }
 
         void DeferredGeometryPass::Begin(CommandBuffer& cmd)
@@ -283,20 +283,49 @@ namespace Pyramid
             PYRAMID_LOG_DEBUG("DeferredGeometryPass::End");
         }
 
-        void DeferredGeometryPass::Resize(u32 width, u32 height)
+        bool DeferredGeometryPass::Resize(u32 width, u32 height)
         {
+            if (!FramebufferUtils::IsValidExtent(width, height))
+            {
+                PYRAMID_LOG_WARN(
+                    "Ignoring G-Buffer resize to non-renderable extent ",
+                    width, "x", height);
+                return false;
+            }
+
             if (m_width == width && m_height == height)
             {
-                return; // No change needed
+                return true;
             }
-            
+
+            if (!m_gBuffer)
+            {
+                const u32 previousWidth = m_width;
+                const u32 previousHeight = m_height;
+                m_width = width;
+                m_height = height;
+                CreateGBuffer();
+                if (!m_gBuffer)
+                {
+                    m_width = previousWidth;
+                    m_height = previousHeight;
+                    return false;
+                }
+                return true;
+            }
+
+            if (!m_gBuffer->Resize(width, height))
+            {
+                PYRAMID_LOG_ERROR(
+                    "G-Buffer resize failed; preserving ",
+                    m_width, "x", m_height);
+                return false;
+            }
+
             m_width = width;
             m_height = height;
-            
-            // Recreate G-Buffer with new dimensions
-            CreateGBuffer();
-            
             PYRAMID_LOG_INFO("G-Buffer resized to ", width, "x", height);
+            return true;
         }
 
     } // namespace Renderer

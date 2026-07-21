@@ -125,7 +125,7 @@ ctest --test-dir build/manual --output-on-failure
 
 ## Tests
 
-CTest registers 14 executables:
+CTest registers 15 executables:
 
 - `Utils.TestPNGComponents`
 - `Utils.TestPNGLoader`
@@ -141,8 +141,9 @@ CTest registers 14 executables:
 - `Graphics.OpenGLDiagnostics`
 - `Platform.WindowResizeEvents`
 - `Graphics.CameraViewportResize`
+- `Graphics.FramebufferResize`
 
-The API test takes addresses of public factory, scene-management, and camera-resize methods so missing definitions fail at link time. The OpenGL diagnostics test verifies readable error, source, type, and severity mappings without requiring a graphics context. The platform test verifies callback delivery, replacement, detachment, window state, and zero-area handling without opening a native window. The camera test verifies perspective and orthographic projection updates plus zero-sized viewport rejection.
+The API test takes addresses of public factory, scene-management, and camera-resize methods so missing definitions fail at link time. The OpenGL diagnostics test verifies readable error, source, type, and severity mappings without requiring a graphics context. The platform test verifies callback delivery, replacement, detachment, window state, and zero-area handling without opening a native window. The camera test verifies perspective and orthographic projection updates plus zero-sized viewport rejection. The framebuffer test verifies specification structure, multisample consistency, and state preservation for rejected zero-area resizes without creating a graphics context.
 
 ## Graphical smoke test
 

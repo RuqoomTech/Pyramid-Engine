@@ -22,3 +22,8 @@ add_executable(CameraViewportTests CameraViewportTests.cpp)
 target_link_libraries(CameraViewportTests PRIVATE Pyramid::Engine)
 set_target_properties(CameraViewportTests PROPERTIES FOLDER "Tests/Graphics")
 add_test(NAME Graphics.CameraViewportResize COMMAND $<TARGET_FILE:CameraViewportTests>)
+
+add_executable(FramebufferResizeTests FramebufferResizeTests.cpp)
+target_link_libraries(FramebufferResizeTests PRIVATE Pyramid::Engine)
+set_target_properties(FramebufferResizeTests PROPERTIES FOLDER "Tests/Graphics")
+add_test(NAME Graphics.FramebufferResize COMMAND $<TARGET_FILE:FramebufferResizeTests>)

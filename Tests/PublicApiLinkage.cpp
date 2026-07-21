@@ -1,12 +1,21 @@
+#include <Pyramid/Core/Game.hpp>
 #include <Pyramid/Graphics/Texture.hpp>
 #include <Pyramid/Graphics/Scene/SceneManager.hpp>
 #include <Pyramid/Graphics/Camera.hpp>
+#include <Pyramid/Graphics/OpenGL/OpenGLFramebuffer.hpp>
+#include <Pyramid/Graphics/Renderer/RenderSystem.hpp>
 
 #include <memory>
 #include <string>
 
 namespace
 {
+    class GameLinkageProbe final : public Pyramid::Game
+    {
+    public:
+        using Pyramid::Game::SetRenderSystem;
+    };
+
     using Pyramid::ITexture2D;
     using Pyramid::TextureFormat;
     using Pyramid::TextureSpecification;
@@ -36,6 +45,14 @@ namespace
     volatile decltype(&SceneManager::DrawDebugInfo) g_drawDebugInfo = &SceneManager::DrawDebugInfo;
     volatile decltype(&Pyramid::Camera::SetViewportSize) g_setCameraViewport =
         &Pyramid::Camera::SetViewportSize;
+    volatile decltype(&Pyramid::OpenGLFramebuffer::Resize) g_resizeFramebuffer =
+        &Pyramid::OpenGLFramebuffer::Resize;
+    volatile decltype(&Pyramid::Renderer::RenderTarget::Resize) g_resizeRenderTarget =
+        &Pyramid::Renderer::RenderTarget::Resize;
+    volatile decltype(&Pyramid::Renderer::RenderSystem::Resize) g_resizeRenderSystem =
+        &Pyramid::Renderer::RenderSystem::Resize;
+    volatile decltype(&GameLinkageProbe::SetRenderSystem) g_setRenderSystem =
+        &GameLinkageProbe::SetRenderSystem;
 }
 
 int main()
@@ -53,7 +70,11 @@ int main()
                    g_registerEvent &&
                    g_triggerEvent &&
                    g_drawDebugInfo &&
-                   g_setCameraViewport
+                   g_setCameraViewport &&
+                   g_resizeFramebuffer &&
+                   g_resizeRenderTarget &&
+                   g_resizeRenderSystem &&
+                   g_setRenderSystem
                ? 0
                : 1;
 }

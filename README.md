@@ -18,14 +18,14 @@ The project is intended for engine development and experimentation. It is not ye
 | Scene | Scene graph, render objects, lights, scene manager, and octree queries |
 | Math | Vectors, matrices, quaternions, geometry helpers, and SIMD-oriented utilities |
 | Images | TGA/BMP subsets, non-interlaced PNG, and experimental JPEG components |
-| Tests | 14 CTest targets: 10 utility tests plus API linkage, OpenGL diagnostics, window events, and camera-resize coverage |
+| Tests | 15 CTest targets: 10 utility tests plus API linkage, OpenGL diagnostics, window events, camera resize, and framebuffer-resize coverage |
 | CI | GCC and Clang, Debug and Release, package install, and external-consumer validation |
 
 ## Implemented
 
 - Application lifecycle and frame loop through `Pyramid::Game`.
 - Win32 window creation, resize-event delivery, resize-safe viewport updates, visibility, positioning, and WGL context management.
-- OpenGL device, buffers, vertex arrays, shaders, textures, framebuffers, and state caching.
+- OpenGL device, buffers, vertex arrays, shaders, textures, resize-safe framebuffers, and state caching.
 - Forward, cascaded-shadow, deferred-geometry, and deferred-lighting passes.
 - Perspective and orthographic cameras.
 - Scene objects, lights, hierarchy nodes, scene management, octree storage, and spatial queries.
@@ -136,8 +136,9 @@ protected:
             return;
 
         // The engine updates the default viewport automatically. Register a
-        // camera with SetActiveCamera() to keep its projection synchronized.
-        // Custom framebuffers still need explicit resize handling.
+        // camera with SetActiveCamera() and a RenderSystem with SetRenderSystem()
+        // to synchronize their window-sized resources. Standalone framebuffers
+        // can call OpenGLFramebuffer::Resize() from this hook.
     }
 };
 
