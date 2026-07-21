@@ -26,13 +26,16 @@ Input, audio, physics, editor, scripting, and asset-pipeline systems are not cur
 3. It attempts core contexts from OpenGL 4.6 down to 3.3.
 4. Context creation fails if no OpenGL 3.3-or-newer core context is available.
 5. `IGraphicsDevice::Create` creates `OpenGLDevice`.
-6. `Game::run()` calls `onCreate()`, processes messages, computes clamped delta time, updates, renders, and shuts down.
+6. `Game` attaches a platform-neutral resize callback after window/device construction.
+7. `Game::run()` calls `onCreate()`, processes messages, computes clamped delta time, updates, renders, and shuts down.
 
 Derived `onCreate()` implementations must call `Game::onCreate()` before creating graphics resources.
 
 ## Window contract
 
-`Window` is a strict interface. Initialization, presentation, context activation, close state, title, size, position, visibility, and minimized/maximized queries are all required operations. `Win32OpenGLWindow` implements the complete contract and updates its dimensions on `WM_SIZE`.
+`Window` is a strict interface. Initialization, presentation, context activation, close state, title, size, position, visibility, and minimized/maximized queries are all required operations.
+
+The base interface owns a replaceable resize callback and emits platform-neutral `WindowResizeEvent` values. `Win32OpenGLWindow` maps `WM_SIZE` to restored, minimized, or maximized states, updates its cached client dimensions before delivery, and suppresses duplicate events. `Game` forwards delivery to `onWindowResize()` on the game thread during message processing. Graphics resize work is deliberately left for the next rendering milestone.
 
 ## Graphics device
 

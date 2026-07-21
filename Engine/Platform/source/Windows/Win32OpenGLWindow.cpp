@@ -36,8 +36,32 @@ namespace Pyramid
         case WM_SIZE:
             if (window)
             {
-                window->m_width = static_cast<int>(LOWORD(lParam));
-                window->m_height = static_cast<int>(HIWORD(lParam));
+                const int width = static_cast<int>(LOWORD(lParam));
+                const int height = static_cast<int>(HIWORD(lParam));
+
+                WindowResizeState state = WindowResizeState::Restored;
+                if (wParam == SIZE_MINIMIZED)
+                {
+                    state = WindowResizeState::Minimized;
+                }
+                else if (wParam == SIZE_MAXIMIZED)
+                {
+                    state = WindowResizeState::Maximized;
+                }
+
+                const bool changed =
+                    width != window->m_width ||
+                    height != window->m_height ||
+                    state != window->m_resizeState;
+
+                window->m_width = width;
+                window->m_height = height;
+                window->m_resizeState = state;
+
+                if (changed)
+                {
+                    window->DispatchResizeEvent({width, height, state});
+                }
             }
             return 0;
 
@@ -50,7 +74,13 @@ namespace Pyramid
     }
 
     Win32OpenGLWindow::Win32OpenGLWindow()
-        : m_hwnd(nullptr), m_hdc(nullptr), m_hglrc(nullptr), m_width(800), m_height(600), m_shouldClose(false)
+        : m_hwnd(nullptr),
+          m_hdc(nullptr),
+          m_hglrc(nullptr),
+          m_width(800),
+          m_height(600),
+          m_shouldClose(false),
+          m_resizeState(WindowResizeState::Restored)
     {
     }
 

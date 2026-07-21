@@ -4,6 +4,14 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 
 ## [Unreleased]
 
+### Window events
+
+- Added a platform-neutral `WindowResizeEvent` with restored, minimized, and maximized states.
+- Added replaceable resize callbacks to the `Window` base interface.
+- Translated Win32 `WM_SIZE` messages into deduplicated engine resize events.
+- Added the overridable `Game::onWindowResize()` hook and detached it safely during shutdown.
+- Added focused callback, replacement, detach, state, and renderable-area tests.
+
 ### Rendering diagnostics
 
 - Added a centralized OpenGL diagnostics module for draining and reporting all pending errors.
@@ -15,7 +23,7 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 ### Next priorities
 
 - Windows runtime verification for Debug and Release.
-- Resize-safe deferred rendering.
+- Viewport, camera, and framebuffer resize propagation.
 - Real JPEG block decoding.
 - Texture-format and depth-target completion.
 - Scene transform and culling correctness.

@@ -74,6 +74,15 @@ protected:
     virtual void onRender();
 
     /**
+     * @brief Called when the native window client area changes size or state.
+     * @param event New client dimensions and restored/minimized/maximized state.
+     *
+     * The callback runs during window-message processing on the game thread.
+     * A minimized event can contain a zero-sized client area.
+     */
+    virtual void onWindowResize(const WindowResizeEvent& event);
+
+    /**
      * @brief Gets the graphics device instance
      * @return IGraphicsDevice* Pointer to the graphics device
      */

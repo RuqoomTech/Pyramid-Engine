@@ -125,7 +125,7 @@ ctest --test-dir build/manual --output-on-failure
 
 ## Tests
 
-CTest registers 12 executables:
+CTest registers 13 executables:
 
 - `Utils.TestPNGComponents`
 - `Utils.TestPNGLoader`
@@ -139,8 +139,9 @@ CTest registers 12 executables:
 - `Utils.TestJPEGIntegration`
 - `API.PublicApiLinkage`
 - `Graphics.OpenGLDiagnostics`
+- `Platform.WindowResizeEvents`
 
-The API test takes addresses of public factory and scene-management methods so missing definitions fail at link time. The OpenGL diagnostics test verifies readable error, source, type, and severity mappings without requiring a graphics context.
+The API test takes addresses of public factory and scene-management methods so missing definitions fail at link time. The OpenGL diagnostics test verifies readable error, source, type, and severity mappings without requiring a graphics context. The platform test verifies callback delivery, replacement, detachment, window state, and zero-area handling without opening a native window.
 
 ## Graphical smoke test
 

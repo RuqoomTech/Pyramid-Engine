@@ -5,7 +5,7 @@
 - `Engine/` builds the C++17 `PyramidEngine` library.
 - Active modules are Core, Graphics, Math, Platform, and Utils.
 - `Examples/BasicGame` and `Examples/BasicRendering` are the graphical references.
-- `Tests/PublicApiLinkage.cpp` protects selected public symbols.
+- `Tests/PublicApiLinkage.cpp` protects selected public symbols; `Tests/WindowResizeEventTests.cpp` protects resize callback semantics.
 - `Tests/Consumer` validates the installed CMake package.
 - `vendor/glad` is a bundled public dependency.
 - The supported Windows toolchain is MSYS2 UCRT64 with MinGW-w64 GCC; Clang is also validated. Visual Studio is not required.

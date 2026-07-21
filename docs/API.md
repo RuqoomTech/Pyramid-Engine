@@ -19,6 +19,7 @@ protected:
     virtual void onCreate();
     virtual void onUpdate(float deltaTime);
     virtual void onRender();
+    virtual void onWindowResize(const WindowResizeEvent& event);
     IGraphicsDevice* GetGraphicsDevice() const;
 };
 ```
@@ -30,6 +31,19 @@ Only `GraphicsAPI::OpenGL` is supported. A derived `onCreate()` must call `Game:
 Header: `Pyramid/Platform/Window.hpp`
 
 The window interface requires initialization, presentation, context activation, message processing, close-state reporting, title/size/position/visibility mutation, and minimized/maximized queries. The checked-in implementation is `Win32OpenGLWindow`.
+
+`Window::SetResizeCallback()` receives platform-neutral `WindowResizeEvent` values while `ProcessMessages()` dispatches native messages. Each event includes client width, client height, and a `Restored`, `Minimized`, or `Maximized` state. `WindowResizeEvent::HasRenderableArea()` is false for minimized or zero-sized windows. `Game` installs this callback and forwards it to the overridable `onWindowResize()` hook.
+
+```cpp
+void MyGame::onWindowResize(const Pyramid::WindowResizeEvent& event)
+{
+    Game::onWindowResize(event);
+    if (!event.HasRenderableArea())
+        return;
+
+    // Update viewport, camera projection, and render targets.
+}
+```
 
 ## Graphics device and resources
 

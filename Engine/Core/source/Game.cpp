@@ -49,6 +49,12 @@ namespace Pyramid
             return;
         }
 
+        m_window->SetResizeCallback(
+            [this](const WindowResizeEvent& event)
+            {
+                onWindowResize(event);
+            });
+
         PYRAMID_LOG_INFO("Game engine initialized successfully");
         m_initialized = true;
     }
@@ -56,6 +62,11 @@ namespace Pyramid
     Game::~Game()
     {
         PYRAMID_LOG_INFO("Shutting down Pyramid Game Engine...");
+
+        if (m_window)
+        {
+            m_window->SetResizeCallback({});
+        }
         
         // Explicitly shutdown graphics device before window destruction
         if (m_graphicsDevice)
@@ -103,6 +114,7 @@ namespace Pyramid
 
     void Game::onUpdate(float deltaTime)
     {
+        (void)deltaTime;
         // Default implementation - base classes can override for game logic
         // Note: Screen clearing should be done in onRender(), not here
     }
@@ -115,6 +127,20 @@ namespace Pyramid
             m_graphicsDevice->Clear(Color(0.2f, 0.3f, 0.3f, 1.0f));
             m_graphicsDevice->Present(true);
         }
+    }
+
+    void Game::onWindowResize(const WindowResizeEvent& event)
+    {
+        if (event.state == WindowResizeState::Minimized)
+        {
+            PYRAMID_LOG_DEBUG("Window minimized");
+            return;
+        }
+
+        const char* state =
+            event.state == WindowResizeState::Maximized ? "maximized" : "restored";
+        PYRAMID_LOG_DEBUG(
+            "Window resized to ", event.width, "x", event.height, " (", state, ")");
     }
 
     void Game::run()

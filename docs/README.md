@@ -5,7 +5,7 @@ This documentation describes the source tree as it exists at the latest audit. P
 | Document | Purpose |
 |---|---|
 | [Building and testing](BUILDING.md) | Supported platform, presets, tests, CI, installation, and troubleshooting |
-| [Architecture](ARCHITECTURE.md) | Runtime layers, rendering flow, ownership, packaging, and subsystem status |
+| [Architecture](Architecture.md) | Runtime layers, rendering flow, ownership, packaging, and subsystem status |
 | [API overview](API.md) | Supported public interfaces and explicit capability limits |
 | [Examples](EXAMPLES.md) | Checked-in applications, output paths, and validation expectations |
 | [Development guide](DEVELOPMENT.md) | Engineering workflow, conventions, tests, documentation, and release hygiene |

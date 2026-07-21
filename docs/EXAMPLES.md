@@ -14,6 +14,7 @@ Demonstrates:
 - vertex/index buffer and vertex-array setup;
 - texture loading;
 - frame update and rendering;
+- platform-neutral resize-event logging through `Game::onWindowResize()`;
 - logging configuration.
 
 Build:
@@ -59,6 +60,7 @@ A successful timed process run proves that startup did not immediately fail. Aft
 - both windows open;
 - shader compilation reports no errors;
 - geometry is visible;
+- resize, maximize, minimize, and restore messages appear in the log;
 - resizing does not crash;
 - closing exits cleanly;
 - the OpenGL debug/error log remains clean.

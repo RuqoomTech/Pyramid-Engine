@@ -13,14 +13,15 @@ The current `0.6.0-pre-alpha` baseline includes:
 - strict required window operations with Win32 implementations;
 - relocatable install/export package and external-consumer test;
 - Windows Debug/Release CI for build, CTest, install, and package consumption;
-- 12 registered tests, including previously omitted PNG/JPEG parser tests and OpenGL diagnostics coverage;
+- 13 registered tests, including PNG/JPEG parsers, OpenGL diagnostics, and platform-neutral resize-event coverage;
 - corrected standards-invalid PNG, zlib, and JPEG test fixtures;
 - public texture convenience definitions and explicit depth-target failure;
 - definitions for scene events, box queries, visibility statistics, spatial test scenes, and octree operations;
 - removal of public render-pass classes that had no implementations;
 - whole-object non-Windows static linkage validation with no unresolved symbols;
 - a missing `<cstring>` dependency fixed in the image loader;
-- Debug-context negotiation and OpenGL driver callback diagnostics.
+- Debug-context negotiation and OpenGL driver callback diagnostics;
+- platform-neutral resize events delivered from Win32 `WM_SIZE` through `Game::onWindowResize()`.
 
 ## P0 — verify and finish the current vertical slice
 
@@ -28,7 +29,7 @@ The current `0.6.0-pre-alpha` baseline includes:
 
 - Run clean Debug and Release CI on the actual repository host.
 - Launch both examples on at least one supported GPU/driver.
-- Verify resize, minimize/restore, visibility changes, close handling, and shutdown.
+- Verify resize callback delivery, minimize/restore, visibility changes, close handling, and shutdown on Windows hardware.
 - Capture OpenGL errors and screenshots for the reference rendering path.
 - Tag the first verified pre-release only after these checks pass.
 
@@ -36,7 +37,8 @@ The current `0.6.0-pre-alpha` baseline includes:
 
 - Implement compute dispatch or remove it from the command model.
 - Complete backend-neutral framebuffer binding.
-- Remove fixed deferred target dimensions and propagate window resize.
+- [x] Add platform-neutral window resize events.
+- Remove fixed deferred target dimensions and propagate resize events into viewport, camera, and render targets.
 - Complete deferred shadow-map-array binding.
 - Verify multisampled targets, resolve behavior, and attachment ownership.
 - [x] Add OpenGL debug-callback handling.

@@ -41,6 +41,7 @@ namespace Pyramid
         int m_width;
         int m_height;
         bool m_shouldClose;
+        WindowResizeState m_resizeState;
     };
 
 } // namespace Pyramid

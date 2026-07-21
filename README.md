@@ -18,13 +18,13 @@ The project is intended for engine development and experimentation. It is not ye
 | Scene | Scene graph, render objects, lights, scene manager, and octree queries |
 | Math | Vectors, matrices, quaternions, geometry helpers, and SIMD-oriented utilities |
 | Images | TGA/BMP subsets, non-interlaced PNG, and experimental JPEG components |
-| Tests | 12 CTest targets: 10 utility tests, one public-API linkage test, and one OpenGL diagnostics test |
+| Tests | 13 CTest targets: 10 utility tests plus API linkage, OpenGL diagnostics, and window-resize event coverage |
 | CI | GCC and Clang, Debug and Release, package install, and external-consumer validation |
 
 ## Implemented
 
 - Application lifecycle and frame loop through `Pyramid::Game`.
-- Win32 window creation, resizing, visibility, positioning, and WGL context management.
+- Win32 window creation, resize-event delivery, visibility, positioning, and WGL context management.
 - OpenGL device, buffers, vertex arrays, shaders, textures, framebuffers, and state caching.
 - Forward, cascaded-shadow, deferred-geometry, and deferred-lighting passes.
 - Perspective and orthographic cameras.
@@ -128,6 +128,15 @@ protected:
         device->Clear(Pyramid::Color(0.08f, 0.10f, 0.14f, 1.0f));
         device->Present(true);
     }
+
+    void onWindowResize(const Pyramid::WindowResizeEvent& event) override
+    {
+        Game::onWindowResize(event);
+        if (!event.HasRenderableArea())
+            return;
+
+        // Step 3 will update the viewport, camera, and render targets here.
+    }
 };
 
 int main()
@@ -161,7 +170,7 @@ The CI workflow validates this package-consumer path with both GCC and Clang.
 
 - [Documentation index](docs/README.md)
 - [Building and testing](docs/BUILDING.md)
-- [Architecture](docs/ARCHITECTURE.md)
+- [Architecture](docs/Architecture.md)
 - [API overview](docs/API.md)
 - [Examples](docs/EXAMPLES.md)
 - [Development guide](docs/DEVELOPMENT.md)
