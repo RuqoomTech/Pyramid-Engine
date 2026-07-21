@@ -2,6 +2,8 @@ target_sources(PyramidEngine
     PRIVATE
         source/GraphicsDevice.cpp
         source/OpenGL/OpenGLDevice.cpp
+        source/OpenGL/OpenGLDiagnostics.cpp
+        source/OpenGL/OpenGLDiagnostics.hpp
         source/OpenGL/Buffer/OpenGLVertexBuffer.cpp
         source/OpenGL/Buffer/OpenGLIndexBuffer.cpp
         source/OpenGL/Buffer/OpenGLVertexArray.cpp

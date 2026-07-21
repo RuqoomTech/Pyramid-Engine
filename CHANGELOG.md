@@ -4,6 +4,14 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 
 ## [Unreleased]
 
+### Rendering diagnostics
+
+- Added a centralized OpenGL diagnostics module for draining and reporting all pending errors.
+- Enabled synchronous driver debug callbacks in Debug builds when the current context supports them.
+- Requested a Win32 OpenGL debug context in non-Release builds.
+- Added readable source, type, severity, and error-name mapping plus focused unit coverage.
+- Suppressed high-volume notification messages while preserving warnings and errors.
+
 ### Next priorities
 
 - Windows runtime verification for Debug and Release.

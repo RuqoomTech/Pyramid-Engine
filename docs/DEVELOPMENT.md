@@ -58,6 +58,8 @@ Utility tests live under `Engine/Utils/test` and are registered by `add_utils_te
 
 Renderer changes require manual visual validation until image-regression tests exist.
 
+Debug builds request an OpenGL debug context and attach a synchronous driver callback when supported. Driver warnings and errors are routed through `PYRAMID_LOG_*`; notification-level messages are suppressed. Release builds do not enable the callback.
+
 ## CMake and package changes
 
 After changing targets, include directories, or installation:

@@ -1,4 +1,5 @@
 #include <Pyramid/Graphics/OpenGL/OpenGLDevice.hpp>
+#include "OpenGLDiagnostics.hpp"
 #include <Pyramid/Util/Log.hpp>                      // For logging
 #include <Pyramid/Graphics/Buffer/UniformBuffer.hpp> // For BufferUsage enum
 #include <Pyramid/Graphics/OpenGL/Buffer/OpenGLVertexBuffer.hpp>
@@ -12,64 +13,12 @@
 #include <Pyramid/Graphics/OpenGL/OpenGLTexture.hpp>
 #include <Pyramid/Graphics/Texture.hpp> // Added for ITexture2D factory methods
 #include <glad/glad.h>
-#include <sstream>
 
 namespace Pyramid
 {
     namespace
     {
         constexpr u32 kMaxTextureSlots = 32;
-
-        const char *ToGlErrorName(GLenum errorCode)
-        {
-            switch (errorCode)
-            {
-            case GL_INVALID_ENUM:
-                return "GL_INVALID_ENUM";
-            case GL_INVALID_VALUE:
-                return "GL_INVALID_VALUE";
-            case GL_INVALID_OPERATION:
-                return "GL_INVALID_OPERATION";
-            case GL_STACK_OVERFLOW:
-                return "GL_STACK_OVERFLOW";
-            case GL_STACK_UNDERFLOW:
-                return "GL_STACK_UNDERFLOW";
-            case GL_OUT_OF_MEMORY:
-                return "GL_OUT_OF_MEMORY";
-            case GL_INVALID_FRAMEBUFFER_OPERATION:
-                return "GL_INVALID_FRAMEBUFFER_OPERATION";
-            default:
-                return "GL_UNKNOWN_ERROR";
-            }
-        }
-
-        void DrainOpenGLErrors()
-        {
-            while (glGetError() != GL_NO_ERROR)
-            {
-            }
-        }
-
-        bool CaptureOpenGLError(const char *operation, std::string &lastError, bool logFailure = true)
-        {
-            const GLenum error = glGetError();
-            if (error == GL_NO_ERROR)
-            {
-                return true;
-            }
-
-            std::ostringstream errorStream;
-            errorStream << operation << " failed with OpenGL error 0x" << std::hex << error
-                        << " (" << ToGlErrorName(error) << ")";
-            lastError = errorStream.str();
-
-            if (logFailure)
-            {
-                PYRAMID_LOG_ERROR(lastError);
-            }
-
-            return false;
-        }
     } // namespace
 
 
@@ -111,14 +60,16 @@ namespace Pyramid
 
         // Make OpenGL context current
         m_window->MakeContextCurrent();
-        DrainOpenGLErrors();
+        OpenGLDiagnostics::ClearErrors();
 
         auto &stateManager = OpenGLStateManager::GetInstance();
         stateManager.InvalidateState();
         stateManager.ResetToDefaults();
         stateManager.SetViewport(0, 0, m_window->GetWidth(), m_window->GetHeight());
 
-        if (!CaptureOpenGLError("OpenGLDevice::Initialize", m_lastError))
+        OpenGLDiagnostics::Initialize();
+
+        if (!OpenGLDiagnostics::CheckError("OpenGLDevice::Initialize", &m_lastError))
         {
             return false;
         }
@@ -134,8 +85,9 @@ namespace Pyramid
     {
         if (m_initialized)
         {
+            OpenGLDiagnostics::Shutdown();
             OpenGLStateManager::GetInstance().InvalidateState();
-            DrainOpenGLErrors();
+            OpenGLDiagnostics::ClearErrors();
 
             m_initialized = false;
             m_deviceInfoCached = false;
@@ -148,7 +100,7 @@ namespace Pyramid
     {
         OpenGLStateManager::GetInstance().SetClearColor(color.r, color.g, color.b, color.a);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        CaptureOpenGLError("OpenGLDevice::Clear", m_lastError, false);
+        OpenGLDiagnostics::CheckError("OpenGLDevice::Clear", &m_lastError, false);
     }
 
     void OpenGLDevice::Present(bool vsync)
@@ -166,19 +118,19 @@ namespace Pyramid
     void OpenGLDevice::DrawIndexed(u32 count)
     {
         glDrawElements(GL_TRIANGLES, count, GL_UNSIGNED_INT, nullptr);
-        CaptureOpenGLError("OpenGLDevice::DrawIndexed", m_lastError, false);
+        OpenGLDiagnostics::CheckError("OpenGLDevice::DrawIndexed", &m_lastError, false);
     }
 
     void OpenGLDevice::DrawIndexedInstanced(u32 indexCount, u32 instanceCount)
     {
         glDrawElementsInstanced(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, nullptr, instanceCount);
-        CaptureOpenGLError("OpenGLDevice::DrawIndexedInstanced", m_lastError, false);
+        OpenGLDiagnostics::CheckError("OpenGLDevice::DrawIndexedInstanced", &m_lastError, false);
     }
 
     void OpenGLDevice::DrawArraysInstanced(u32 vertexCount, u32 instanceCount, u32 firstVertex)
     {
         glDrawArraysInstanced(GL_TRIANGLES, firstVertex, vertexCount, instanceCount);
-        CaptureOpenGLError("OpenGLDevice::DrawArraysInstanced", m_lastError, false);
+        OpenGLDiagnostics::CheckError("OpenGLDevice::DrawArraysInstanced", &m_lastError, false);
     }
 
     void OpenGLDevice::SetViewport(u32 x, u32 y, u32 width, u32 height)
@@ -325,13 +277,13 @@ namespace Pyramid
     void OpenGLDevice::SetWireframeMode(bool enable)
     {
         OpenGLStateManager::GetInstance().SetPolygonMode(enable ? GL_LINE : GL_FILL);
-        CaptureOpenGLError("OpenGLDevice::SetWireframeMode", m_lastError, false);
+        OpenGLDiagnostics::CheckError("OpenGLDevice::SetWireframeMode", &m_lastError, false);
     }
 
     void OpenGLDevice::SetPolygonMode(u32 mode)
     {
         OpenGLStateManager::GetInstance().SetPolygonMode(static_cast<GLenum>(mode));
-        CaptureOpenGLError("OpenGLDevice::SetPolygonMode", m_lastError, false);
+        OpenGLDiagnostics::CheckError("OpenGLDevice::SetPolygonMode", &m_lastError, false);
     }
 
     void OpenGLDevice::BindFramebuffer(IFramebuffer *framebuffer)
@@ -423,7 +375,7 @@ namespace Pyramid
         const GLfloat borderColor[] = {r, g, b, a};
         OpenGLStateManager::GetInstance().BindTextureUnit(0, static_cast<GLenum>(target), textureId);
         glTexParameterfv(static_cast<GLenum>(target), GL_TEXTURE_BORDER_COLOR, borderColor);
-        CaptureOpenGLError("OpenGLDevice::SetTextureBorderColor", m_lastError);
+        OpenGLDiagnostics::CheckError("OpenGLDevice::SetTextureBorderColor", &m_lastError);
     }
 
     void OpenGLDevice::BindUniformBuffer(IUniformBuffer *buffer, u32 bindingPoint)
@@ -442,7 +394,7 @@ namespace Pyramid
     void OpenGLDevice::ClearBuffers(u32 clearMask)
     {
         glClear(static_cast<GLbitfield>(clearMask));
-        CaptureOpenGLError("OpenGLDevice::ClearBuffers", m_lastError, false);
+        OpenGLDiagnostics::CheckError("OpenGLDevice::ClearBuffers", &m_lastError, false);
     }
 
 } // namespace Pyramid

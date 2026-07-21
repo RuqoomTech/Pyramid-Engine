@@ -13,13 +13,14 @@ The current `0.6.0-pre-alpha` baseline includes:
 - strict required window operations with Win32 implementations;
 - relocatable install/export package and external-consumer test;
 - Windows Debug/Release CI for build, CTest, install, and package consumption;
-- 11 registered tests, including previously omitted PNG/JPEG parser tests;
+- 12 registered tests, including previously omitted PNG/JPEG parser tests and OpenGL diagnostics coverage;
 - corrected standards-invalid PNG, zlib, and JPEG test fixtures;
 - public texture convenience definitions and explicit depth-target failure;
 - definitions for scene events, box queries, visibility statistics, spatial test scenes, and octree operations;
 - removal of public render-pass classes that had no implementations;
 - whole-object non-Windows static linkage validation with no unresolved symbols;
-- a missing `<cstring>` dependency fixed in the image loader.
+- a missing `<cstring>` dependency fixed in the image loader;
+- Debug-context negotiation and OpenGL driver callback diagnostics.
 
 ## P0 — verify and finish the current vertical slice
 
@@ -38,7 +39,8 @@ The current `0.6.0-pre-alpha` baseline includes:
 - Remove fixed deferred target dimensions and propagate window resize.
 - Complete deferred shadow-map-array binding.
 - Verify multisampled targets, resolve behavior, and attachment ownership.
-- Add OpenGL debug-callback handling and render-state transition tests.
+- [x] Add OpenGL debug-callback handling.
+- [ ] Add render-state transition tests.
 
 ### Texture and image correctness
 

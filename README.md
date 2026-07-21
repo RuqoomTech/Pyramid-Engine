@@ -18,7 +18,7 @@ The project is intended for engine development and experimentation. It is not ye
 | Scene | Scene graph, render objects, lights, scene manager, and octree queries |
 | Math | Vectors, matrices, quaternions, geometry helpers, and SIMD-oriented utilities |
 | Images | TGA/BMP subsets, non-interlaced PNG, and experimental JPEG components |
-| Tests | 11 CTest targets: 10 utility tests and one public-API linkage test |
+| Tests | 12 CTest targets: 10 utility tests, one public-API linkage test, and one OpenGL diagnostics test |
 | CI | GCC and Clang, Debug and Release, package install, and external-consumer validation |
 
 ## Implemented
@@ -29,6 +29,7 @@ The project is intended for engine development and experimentation. It is not ye
 - Forward, cascaded-shadow, deferred-geometry, and deferred-lighting passes.
 - Perspective and orthographic cameras.
 - Scene objects, lights, hierarchy nodes, scene management, octree storage, and spatial queries.
+- OpenGL driver debug callbacks and centralized error diagnostics in Debug builds.
 - Logging, assertions, image loading, compression utilities, and math primitives.
 - Installable CMake package exported as `Pyramid::Engine`.
 

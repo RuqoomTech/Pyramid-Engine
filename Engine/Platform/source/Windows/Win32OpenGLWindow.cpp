@@ -254,18 +254,32 @@ namespace Pyramid
             const int versions[][2] = {
                 {4, 6}, {4, 5}, {4, 4}, {4, 3}, {4, 2}, {4, 1}, {4, 0}, {3, 3}};
 
+#ifdef NDEBUG
+            constexpr int contextFlagOptions[] = {
+                WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB};
+#else
+            constexpr int contextFlagOptions[] = {
+                WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB | WGL_CONTEXT_DEBUG_BIT_ARB,
+                WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB};
+#endif
+
             for (const auto &version : versions)
             {
-                const int contextAttribs[] = {
-                    WGL_CONTEXT_MAJOR_VERSION_ARB, version[0],
-                    WGL_CONTEXT_MINOR_VERSION_ARB, version[1],
-                    WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
-                    WGL_CONTEXT_FLAGS_ARB, WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
-                    0};
-
-                m_hglrc = wglCreateContextAttribsARB(m_hdc, nullptr, contextAttribs);
-                if (m_hglrc)
+                for (const int contextFlags : contextFlagOptions)
                 {
+                    const int contextAttribs[] = {
+                        WGL_CONTEXT_MAJOR_VERSION_ARB, version[0],
+                        WGL_CONTEXT_MINOR_VERSION_ARB, version[1],
+                        WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
+                        WGL_CONTEXT_FLAGS_ARB, contextFlags,
+                        0};
+
+                    m_hglrc = wglCreateContextAttribsARB(m_hdc, nullptr, contextAttribs);
+                    if (!m_hglrc)
+                    {
+                        continue;
+                    }
+
                     // Success! Clean up temporary context
                     wglMakeCurrent(nullptr, nullptr);
                     wglDeleteContext(tempContext);
@@ -286,6 +300,14 @@ namespace Pyramid
                         m_hglrc = nullptr;
                         return false;
                     }
+
+#ifndef NDEBUG
+                    if ((contextFlags & WGL_CONTEXT_DEBUG_BIT_ARB) == 0)
+                    {
+                        PYRAMID_LOG_WARN(
+                            "Driver rejected a debug OpenGL context; continuing with a standard core context");
+                    }
+#endif
 
                     // Enhanced OpenGL context information logging
                     LogOpenGLContextInfo();
