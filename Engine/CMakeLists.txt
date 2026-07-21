@@ -29,9 +29,17 @@ target_include_directories(PyramidEngine
 target_link_libraries(PyramidEngine
     PUBLIC
         glad
-    PRIVATE
-        opengl32
 )
+
+if(WIN32)
+    find_package(OpenGL REQUIRED)
+    target_link_libraries(PyramidEngine
+        PRIVATE
+            OpenGL::GL
+            gdi32
+            user32
+    )
+endif()
 
 target_compile_definitions(PyramidEngine
     PUBLIC
@@ -43,7 +51,12 @@ target_compile_definitions(PyramidEngine
         PYRAMID_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
 )
 
-if(MSVC)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(PyramidEngine PRIVATE -Wall -Wextra -Wpedantic)
+    if(PYRAMID_WARNINGS_AS_ERRORS)
+        target_compile_options(PyramidEngine PRIVATE -Werror)
+    endif()
+elseif(MSVC)
     target_compile_options(PyramidEngine PRIVATE /W4 /permissive-)
     if(PYRAMID_WARNINGS_AS_ERRORS)
         target_compile_options(PyramidEngine PRIVATE /WX)

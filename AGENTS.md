@@ -8,23 +8,24 @@
 - `Tests/PublicApiLinkage.cpp` protects selected public symbols.
 - `Tests/Consumer` validates the installed CMake package.
 - `vendor/glad` is a bundled public dependency.
+- The supported Windows toolchain is MSYS2 UCRT64 with MinGW-w64 GCC; Clang is also validated. Visual Studio is not required.
 - Input, audio, physics, editor, scripting, DirectX, Vulkan, Linux, and macOS are not supported.
 
 ## Build and test
 
 ```powershell
-cmake --preset vs2022-debug-tests
-cmake --build --preset build-debug-tests
-ctest --preset test-debug
-./scripts/run-smoke.ps1 -BuildDir build/debug-tests -Config Debug -DurationSeconds 5
+cmake --preset gcc-debug-tests
+cmake --build --preset build-gcc-debug-tests
+ctest --preset test-gcc-debug
+./scripts/run-smoke.ps1 -BuildDir build/gcc-debug-tests -DurationSeconds 5
 ```
 
 Release validation:
 
 ```powershell
-cmake --preset vs2022-release-tests
-cmake --build --preset build-release-tests
-ctest --preset test-release
+cmake --preset gcc-release-tests
+cmake --build --preset build-gcc-release-tests
+ctest --preset test-gcc-release
 ```
 
 ## Style

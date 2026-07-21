@@ -1,4 +1,7 @@
 @PACKAGE_INIT@
 
+include(CMakeFindDependencyMacro)
+find_dependency(OpenGL)
+
 include("${CMAKE_CURRENT_LIST_DIR}/PyramidEngineTargets.cmake")
 check_required_components(PyramidEngine)

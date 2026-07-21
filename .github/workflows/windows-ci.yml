@@ -1,4 +1,4 @@
-name: Windows CI
+name: Windows MinGW CI
 
 on:
   push:
@@ -15,56 +15,110 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        configuration: [Debug, Release]
+        include:
+          - name: gcc-debug
+            configuration: Debug
+            configure_preset: gcc-debug-tests
+            build_preset: build-gcc-debug-tests
+            test_preset: test-gcc-debug
+            compiler_c: gcc
+            compiler_cxx: g++
+            packages: >-
+              mingw-w64-ucrt-x86_64-toolchain
+              mingw-w64-ucrt-x86_64-cmake
+              mingw-w64-ucrt-x86_64-ninja
+          - name: gcc-release
+            configuration: Release
+            configure_preset: gcc-release-tests
+            build_preset: build-gcc-release-tests
+            test_preset: test-gcc-release
+            compiler_c: gcc
+            compiler_cxx: g++
+            packages: >-
+              mingw-w64-ucrt-x86_64-toolchain
+              mingw-w64-ucrt-x86_64-cmake
+              mingw-w64-ucrt-x86_64-ninja
+          - name: clang-debug
+            configuration: Debug
+            configure_preset: clang-debug-tests
+            build_preset: build-clang-debug-tests
+            test_preset: test-clang-debug
+            compiler_c: clang
+            compiler_cxx: clang++
+            packages: >-
+              mingw-w64-ucrt-x86_64-toolchain
+              mingw-w64-ucrt-x86_64-clang
+              mingw-w64-ucrt-x86_64-lld
+              mingw-w64-ucrt-x86_64-cmake
+              mingw-w64-ucrt-x86_64-ninja
+          - name: clang-release
+            configuration: Release
+            configure_preset: clang-release-tests
+            build_preset: build-clang-release-tests
+            test_preset: test-clang-release
+            compiler_c: clang
+            compiler_cxx: clang++
+            packages: >-
+              mingw-w64-ucrt-x86_64-toolchain
+              mingw-w64-ucrt-x86_64-clang
+              mingw-w64-ucrt-x86_64-lld
+              mingw-w64-ucrt-x86_64-cmake
+              mingw-w64-ucrt-x86_64-ninja
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up MSYS2 UCRT64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: ${{ matrix.packages }}
+
       - name: Configure
-        shell: pwsh
-        run: >-
-          cmake -S . -B build
-          -G "Visual Studio 17 2022"
-          -A x64
-          -DPYRAMID_BUILD_EXAMPLES=ON
-          -DPYRAMID_BUILD_TESTS=ON
-          -DPYRAMID_WARNINGS_AS_ERRORS=OFF
+        shell: msys2 {0}
+        run: cmake --preset ${{ matrix.configure_preset }}
 
       - name: Build
-        shell: pwsh
-        run: cmake --build build --config ${{ matrix.configuration }} --parallel
+        shell: msys2 {0}
+        run: cmake --build --preset ${{ matrix.build_preset }} --parallel
 
       - name: Test
-        shell: pwsh
-        run: ctest --test-dir build -C ${{ matrix.configuration }} --output-on-failure
+        shell: msys2 {0}
+        run: ctest --preset ${{ matrix.test_preset }}
 
       - name: Install smoke test
-        shell: pwsh
-        run: cmake --install build --config ${{ matrix.configuration }} --prefix build/install
+        shell: msys2 {0}
+        run: >-
+          cmake --install build/${{ matrix.configure_preset }}
+          --prefix build/install/${{ matrix.name }}
 
       - name: Configure external consumer
-        shell: pwsh
+        shell: msys2 {0}
         run: >-
-          cmake -S Tests/Consumer -B build/consumer
-          -G "Visual Studio 17 2022"
-          -A x64
-          -DCMAKE_PREFIX_PATH="${{ github.workspace }}/build/install"
+          cmake -S Tests/Consumer
+          -B build/consumer/${{ matrix.name }}
+          -G Ninja
+          -DCMAKE_BUILD_TYPE=${{ matrix.configuration }}
+          -DCMAKE_C_COMPILER=${{ matrix.compiler_c }}
+          -DCMAKE_CXX_COMPILER=${{ matrix.compiler_cxx }}
+          -DCMAKE_PREFIX_PATH="$PWD/build/install/${{ matrix.name }}"
 
       - name: Build external consumer
-        shell: pwsh
-        run: cmake --build build/consumer --config ${{ matrix.configuration }} --parallel
+        shell: msys2 {0}
+        run: cmake --build build/consumer/${{ matrix.name }} --parallel
 
       - name: Run external consumer
-        shell: pwsh
-        run: ./build/consumer/${{ matrix.configuration }}/PyramidConsumer.exe
+        shell: msys2 {0}
+        run: ./build/consumer/${{ matrix.name }}/PyramidConsumer.exe
 
       - name: Upload binaries
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: pyramid-${{ matrix.configuration }}
+          name: pyramid-${{ matrix.name }}
           path: |
-            build/bin/${{ matrix.configuration }}
-            build/Examples/BasicRendering/${{ matrix.configuration }}
+            build/${{ matrix.configure_preset }}/bin
+            build/${{ matrix.configure_preset }}/lib
           if-no-files-found: warn

@@ -20,10 +20,12 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 - Raised the supported CMake workflow to 3.23+.
 - Added an explicit Windows-only platform guard.
 - Removed stale `Game`, dependency, tool, and empty subsystem build entries.
-- Added MSVC `/W4` and `/permissive-` defaults.
+- Replaced the Visual Studio presets with Ninja presets for MSYS2 UCRT64 GCC and Clang.
+- Added GCC/Clang `-Wall -Wextra -Wpedantic` defaults.
+- Added PowerShell helpers for installing and invoking the open-source MinGW toolchain.
 - Added relocatable CMake package exports for `Pyramid::Engine` and GLAD.
 - Added an external `find_package` consumer.
-- Added Windows Debug/Release CI for build, tests, install, and consumer validation.
+- Added MSYS2 UCRT64 CI for GCC and Clang Debug/Release builds, tests, install, and consumer validation.
 
 ### API reliability
 

@@ -1,7 +1,5 @@
 param(
-    [string]$BuildDir = "build/debug",
-    [ValidateSet("Debug", "Release", "RelWithDebInfo", "MinSizeRel")]
-    [string]$Config = "Debug",
+    [string]$BuildDir = "build/gcc-debug",
     [ValidateRange(1, 300)]
     [int]$DurationSeconds = 5
 )
@@ -15,7 +13,7 @@ function Resolve-Executable {
     )
 
     if (-not (Test-Path $Path -PathType Leaf)) {
-        throw "Could not locate '$Name' at '$Path'. Build the selected preset and configuration first."
+        throw "Could not locate '$Name' at '$Path'. Build the selected preset first."
     }
 
     return (Resolve-Path $Path).Path
@@ -47,7 +45,7 @@ function Invoke-SmokeRun {
     return $false
 }
 
-$runtimeDir = Join-Path $BuildDir "bin/$Config"
+$runtimeDir = Join-Path $BuildDir "bin"
 $basicGame = Resolve-Executable -Name "BasicGame" -Path (Join-Path $runtimeDir "BasicGame.exe")
 $basicRendering = Resolve-Executable -Name "BasicRenderingExample" -Path (Join-Path $runtimeDir "BasicRenderingExample.exe")
 

@@ -14,7 +14,7 @@ option(
 if(NOT WIN32 AND NOT PYRAMID_ALLOW_UNSUPPORTED_HOST_CONFIGURE)
     message(FATAL_ERROR
         "Pyramid Engine currently supports Windows only. "
-        "Use Windows 10/11 with Visual Studio 2022 and a Windows SDK.")
+        "Use Windows 10/11 with a MinGW-w64 toolchain; MSYS2 UCRT64 is recommended.")
 endif()
 
 set(CMAKE_CXX_STANDARD 17)

@@ -19,14 +19,14 @@ Demonstrates:
 Build:
 
 ```powershell
-cmake --preset vs2022-debug
-cmake --build --preset build-debug
+cmake --preset gcc-debug
+cmake --build --preset build-gcc-debug
 ```
 
 Run:
 
 ```powershell
-./build/debug/bin/Debug/BasicGame.exe
+./build/gcc-debug/bin/BasicGame.exe
 ```
 
 
@@ -45,13 +45,13 @@ This is the lower-level reference rendering path. It demonstrates:
 Run:
 
 ```powershell
-./build/debug/bin/Debug/BasicRenderingExample.exe
+./build/gcc-debug/bin/BasicRenderingExample.exe
 ```
 
 ## Smoke validation
 
 ```powershell
-./scripts/run-smoke.ps1 -BuildDir build/debug -Config Debug -DurationSeconds 5
+./scripts/run-smoke.ps1 -BuildDir build/gcc-debug -DurationSeconds 5
 ```
 
 A successful timed process run proves that startup did not immediately fail. After graphics changes, also verify:

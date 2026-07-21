@@ -14,10 +14,10 @@
 Recommended local validation:
 
 ```powershell
-cmake --preset vs2022-debug-tests
-cmake --build --preset build-debug-tests
-ctest --preset test-debug
-./scripts/run-smoke.ps1 -BuildDir build/debug-tests -Config Debug -DurationSeconds 5
+cmake --preset gcc-debug-tests
+cmake --build --preset build-gcc-debug-tests
+ctest --preset test-gcc-debug
+./scripts/run-smoke.ps1 -BuildDir build/gcc-debug-tests -DurationSeconds 5
 ```
 
 ## Conventions
@@ -32,7 +32,7 @@ ctest --preset test-debug
 - No required interface operation may silently default to a no-op.
 - Platform-specific APIs belong behind platform implementation headers.
 
-The codebase enables MSVC `/W4` and `/permissive-`. Warnings are not yet errors by default because existing warnings still need cleanup. New code should not add warnings.
+The primary toolchain enables GCC/Clang `-Wall -Wextra -Wpedantic`. Warnings are not errors by default because existing warnings still need cleanup. New code should not add warnings.
 
 ## Public API discipline
 
@@ -54,7 +54,7 @@ Utility tests live under `Engine/Utils/test` and are registered by `add_utils_te
 - clean up temporary files;
 - print enough context to diagnose a failure.
 
-`API.PublicApiLinkage` verifies selected exported symbols. Windows CI additionally validates Debug and Release builds, installation, and an external `find_package` consumer.
+`API.PublicApiLinkage` verifies selected exported symbols. Windows CI validates GCC and Clang in Debug and Release, plus installation and an external `find_package` consumer.
 
 Renderer changes require manual visual validation until image-regression tests exist.
 
@@ -62,14 +62,16 @@ Renderer changes require manual visual validation until image-regression tests e
 
 After changing targets, include directories, or installation:
 
-```powershell
-cmake --preset vs2022-release-tests
-cmake --build --preset build-release-tests
-ctest --preset test-release
-cmake --install build/release-tests --config Release --prefix install
-cmake -S Tests/Consumer -B build/consumer -G "Visual Studio 17 2022" -A x64 `
+```bash
+cmake --preset gcc-release-tests
+cmake --build --preset build-gcc-release-tests
+ctest --preset test-gcc-release
+cmake --install build/gcc-release-tests --prefix install
+cmake -S Tests/Consumer -B build/consumer -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CXX_COMPILER=g++ \
   -DCMAKE_PREFIX_PATH="$PWD/install"
-cmake --build build/consumer --config Release
+cmake --build build/consumer --parallel
 ```
 
 Keep build-tree paths out of installed target interfaces. Public headers should be installed as files, not exposed as absolute `INTERFACE_SOURCES`.
@@ -108,7 +110,7 @@ Include:
 Before tagging:
 
 1. synchronize CMake version, status, tag, and changelog;
-2. pass clean Windows Debug and Release CI;
+2. pass clean GCC and Clang Debug/Release CI;
 3. run all registered tests;
 4. manually run and inspect both examples;
 5. install into an empty prefix and build the external consumer;

@@ -1,14 +1,22 @@
 param(
-    [ValidateSet("vs2022-debug", "vs2022-debug-tests", "vs2022-release-tests")]
-    [string]$Preset = "vs2022-debug"
+    [ValidateSet(
+        "gcc-debug",
+        "gcc-debug-tests",
+        "gcc-release-tests",
+        "clang-debug-tests",
+        "clang-release-tests"
+    )]
+    [string]$Preset = "gcc-debug"
 )
 
 $ErrorActionPreference = "Stop"
 
 $buildDirByPreset = @{
-    "vs2022-debug" = "build/debug"
-    "vs2022-debug-tests" = "build/debug-tests"
-    "vs2022-release-tests" = "build/release-tests"
+    "gcc-debug" = "build/gcc-debug"
+    "gcc-debug-tests" = "build/gcc-debug-tests"
+    "gcc-release-tests" = "build/gcc-release-tests"
+    "clang-debug-tests" = "build/clang-debug-tests"
+    "clang-release-tests" = "build/clang-release-tests"
 }
 
 $buildDir = $buildDirByPreset[$Preset]

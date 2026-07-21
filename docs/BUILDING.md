@@ -2,51 +2,103 @@
 
 ## Supported environment
 
-Pyramid Engine currently supports one build environment:
+Pyramid Engine currently supports native 64-bit Windows builds with an open-source MinGW toolchain:
 
-- Windows 10 or 11, x64
-- Visual Studio 2022 with **Desktop development with C++**
-- Windows SDK
-- CMake 3.23 or newer
-- OpenGL 3.3 core or newer
+- Windows 10 or 11, x64;
+- MSYS2 using the **UCRT64** environment;
+- MinGW-w64 GCC as the default compiler;
+- optional Clang targeting the same MinGW-w64/UCRT runtime;
+- Ninja;
+- CMake 3.23 or newer;
+- OpenGL 3.3 core or newer.
 
-A normal configure on Linux or macOS fails immediately with a clear unsupported-platform message. The internal `PYRAMID_ALLOW_UNSUPPORTED_HOST_CONFIGURE` option exists only for configure-time metadata validation; it does not make the engine buildable on those systems.
+Visual Studio, MSVC, and the Visual Studio Build Tools are not required.
+
+A normal configure on Linux or macOS fails immediately. `PYRAMID_ALLOW_UNSUPPORTED_HOST_CONFIGURE` is only for metadata validation; it does not make the Win32/WGL engine runnable on another platform.
+
+## Install MSYS2 and the compiler
+
+Install MSYS2 to `C:\msys64`, then run from PowerShell:
+
+```powershell
+./scripts/bootstrap-msys2.ps1 -Compiler gcc
+```
+
+To install both GCC and Clang:
+
+```powershell
+./scripts/bootstrap-msys2.ps1 -Compiler both
+```
+
+The script installs the UCRT64 MinGW-w64 toolchain, CMake, and Ninja. It does not install Visual Studio.
+
+After setup, use either:
+
+- the **MSYS2 UCRT64** terminal; or
+- `scripts/build-mingw.ps1` from ordinary PowerShell.
+
+Do not build from the plain **MSYS** shell. Its `/usr` compiler targets the MSYS POSIX runtime rather than native Windows.
+
+## PowerShell workflow
+
+Default GCC Debug build with tests:
+
+```powershell
+./scripts/build-mingw.ps1 -Compiler gcc -Configuration Debug
+```
+
+GCC Release:
+
+```powershell
+./scripts/build-mingw.ps1 -Compiler gcc -Configuration Release
+```
+
+Clang Debug:
+
+```powershell
+./scripts/build-mingw.ps1 -Compiler clang -Configuration Debug
+```
 
 ## Presets
 
 | Configure preset | Build directory | Purpose |
 |---|---|---|
-| `vs2022-debug` | `build/debug` | Debug engine and examples |
-| `vs2022-debug-tests` | `build/debug-tests` | Debug engine, examples, and tests |
-| `vs2022-release-tests` | `build/release-tests` | Release engine, examples, and tests |
+| `gcc-debug` | `build/gcc-debug` | GCC Debug engine and examples |
+| `gcc-debug-tests` | `build/gcc-debug-tests` | GCC Debug engine, examples, and tests |
+| `gcc-release-tests` | `build/gcc-release-tests` | GCC Release engine, examples, and tests |
+| `clang-debug-tests` | `build/clang-debug-tests` | Clang Debug engine, examples, and tests |
+| `clang-release-tests` | `build/clang-release-tests` | Clang Release engine, examples, and tests |
 
-### Debug
+### GCC Debug with tests
 
-```powershell
-cmake --preset vs2022-debug
-cmake --build --preset build-debug
+Run in **MSYS2 UCRT64**:
+
+```bash
+cmake --preset gcc-debug-tests
+cmake --build --preset build-gcc-debug-tests
+ctest --preset test-gcc-debug
 ```
 
-### Debug with tests
+### GCC Release with tests
 
-```powershell
-cmake --preset vs2022-debug-tests
-cmake --build --preset build-debug-tests
-ctest --preset test-debug
+```bash
+cmake --preset gcc-release-tests
+cmake --build --preset build-gcc-release-tests
+ctest --preset test-gcc-release
 ```
 
-### Release with tests
+### Clang validation
 
-```powershell
-cmake --preset vs2022-release-tests
-cmake --build --preset build-release-tests
-ctest --preset test-release
+```bash
+cmake --preset clang-debug-tests
+cmake --build --preset build-clang-debug-tests
+ctest --preset test-clang-debug
 ```
 
-Clean configuration helper:
+Clean configuration helper from PowerShell:
 
 ```powershell
-./scripts/configure-clean.ps1 -Preset vs2022-debug-tests
+./scripts/configure-clean.ps1 -Preset gcc-debug-tests
 ```
 
 ## CMake options
@@ -55,17 +107,20 @@ Clean configuration helper:
 |---|---:|---|
 | `PYRAMID_BUILD_EXAMPLES` | `ON` | Build both graphical examples |
 | `PYRAMID_BUILD_TESTS` | `OFF` | Enable CTest and all maintained tests |
-| `PYRAMID_WARNINGS_AS_ERRORS` | `OFF` | Promote MSVC warnings to errors |
+| `PYRAMID_WARNINGS_AS_ERRORS` | `OFF` | Promote GCC/Clang warnings to errors |
 | `PYRAMID_ALLOW_UNSUPPORTED_HOST_CONFIGURE` | `OFF` | Configure-only validation outside Windows |
 
-Manual configuration:
+Manual GCC configuration from UCRT64:
 
-```powershell
-cmake -S . -B build/manual -G "Visual Studio 17 2022" -A x64 `
-  -DPYRAMID_BUILD_EXAMPLES=ON `
+```bash
+cmake -S . -B build/manual -G Ninja \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DCMAKE_C_COMPILER=gcc \
+  -DCMAKE_CXX_COMPILER=g++ \
+  -DPYRAMID_BUILD_EXAMPLES=ON \
   -DPYRAMID_BUILD_TESTS=ON
-cmake --build build/manual --config Debug --parallel
-ctest --test-dir build/manual -C Debug --output-on-failure
+cmake --build build/manual --parallel
+ctest --test-dir build/manual --output-on-failure
 ```
 
 ## Tests
@@ -88,28 +143,30 @@ The API test takes addresses of public factory and scene-management methods so m
 
 ## Graphical smoke test
 
+After building, run from PowerShell:
+
 ```powershell
-./scripts/run-smoke.ps1 -BuildDir build/debug -Config Debug -DurationSeconds 5
+./scripts/run-smoke.ps1 -BuildDir build/gcc-debug-tests -DurationSeconds 5
 ```
 
 The script starts `BasicGame` and `BasicRenderingExample`, then fails if either exits abnormally during the requested interval. Visually inspect both windows after renderer changes.
 
-Typical Debug outputs:
+Typical GCC Debug outputs:
 
 ```text
-build/debug/bin/Debug/BasicGame.exe
-build/debug/bin/Debug/BasicRenderingExample.exe
-build/debug/lib/Debug/PyramidEngined.lib
+build/gcc-debug-tests/bin/BasicGame.exe
+build/gcc-debug-tests/bin/BasicRenderingExample.exe
+build/gcc-debug-tests/lib/libPyramidEngined.a
 ```
 
 ## Installable package
 
 Build and install:
 
-```powershell
-cmake --preset vs2022-release-tests
-cmake --build --preset build-release-tests
-cmake --install build/release-tests --config Release --prefix install
+```bash
+cmake --preset gcc-release-tests
+cmake --build --preset build-gcc-release-tests
+cmake --install build/gcc-release-tests --prefix install
 ```
 
 The installation contains:
@@ -127,27 +184,34 @@ find_package(PyramidEngine CONFIG REQUIRED)
 target_link_libraries(MyTarget PRIVATE Pyramid::Engine)
 ```
 
-`Tests/Consumer` is the reference external consumer and is built by Windows CI after installation.
+`Tests/Consumer` is the reference external consumer and is built by CI after installation.
 
 ## CI
 
-`.github/workflows/windows-ci.yml` validates Debug and Release independently:
+`.github/workflows/windows-ci.yml` uses MSYS2 UCRT64 and validates four combinations:
 
-1. configure;
-2. build engine, examples, and tests;
-3. run CTest;
-4. install into a clean prefix;
-5. configure and build the external consumer;
-6. run the consumer executable;
-7. upload available binaries.
+- GCC Debug;
+- GCC Release;
+- Clang Debug;
+- Clang Release.
 
-The hosted runner does not validate rendered pixels or interactive behavior.
+Each combination configures, builds, runs CTest, installs the package, builds an external `find_package` consumer, and runs that consumer. No Visual Studio installation is used by the workflow.
 
 ## Troubleshooting
 
-### Unsupported platform message
+### `gcc`, `g++`, `cmake`, or `ninja` is not found
 
-Use Windows. The configure-only override is not a supported build mode.
+Open **MSYS2 UCRT64**, not the plain MSYS shell, or use `scripts/build-mingw.ps1` from PowerShell. Rerun `scripts/bootstrap-msys2.ps1` if the packages are missing.
+
+### CMake still reports `Visual Studio 17 2022`
+
+You are using an old `CMakePresets.json` or an old build directory. Pull/copy the updated files and remove the old build directory:
+
+```powershell
+Remove-Item build -Recurse -Force
+```
+
+Then use `gcc-debug-tests`, not `vs2022-debug-tests`.
 
 ### OpenGL context creation fails
 
@@ -163,4 +227,4 @@ Development builds resolve checked-in shaders using the compile-time source root
 
 ### Build files are locked
 
-Close Visual Studio and running examples, then rerun `scripts/configure-clean.ps1`.
+Close running examples and any terminal/debugger using the output files, then rerun `scripts/configure-clean.ps1`.

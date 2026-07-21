@@ -4,7 +4,7 @@ Pyramid Engine is a Windows-first, C++17 game-engine project built around a Win3
 
 **Current development version:** `0.6.0-pre-alpha`
 
-The project is suitable for engine development and experimentation. It is not yet a stable SDK or production-ready game engine.
+The project is intended for engine development and experimentation. It is not yet a stable SDK or production-ready game engine.
 
 ## Status
 
@@ -12,13 +12,14 @@ The project is suitable for engine development and experimentation. It is not ye
 |---|---|
 | Platform | Windows 10/11 x64 only |
 | Graphics | OpenGL 3.3 core or newer |
-| Toolchain | Visual Studio 2022 and CMake 3.23+ |
+| Toolchain | MSYS2 UCRT64, MinGW-w64 GCC, Ninja, and CMake 3.23+ |
+| Optional compiler | Clang targeting the same MinGW-w64/UCRT runtime |
 | Renderer | Forward, shadow, and deferred passes; several advanced paths remain partial |
 | Scene | Scene graph, render objects, lights, scene manager, and octree queries |
 | Math | Vectors, matrices, quaternions, geometry helpers, and SIMD-oriented utilities |
 | Images | TGA/BMP subsets, non-interlaced PNG, and experimental JPEG components |
 | Tests | 11 CTest targets: 10 utility tests and one public-API linkage test |
-| CI | Windows Debug and Release build, test, install, and external-consumer validation |
+| CI | GCC and Clang, Debug and Release, package install, and external-consumer validation |
 
 ## Implemented
 
@@ -44,43 +45,60 @@ The project is suitable for engine development and experimentation. It is not ye
 
 See [Roadmap and known issues](docs/ROADMAP.md) before building new systems on top of the engine.
 
-## Build
+## Toolchain setup
 
-### Requirements
+Pyramid does **not** require Visual Studio or the Microsoft C++ compiler. The supported default is MSYS2 UCRT64 with MinGW-w64 GCC and Ninja.
 
-- Windows 10 or 11, x64
-- Visual Studio 2022 with **Desktop development with C++**
-- Windows 10/11 SDK
-- CMake 3.23 or newer
-- GPU and driver supporting OpenGL 3.3 core or newer
-
-### Debug build
+1. Install MSYS2 to its default location: `C:\msys64`.
+2. From PowerShell in the repository, install the toolchain:
 
 ```powershell
-cmake --preset vs2022-debug
-cmake --build --preset build-debug
+./scripts/bootstrap-msys2.ps1 -Compiler gcc
 ```
 
-### Tests
+3. Either open **MSYS2 UCRT64** or use the PowerShell build wrapper below.
+
+## Build from PowerShell
 
 ```powershell
-cmake --preset vs2022-debug-tests
-cmake --build --preset build-debug-tests
-ctest --preset test-debug
+./scripts/build-mingw.ps1 -Compiler gcc -Configuration Debug
 ```
 
-Release validation is also available:
+That configures, builds, and runs all tests. A Release build is:
 
 ```powershell
-cmake --preset vs2022-release-tests
-cmake --build --preset build-release-tests
-ctest --preset test-release
+./scripts/build-mingw.ps1 -Compiler gcc -Configuration Release
+```
+
+Optional Clang validation:
+
+```powershell
+./scripts/bootstrap-msys2.ps1 -Compiler both
+./scripts/build-mingw.ps1 -Compiler clang -Configuration Debug
+```
+
+## Build from MSYS2 UCRT64
+
+```bash
+cmake --preset gcc-debug-tests
+cmake --build --preset build-gcc-debug-tests
+ctest --preset test-gcc-debug
+```
+
+Release validation:
+
+```bash
+cmake --preset gcc-release-tests
+cmake --build --preset build-gcc-release-tests
+ctest --preset test-gcc-release
 ```
 
 ### Graphical smoke test
 
+Run this from PowerShell after a successful build:
+
 ```powershell
-./scripts/run-smoke.ps1 -BuildDir build/debug -Config Debug -DurationSeconds 5
+./scripts/run-smoke.ps1 -BuildDir build/gcc-debug-tests -DurationSeconds 5
 ```
 
 This catches early process failure. It does not replace visual inspection or render-image regression testing.
@@ -122,10 +140,10 @@ A derived `onCreate()` must call `Game::onCreate()` before creating GPU resource
 
 ## Install and consume
 
-```powershell
-cmake --preset vs2022-release-tests
-cmake --build --preset build-release-tests
-cmake --install build/release-tests --config Release --prefix install
+```bash
+cmake --preset gcc-release-tests
+cmake --build --preset build-gcc-release-tests
+cmake --install build/gcc-release-tests --prefix install
 ```
 
 External CMake project:
@@ -136,7 +154,7 @@ add_executable(MyGame main.cpp)
 target_link_libraries(MyGame PRIVATE Pyramid::Engine)
 ```
 
-The CI workflow validates this package-consumer path.
+The CI workflow validates this package-consumer path with both GCC and Clang.
 
 ## Documentation
 
@@ -161,7 +179,7 @@ Engine/
 Examples/     BasicGame and BasicRenderingExample
 Tests/        Public API linkage and external package consumer
 CMake/        Package configuration template
-scripts/      Clean configure and graphical smoke helpers
+scripts/      MSYS2 setup, builds, clean configure, and smoke tests
 docs/         Maintained documentation
 vendor/glad/  Bundled OpenGL/WGL loader
 ```

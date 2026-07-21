@@ -7,63 +7,128 @@
   },
   "configurePresets": [
     {
-      "name": "vs2022-debug",
-      "displayName": "VS2022 Debug",
-      "generator": "Visual Studio 17 2022",
-      "architecture": "x64",
-      "binaryDir": "${sourceDir}/build/debug",
+      "name": "ninja-base",
+      "hidden": true,
+      "generator": "Ninja",
       "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "PYRAMID_BUILD_EXAMPLES": "ON",
         "PYRAMID_BUILD_TESTS": "OFF",
         "PYRAMID_WARNINGS_AS_ERRORS": "OFF"
       }
     },
     {
-      "name": "vs2022-debug-tests",
-      "displayName": "VS2022 Debug + Tests",
-      "inherits": "vs2022-debug",
-      "binaryDir": "${sourceDir}/build/debug-tests",
+      "name": "gcc-base",
+      "hidden": true,
+      "inherits": "ninja-base",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++"
+      }
+    },
+    {
+      "name": "clang-base",
+      "hidden": true,
+      "inherits": "ninja-base",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++"
+      }
+    },
+    {
+      "name": "gcc-debug",
+      "displayName": "GCC Debug",
+      "inherits": "gcc-base",
+      "binaryDir": "${sourceDir}/build/gcc-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "gcc-debug-tests",
+      "displayName": "GCC Debug + Tests",
+      "inherits": "gcc-debug",
+      "binaryDir": "${sourceDir}/build/gcc-debug-tests",
       "cacheVariables": {
         "PYRAMID_BUILD_TESTS": "ON"
       }
     },
     {
-      "name": "vs2022-release-tests",
-      "displayName": "VS2022 Release + Tests",
-      "inherits": "vs2022-debug-tests",
-      "binaryDir": "${sourceDir}/build/release-tests"
+      "name": "gcc-release-tests",
+      "displayName": "GCC Release + Tests",
+      "inherits": "gcc-debug-tests",
+      "binaryDir": "${sourceDir}/build/gcc-release-tests",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "clang-debug-tests",
+      "displayName": "Clang Debug + Tests",
+      "inherits": "clang-base",
+      "binaryDir": "${sourceDir}/build/clang-debug-tests",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "PYRAMID_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "clang-release-tests",
+      "displayName": "Clang Release + Tests",
+      "inherits": "clang-debug-tests",
+      "binaryDir": "${sourceDir}/build/clang-release-tests",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
     }
   ],
   "buildPresets": [
     {
-      "name": "build-debug",
-      "configurePreset": "vs2022-debug",
-      "configuration": "Debug"
+      "name": "build-gcc-debug",
+      "configurePreset": "gcc-debug"
     },
     {
-      "name": "build-debug-tests",
-      "configurePreset": "vs2022-debug-tests",
-      "configuration": "Debug"
+      "name": "build-gcc-debug-tests",
+      "configurePreset": "gcc-debug-tests"
     },
     {
-      "name": "build-release-tests",
-      "configurePreset": "vs2022-release-tests",
-      "configuration": "Release"
+      "name": "build-gcc-release-tests",
+      "configurePreset": "gcc-release-tests"
+    },
+    {
+      "name": "build-clang-debug-tests",
+      "configurePreset": "clang-debug-tests"
+    },
+    {
+      "name": "build-clang-release-tests",
+      "configurePreset": "clang-release-tests"
     }
   ],
   "testPresets": [
     {
-      "name": "test-debug",
-      "configurePreset": "vs2022-debug-tests",
-      "configuration": "Debug",
+      "name": "test-gcc-debug",
+      "configurePreset": "gcc-debug-tests",
       "output": {
         "outputOnFailure": true
       }
     },
     {
-      "name": "test-release",
-      "configurePreset": "vs2022-release-tests",
-      "configuration": "Release",
+      "name": "test-gcc-release",
+      "configurePreset": "gcc-release-tests",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "test-clang-debug",
+      "configurePreset": "clang-debug-tests",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "test-clang-release",
+      "configurePreset": "clang-release-tests",
       "output": {
         "outputOnFailure": true
       }
