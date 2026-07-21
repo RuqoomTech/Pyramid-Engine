@@ -1,90 +1,94 @@
 # Pyramid Engine
 
-Pyramid is an experimental C++17 game-engine codebase focused on a native Win32/OpenGL renderer, engine-owned math and image-loading utilities, and a small scene/rendering framework.
+Pyramid Engine is a Windows-first, C++17 game-engine project built around a Win32/WGL platform layer and an OpenGL renderer.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![C++](https://img.shields.io/badge/C%2B%2B-17-blue.svg)](https://isocpp.org/)
-[![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)](#current-status)
-[![Renderer](https://img.shields.io/badge/renderer-OpenGL-green.svg)](#current-status)
+**Current development version:** `0.6.0-pre-alpha`
 
-> **Maturity:** pre-alpha. The repository is suitable for engine development and experimentation, not production games.
+The project is suitable for engine development and experimentation. It is not yet a stable SDK or production-ready game engine.
 
-## Current status
-
-This documentation was verified against the source tree on **July 21, 2026**.
+## Status
 
 | Area | Current state |
 |---|---|
-| Runtime platform | Windows only: Win32 windowing and WGL context creation |
-| Graphics backend | OpenGL only; `IGraphicsDevice::Create` rejects the other declared APIs |
-| Language and build | C++17, CMake, Visual Studio 2022 x64 presets |
-| OpenGL level | The Win32 path attempts core contexts from 4.6 down to 3.3, then can retain its temporary legacy context if modern creation fails; bundled examples use GLSL 4.60 and require OpenGL 4.6 |
-| Project version | `CMakeLists.txt` declares 0.3.3; `CHANGELOG.md` contains milestones through 0.6.0. These must be reconciled before a release |
-| Automated tests | Eight utility test executables are registered with CTest when `PYRAMID_BUILD_TESTS=ON` |
-| Continuous integration | Not included in this snapshot |
+| Platform | Windows 10/11 x64 only |
+| Graphics | OpenGL 3.3 core or newer |
+| Toolchain | Visual Studio 2022 and CMake 3.23+ |
+| Renderer | Forward, shadow, and deferred passes; several advanced paths remain partial |
+| Scene | Scene graph, render objects, lights, scene manager, and octree queries |
+| Math | Vectors, matrices, quaternions, geometry helpers, and SIMD-oriented utilities |
+| Images | TGA/BMP subsets, non-interlaced PNG, and experimental JPEG components |
+| Tests | 11 CTest targets: 10 utility tests and one public-API linkage test |
+| CI | Windows Debug and Release build, test, install, and external-consumer validation |
 
-### Implemented
+## Implemented
 
-- Core `Game` lifecycle and variable-timestep loop.
-- Win32 window and OpenGL context creation.
-- OpenGL device abstraction, buffers, vertex arrays, shaders, textures, framebuffer utilities, and cached render state.
-- Command-buffer recording plus forward, shadow, and deferred render-pass implementations.
-- Camera, scene objects, lights, scene graph support, octree spatial queries, and frustum-query integration.
-- Vector, matrix, quaternion, geometry, and SIMD helper code.
-- In-tree TGA/BMP loaders, a custom PNG path, and experimental JPEG parser/decoder components.
-- Configurable console/file logging with rotation, structured fields, and assertions.
-- `BasicGame` and `BasicRenderingExample` sample applications.
+- Application lifecycle and frame loop through `Pyramid::Game`.
+- Win32 window creation, resizing, visibility, positioning, and WGL context management.
+- OpenGL device, buffers, vertex arrays, shaders, textures, framebuffers, and state caching.
+- Forward, cascaded-shadow, deferred-geometry, and deferred-lighting passes.
+- Perspective and orthographic cameras.
+- Scene objects, lights, hierarchy nodes, scene management, octree storage, and spatial queries.
+- Logging, assertions, image loading, compression utilities, and math primitives.
+- Installable CMake package exported as `Pyramid::Engine`.
 
-### Partial or unavailable
+## Important limitations
 
-- `Audio`, `Input`, and `Physics` are placeholder modules with no public implementation.
-- DirectX and Vulkan values exist in `GraphicsAPI`, but no backend is implemented.
-- Compute dispatch is recorded but not sent to OpenGL.
-- Generic `IFramebuffer` binding is incomplete; handle-based binding is the working path.
-- Several public declarations have no definitions, including parts of `SceneManager`, optional render-pass classes, and texture convenience factories.
-- Scene transform updates, occlusion culling, and some mesh-generation paths are placeholders.
-- JPEG loading does not decode real image blocks yet; it currently returns a generated test pattern after parsing.
-- Linux and macOS are not build targets in the current CMake configuration.
+- DirectX and Vulkan enum values are reserved; only OpenGL is implemented.
+- Linux and macOS builds are rejected explicitly.
+- Compute dispatch is recorded by the command buffer but is not executed by OpenGL.
+- Scene persistence methods fail explicitly because serialization is not implemented.
+- Occlusion culling and frustum-plane extraction remain placeholder algorithms.
+- `ITexture2D::CreateDepthTarget` fails explicitly; use the framebuffer API for depth attachments.
+- JPEG parsing and helper stages exist, but the loader still generates a test pattern instead of decoding real image blocks.
+- Input, audio, and physics modules are not part of the current source tree.
 
-See [Roadmap and known issues](docs/ROADMAP.md) for prioritized work.
+See [Roadmap and known issues](docs/ROADMAP.md) before building new systems on top of the engine.
 
 ## Build
 
 ### Requirements
 
 - Windows 10 or 11, x64
-- Visual Studio 2022 with **Desktop development with C++** and a Windows SDK
-- CMake 3.23 or newer for the included presets
-- A GPU/driver supporting OpenGL 4.6 to run the bundled examples
+- Visual Studio 2022 with **Desktop development with C++**
+- Windows 10/11 SDK
+- CMake 3.23 or newer
+- GPU and driver supporting OpenGL 3.3 core or newer
 
-### Configure and build
+### Debug build
 
 ```powershell
 cmake --preset vs2022-debug
 cmake --build --preset build-debug
 ```
 
-Build and run the registered tests:
+### Tests
 
 ```powershell
 cmake --preset vs2022-debug-tests
-cmake --build --preset build-debug-tests-clean
+cmake --build --preset build-debug-tests
 ctest --preset test-debug
 ```
 
-Run the graphical smoke test after building:
+Release validation is also available:
 
 ```powershell
-./scripts/run-smoke.ps1 -BuildDir build -Config Debug -DurationSeconds 5
+cmake --preset vs2022-release-tests
+cmake --build --preset build-release-tests
+ctest --preset test-release
 ```
 
-For output paths, CMake options, installation, and troubleshooting, read [Building and testing](docs/BUILDING.md).
+### Graphical smoke test
+
+```powershell
+./scripts/run-smoke.ps1 -BuildDir build/debug -Config Debug -DurationSeconds 5
+```
+
+This catches early process failure. It does not replace visual inspection or render-image regression testing.
 
 ## Minimal application
 
 ```cpp
 #include <Pyramid/Core/Game.hpp>
-#include <Pyramid/Graphics/GraphicsDevice.hpp>
 
 class MyGame final : public Pyramid::Game
 {
@@ -114,7 +118,25 @@ int main()
 }
 ```
 
-Derived `onCreate()` implementations must call `Game::onCreate()` before creating GPU resources. A custom `onRender()` must present the frame itself, or use `Pyramid::Renderer::RenderSystem::EndFrame()`.
+A derived `onCreate()` must call `Game::onCreate()` before creating GPU resources.
+
+## Install and consume
+
+```powershell
+cmake --preset vs2022-release-tests
+cmake --build --preset build-release-tests
+cmake --install build/release-tests --config Release --prefix install
+```
+
+External CMake project:
+
+```cmake
+find_package(PyramidEngine CONFIG REQUIRED)
+add_executable(MyGame main.cpp)
+target_link_libraries(MyGame PRIVATE Pyramid::Engine)
+```
+
+The CI workflow validates this package-consumer path.
 
 ## Documentation
 
@@ -130,17 +152,18 @@ Derived `onCreate()` implementations must call `Game::onCreate()` before creatin
 ## Repository layout
 
 ```text
-Engine/                 PyramidEngine library
-  Core/                 Game lifecycle and common types
-  Graphics/             OpenGL backend, rendering, camera, and scenes
-  Math/                 Math and SIMD utilities
-  Platform/             Win32/WGL platform implementation
-  Utils/                Logging and image loading
-  Audio|Input|Physics/  Reserved placeholder modules
-Examples/               Runnable sample applications
-scripts/                Configure and smoke-test helpers
-docs/                   Maintained project documentation
-vendor/glad/             Bundled OpenGL/WGL loader
+Engine/
+  Core/       Application lifecycle and common types
+  Graphics/   OpenGL resources, renderer, camera, scenes, and octree
+  Math/       Math and SIMD-oriented utilities
+  Platform/   Win32/WGL implementation
+  Utils/      Logging, compression, and image loading
+Examples/     BasicGame and BasicRenderingExample
+Tests/        Public API linkage and external package consumer
+CMake/        Package configuration template
+scripts/      Clean configure and graphical smoke helpers
+docs/         Maintained documentation
+vendor/glad/  Bundled OpenGL/WGL loader
 ```
 
 ## License

@@ -8,7 +8,7 @@ target_sources(PyramidEngine
         source/Mat4.cpp
         source/Quat.cpp
         source/MathSIMD.cpp
-    PUBLIC
+    PRIVATE
         include/Pyramid/Math/MathCommon.hpp
         include/Pyramid/Math/Vec2.hpp
         include/Pyramid/Math/Vec3.hpp

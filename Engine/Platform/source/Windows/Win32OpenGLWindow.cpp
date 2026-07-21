@@ -33,6 +33,14 @@ namespace Pyramid
                 window->m_shouldClose = true;
             return 0;
 
+        case WM_SIZE:
+            if (window)
+            {
+                window->m_width = static_cast<int>(LOWORD(lParam));
+                window->m_height = static_cast<int>(HIWORD(lParam));
+            }
+            return 0;
+
         case WM_DESTROY:
             PostQuitMessage(0);
             return 0;
@@ -287,31 +295,19 @@ namespace Pyramid
             }
         }
 
-        // Fallback to the temporary context if modern context creation failed
-        m_hglrc = tempContext;
-
-        if (!gladLoadGL())
-        {
-            wglMakeCurrent(nullptr, nullptr);
-            wglDeleteContext(m_hglrc);
-            m_hglrc = nullptr;
-            return false;
-        }
-
-        const char *version_str = reinterpret_cast<const char *>(glGetString(GL_VERSION));
-        PYRAMID_LOG_WARN("Using fallback OpenGL context - Version: ", version_str);
-
-        return true;
+        PYRAMID_LOG_ERROR("OpenGL 3.3 core or newer is required");
+        wglMakeCurrent(nullptr, nullptr);
+        wglDeleteContext(tempContext);
+        return false;
     }
 
     void Win32OpenGLWindow::Present(bool vsync)
     {
-        if (vsync)
-            wglSwapIntervalEXT(1);
-        else
-            wglSwapIntervalEXT(0);
+        if (wglSwapIntervalEXT)
+            wglSwapIntervalEXT(vsync ? 1 : 0);
 
-        SwapBuffers(m_hdc);
+        if (m_hdc)
+            SwapBuffers(m_hdc);
     }
 
     void Win32OpenGLWindow::MakeContextCurrent()
@@ -333,6 +329,64 @@ namespace Pyramid
         }
 
         return !m_shouldClose;
+    }
+
+    void Win32OpenGLWindow::SetTitle(const char* title)
+    {
+        if (!m_hwnd || !title)
+            return;
+
+        const int length = static_cast<int>(strlen(title));
+        if (length <= 0)
+            return;
+
+        const int wideLength = MultiByteToWideChar(CP_UTF8, 0, title, length, nullptr, 0);
+        if (wideLength <= 0)
+            return;
+
+        std::vector<wchar_t> buffer(static_cast<size_t>(wideLength) + 1, L'\0');
+        MultiByteToWideChar(CP_UTF8, 0, title, length, buffer.data(), wideLength);
+        SetWindowTextW(m_hwnd, buffer.data());
+    }
+
+    void Win32OpenGLWindow::SetSize(int width, int height)
+    {
+        if (!m_hwnd || width <= 0 || height <= 0)
+            return;
+
+        RECT rect = {0, 0, width, height};
+        const DWORD style = static_cast<DWORD>(GetWindowLongPtrW(m_hwnd, GWL_STYLE));
+        AdjustWindowRect(&rect, style, FALSE);
+        SetWindowPos(
+            m_hwnd,
+            nullptr,
+            0,
+            0,
+            rect.right - rect.left,
+            rect.bottom - rect.top,
+            SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+
+    void Win32OpenGLWindow::SetPosition(int x, int y)
+    {
+        if (m_hwnd)
+            SetWindowPos(m_hwnd, nullptr, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+
+    void Win32OpenGLWindow::SetVisible(bool visible)
+    {
+        if (m_hwnd)
+            ShowWindow(m_hwnd, visible ? SW_SHOW : SW_HIDE);
+    }
+
+    bool Win32OpenGLWindow::IsMinimized() const
+    {
+        return m_hwnd && IsIconic(m_hwnd) != FALSE;
+    }
+
+    bool Win32OpenGLWindow::IsMaximized() const
+    {
+        return m_hwnd && IsZoomed(m_hwnd) != FALSE;
     }
 
     void Win32OpenGLWindow::LogOpenGLContextInfo()

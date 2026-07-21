@@ -1,20 +1,10 @@
 # API overview
 
-This is a compact map of the supported public surface. The public headers under `Engine/*/include` remain the signature-level source of truth.
+Public headers under `Engine/*/include` are the signature-level source of truth. `PYRAMID_VERSION_STRING` is exported as a target compile definition and currently evaluates to `0.6.0-pre-alpha`.
 
-## Namespaces
+## Application
 
-| Namespace | Primary responsibility |
-|---|---|
-| `Pyramid` | Core, platform, graphics resources, camera, and scene types |
-| `Pyramid::Renderer` | Command buffers, materials, render targets, passes, and `RenderSystem` |
-| `Pyramid::SceneManagement` | `SceneManager`, octree integration, and spatial query types |
-| `Pyramid::Math` | Vectors, matrices, quaternions, geometry, and SIMD helpers |
-| `Pyramid::Util` | Logging and image loading |
-
-## Core application
-
-Header: `Engine/Core/include/Pyramid/Core/Game.hpp`
+Header: `Pyramid/Core/Game.hpp`
 
 ```cpp
 class Game
@@ -33,7 +23,13 @@ protected:
 };
 ```
 
-Only `GraphicsAPI::OpenGL` is implemented. Call the base `onCreate()` before using the device.
+Only `GraphicsAPI::OpenGL` is supported. A derived `onCreate()` must call `Game::onCreate()` first.
+
+## Window
+
+Header: `Pyramid/Platform/Window.hpp`
+
+The window interface requires initialization, presentation, context activation, message processing, close-state reporting, title/size/position/visibility mutation, and minimized/maximized queries. The checked-in implementation is `Win32OpenGLWindow`.
 
 ## Graphics device and resources
 
@@ -45,48 +41,42 @@ Primary headers:
 - `Pyramid/Graphics/Texture.hpp`
 - `Pyramid/Graphics/Geometry/Vertex.hpp`
 
-`IGraphicsDevice` supports initialization/shutdown, clear/present, indexed and instanced draws, viewport/raster state, resource factories, resource binding, and device diagnostics.
-
-Typical resource setup:
+Typical geometry setup:
 
 ```cpp
 auto* device = GetGraphicsDevice();
-auto vertexBuffer = device->CreateVertexBuffer();
-auto indexBuffer = device->CreateIndexBuffer();
-auto vertexArray = device->CreateVertexArray();
-auto shader = device->CreateShader();
+auto vertices = device->CreateVertexBuffer();
+auto indices = device->CreateIndexBuffer();
+auto array = device->CreateVertexArray();
 
-vertexBuffer->SetData(vertices.data(),
-                      static_cast<Pyramid::u32>(vertices.size() * sizeof(Pyramid::Vertex)));
-indexBuffer->SetData(indices.data(),
-                     static_cast<Pyramid::u32>(indices.size()));
+vertices->SetData(vertexData, vertexBytes);
+indices->SetData(indexData, indexCount);
 
 Pyramid::BufferLayout layout = {
-    { Pyramid::ShaderDataType::Float3, "a_Position" },
-    { Pyramid::ShaderDataType::Float4, "a_Color" }
+    {Pyramid::ShaderDataType::Float3, "a_Position"},
+    {Pyramid::ShaderDataType::Float4, "a_Color"}
 };
 
-vertexArray->AddVertexBuffer(vertexBuffer, layout);
-vertexArray->SetIndexBuffer(indexBuffer);
+array->AddVertexBuffer(vertices, layout);
+array->SetIndexBuffer(indices);
 ```
 
-Use the checked-in examples for complete shader and geometry setup.
-
 ### Textures
-
-`TextureSpecification` declares dimensions, format, filtering, wrapping, mip generation, sRGB intent, border color, anisotropy, and vertical flipping. The current OpenGL implementation fully maps only the basic RGB8/RGBA8 path; several other fields and formats are declared but ignored or fall back to defaults.
 
 ```cpp
 Pyramid::TextureSpecification spec;
 spec.Width = 512;
 spec.Height = 512;
 spec.Format = Pyramid::TextureFormat::RGBA8;
-spec.GenerateMips = true;
+spec.GenerateMips = false;
 
-auto texture = device->CreateTexture2D(spec, pixelData);
+auto texture = Pyramid::ITexture2D::Create(spec, pixels);
+auto blank = Pyramid::ITexture2D::Create(512, 512);
+auto target = Pyramid::ITexture2D::CreateRenderTarget(1280, 720);
+auto white = Pyramid::ITexture2D::CreateFromColor(1, 1, Pyramid::Color::White);
 ```
 
-Several optional `ITexture` methods have default no-op implementations. `TextureSpecification::SRGB`, border color, anisotropy, and `FlipY` are not applied by the specification-based constructor, and convenience factories such as `CreateRenderTarget`, `CreateDepthTarget`, and `CreateFromColor` have no definitions. Use the device factory paths exercised by the examples and verify `OpenGLTexture2D` before relying on advanced texture behavior.
+The basic RGB8/RGBA8 color path is the reliable texture path. Advanced declared formats and specification fields are not all mapped. `CreateDepthTarget` currently returns `nullptr` with an error; use `OpenGLFramebuffer` for depth attachments.
 
 ## Renderer
 
@@ -105,13 +95,11 @@ renderer.Render(scene, camera);
 renderer.EndFrame();
 ```
 
-The default renderer installs shadow and forward passes. `SetupDeferredPipeline()` opts into the deferred path. `CommandBuffer::Dispatch()` is not an operational compute API yet.
+Implemented public pass classes are `ForwardRenderPass`, `ShadowMapPass`, `DeferredGeometryPass`, and `DeferredLightingPass`. Compute dispatch is not operational.
 
 ## Camera
 
 Header: `Pyramid/Graphics/Camera.hpp`
-
-`Camera` supports perspective/orthographic projection, position and quaternion/Euler rotation, `LookAt`, local movement, view/projection accessors, screen/world conversion, and point/sphere visibility helpers.
 
 ```cpp
 Pyramid::Camera camera(
@@ -124,7 +112,9 @@ camera.SetPosition({0.0f, 2.5f, 6.0f});
 camera.LookAt(Pyramid::Math::Vec3::Zero);
 ```
 
-## Scene and spatial queries
+The camera provides perspective/orthographic projection, quaternion/Euler rotation, local movement, view/projection matrices, coordinate conversion, and point/sphere visibility helpers.
+
+## Scene
 
 Headers:
 
@@ -132,26 +122,24 @@ Headers:
 - `Pyramid/Graphics/Scene/SceneManager.hpp`
 - `Pyramid/Graphics/Scene/Octree.hpp`
 
-`Scene` is the rendering data container. It exposes render-object, node, light, environment, and primary-light management.
-
-`SceneManager` lives in `Pyramid::SceneManagement`, not directly in `Pyramid`:
-
 ```cpp
 auto manager = Pyramid::SceneManagement::SceneUtils::CreateSceneManager();
+auto scene = manager->CreateScene("Main");
 manager->SetActiveScene(scene);
 manager->RebuildSpatialPartition();
 
 auto nearby = manager->GetObjectsInRadius(position, 10.0f);
-auto visible = manager->GetVisibleObjects(camera);
+auto boxed = manager->GetObjectsInBox(minBounds, maxBounds);
+auto nearest = manager->GetNearestObject(position);
 ```
 
-Do not rely on scene serialization, box queries, visibility updates, debug drawing, or occlusion culling until their missing/placeholder implementations are completed.
+Event callbacks, box queries, visibility-stat updates, test-scene creation, and octree configuration have definitions and are covered by linkage validation.
+
+`LoadScene` and `SaveScene` deliberately return `false`; serialization is not implemented. Frustum and occlusion algorithms are not production-ready.
 
 ## Math
 
 Umbrella header: `Pyramid/Math/Math.hpp`
-
-Core types are `Vec2`, `Vec3`, `Vec4`, `Mat3`, `Mat4`, and `Quat`. The library includes arithmetic, products, normalization, transforms, projections, interpolation, geometry helpers, constants, and SIMD-oriented helpers.
 
 ```cpp
 using namespace Pyramid::Math;
@@ -161,7 +149,7 @@ Mat4 model = Mat4::CreateTranslation(position)
            * Mat4::CreateRotationY(Radians(30.0f));
 ```
 
-Check the concrete headers for exact factory names and coordinate conventions when adding new rendering code.
+Concrete headers define exact conventions and available operations for vectors, matrices, quaternions, geometry, interpolation, and SIMD helpers.
 
 ## Images
 
@@ -171,12 +159,12 @@ Header: `Pyramid/Util/Image.hpp`
 auto image = Pyramid::Util::Image::Load("assets/texture.png");
 if (image.Data)
 {
-    // Use image.Width, image.Height, and image.Channels.
+    // Consume image.Width, image.Height, image.Channels, and image.Data.
     Pyramid::Util::Image::Free(image.Data);
 }
 ```
 
-Loading is extension-based. TGA/BMP support narrow uncompressed subsets; PNG is non-interlaced and effectively 8-bit at output; JPEG currently returns a generated test pattern rather than decoded image content. See [Architecture](ARCHITECTURE.md#image-loading).
+PNG is the most thoroughly tested real-image path. JPEG output is still a generated pattern after marker parsing and must not be used as decoded texture content.
 
 ## Logging
 
@@ -190,18 +178,5 @@ config.logFilePath = "pyramid_game.log";
 Pyramid::Util::Logger::GetInstance().Configure(config);
 
 PYRAMID_LOG_INFO("Loaded ", objectCount, " objects");
-PYRAMID_WARN_STREAM() << "Fallback path selected";
-```
-
-Assertions are active when `NDEBUG` is not defined:
-
-```cpp
 PYRAMID_ASSERT(resource != nullptr, "Resource must exist");
-PYRAMID_CORE_ASSERT(device->IsValid(), "Graphics device is invalid");
 ```
-
-## Platform window
-
-Header: `Pyramid/Platform/Window.hpp`
-
-`Window` defines initialization, presentation, context activation, message processing, native handle access, and dimensions. Only `Win32OpenGLWindow` exists. Optional mutator/query methods in the interface default to no-ops or `false` and are not overridden by the current implementation.

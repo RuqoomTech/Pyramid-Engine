@@ -6,35 +6,35 @@ target_sources(PyramidEngine
         source/OpenGL/Buffer/OpenGLIndexBuffer.cpp
         source/OpenGL/Buffer/OpenGLVertexArray.cpp
         source/OpenGL/Buffer/OpenGLUniformBuffer.cpp
-        source/OpenGL/Buffer/OpenGLInstanceBuffer.cpp # Added for instanced rendering
-        source/OpenGL/Buffer/OpenGLShaderStorageBuffer.cpp # Added for compute shaders
-        source/OpenGL/OpenGLStateManager.cpp # Added for state management
+        source/OpenGL/Buffer/OpenGLInstanceBuffer.cpp
+        source/OpenGL/Buffer/OpenGLShaderStorageBuffer.cpp
+        source/OpenGL/OpenGLStateManager.cpp
         source/Buffer/UniformBuffer.cpp
         source/OpenGL/Shader/OpenGLShader.cpp
-        source/Texture.cpp # Added
-        source/OpenGL/OpenGLTexture.cpp # Added
-        source/OpenGL/OpenGLFramebuffer.cpp # Added - FBO Implementation
+        source/Texture.cpp
+        source/OpenGL/OpenGLTexture.cpp
+        source/OpenGL/OpenGLFramebuffer.cpp
         source/Renderer/RenderSystem.cpp
         source/Renderer/ShaderPathResolver.cpp
-        source/Renderer/ForwardRenderPass.cpp # Added - Forward rendering pass
-        source/Renderer/ShadowMapPass.cpp # Added - Shadow mapping with CSM
-        source/Renderer/DeferredGeometryPass.cpp # Added - Deferred geometry pass (G-Buffer)
-        source/Renderer/DeferredLightingPass.cpp # Added - Deferred lighting pass
+        source/Renderer/ForwardRenderPass.cpp
+        source/Renderer/ShadowMapPass.cpp
+        source/Renderer/DeferredGeometryPass.cpp
+        source/Renderer/DeferredLightingPass.cpp
         source/Camera.cpp
         source/Scene.cpp
         source/Scene/SceneManager.cpp
         source/Scene/Octree.cpp
-    PUBLIC
+    PRIVATE
         include/Pyramid/Graphics/GraphicsDevice.hpp
         include/Pyramid/Graphics/Buffer/VertexBuffer.hpp
         include/Pyramid/Graphics/Buffer/IndexBuffer.hpp
         include/Pyramid/Graphics/Buffer/VertexArray.hpp
         include/Pyramid/Graphics/Buffer/BufferLayout.hpp
-        include/Pyramid/Graphics/Buffer/UniformBuffer.hpp # Added
-        include/Pyramid/Graphics/Buffer/InstanceBuffer.hpp # Added for instanced rendering
-        include/Pyramid/Graphics/Buffer/ShaderStorageBuffer.hpp # Added for compute shaders
+        include/Pyramid/Graphics/Buffer/UniformBuffer.hpp
+        include/Pyramid/Graphics/Buffer/InstanceBuffer.hpp
+        include/Pyramid/Graphics/Buffer/ShaderStorageBuffer.hpp
         include/Pyramid/Graphics/Shader/Shader.hpp
-        include/Pyramid/Graphics/Texture.hpp # Added
+        include/Pyramid/Graphics/Texture.hpp
         include/Pyramid/Graphics/Geometry/Vertex.hpp
         include/Pyramid/Graphics/Renderer/RenderSystem.hpp
         include/Pyramid/Graphics/Renderer/ShaderPathResolver.hpp
@@ -48,12 +48,12 @@ target_sources(PyramidEngine
         include/Pyramid/Graphics/OpenGL/Buffer/OpenGLVertexArray.hpp
         include/Pyramid/Graphics/OpenGL/Buffer/OpenGLVertexBuffer.hpp
         include/Pyramid/Graphics/OpenGL/Buffer/OpenGLUniformBuffer.hpp
-        include/Pyramid/Graphics/OpenGL/Buffer/OpenGLInstanceBuffer.hpp # Added for instanced rendering
-        include/Pyramid/Graphics/OpenGL/Buffer/OpenGLShaderStorageBuffer.hpp # Added for compute shaders
-        include/Pyramid/Graphics/OpenGL/OpenGLStateManager.hpp # Added for state management
+        include/Pyramid/Graphics/OpenGL/Buffer/OpenGLInstanceBuffer.hpp
+        include/Pyramid/Graphics/OpenGL/Buffer/OpenGLShaderStorageBuffer.hpp
+        include/Pyramid/Graphics/OpenGL/OpenGLStateManager.hpp
         include/Pyramid/Graphics/OpenGL/Shader/OpenGLShader.hpp
-        include/Pyramid/Graphics/OpenGL/OpenGLTexture.hpp # Added
-        include/Pyramid/Graphics/OpenGL/OpenGLFramebuffer.hpp # Added - FBO Implementation
+        include/Pyramid/Graphics/OpenGL/OpenGLTexture.hpp
+        include/Pyramid/Graphics/OpenGL/OpenGLFramebuffer.hpp
 )
 
 target_include_directories(PyramidEngine

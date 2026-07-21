@@ -246,7 +246,7 @@ bool TestIDCTProperties()
     {
         float expected = output1[i] * 2.0f;
         float actual = output2[i];
-        float error = abs(actual - expected);
+        float error = std::abs(actual - expected);
         
         if (error > 2.0f) // Allow some tolerance for floating point precision
         {

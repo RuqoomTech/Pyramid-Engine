@@ -1,7 +1,7 @@
 target_sources(PyramidEngine
     PRIVATE
         source/Windows/Win32OpenGLWindow.cpp
-    PUBLIC
+    PRIVATE
         include/Pyramid/Platform/Window.hpp
         include/Pyramid/Platform/Windows/Win32OpenGLWindow.hpp
 )

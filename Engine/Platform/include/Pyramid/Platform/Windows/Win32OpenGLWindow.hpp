@@ -21,6 +21,13 @@ namespace Pyramid
         void *GetHandle() const override { return m_hwnd; }
         int GetWidth() const override { return m_width; }
         int GetHeight() const override { return m_height; }
+        bool ShouldClose() const override { return m_shouldClose; }
+        void SetTitle(const char* title) override;
+        void SetSize(int width, int height) override;
+        void SetPosition(int x, int y) override;
+        void SetVisible(bool visible) override;
+        bool IsMinimized() const override;
+        bool IsMaximized() const override;
 
     private:
         static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);

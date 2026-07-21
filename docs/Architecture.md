@@ -2,121 +2,113 @@
 
 ## Scope
 
-Pyramid currently builds one `PyramidEngine` library and two example executables. It is a layered native engine prototype, not yet a complete cross-platform runtime.
+Pyramid Engine is a monolithic C++17 library with a Win32/WGL platform implementation and an OpenGL backend. CMake exports the installed library as `Pyramid::Engine`.
 
-```text
-Application / Examples
-        |
-        v
-Pyramid::Game ---------------------- main loop and lifecycle
-        |
-        +--> Win32OpenGLWindow ----- Win32 messages and WGL context
-        |
-        +--> IGraphicsDevice ------- OpenGL resource/state abstraction
-                 |
-                 +--> RenderSystem - command buffers and render passes
-                 +--> Scene/Camera -- visible objects, lights, transforms
-                 +--> Buffers, shaders, textures, framebuffers
+## Layers
 
-Shared services: Pyramid::Math and Pyramid::Util
-```
-
-## Modules
-
-| Module | Namespace | State |
+| Layer | Namespace | Responsibility |
 |---|---|---|
-| Core | `Pyramid` | Implemented: common types, `Color`, `GraphicsAPI`, and `Game` |
-| Platform | `Pyramid` | Implemented only for Win32/WGL |
-| Graphics device/resources | `Pyramid` | OpenGL implementation present; other API enum values unsupported |
-| Renderer | `Pyramid::Renderer` | Forward/shadow pipeline used by `BasicGame`; deferred components present but less exercised |
-| Scene | `Pyramid` | Scene nodes, render objects, lights, environment, camera-visible object collection |
-| Scene management | `Pyramid::SceneManagement` | Octree queries implemented; several declared management features incomplete |
-| Math | `Pyramid::Math` | Vectors, matrices, quaternions, helpers, and SIMD routines |
-| Utilities | `Pyramid::Util` | Logging and in-tree image decoders |
-| Audio/Input/Physics | — | Placeholder CMake modules; no public engine implementation |
+| Core | `Pyramid` | Application lifecycle, common types, and graphics API selection |
+| Platform | `Pyramid` | Window, message pump, and OpenGL context |
+| Graphics resources | `Pyramid` | Device, buffers, arrays, shaders, textures, framebuffers, and camera |
+| Renderer | `Pyramid::Renderer` | Command recording, materials, render targets, and render passes |
+| Scene | `Pyramid` | Scene graph, render objects, lights, and environment |
+| Spatial management | `Pyramid::SceneManagement` | Scene manager, octree, AABB, and query helpers |
+| Math | `Pyramid::Math` | Vectors, matrices, quaternions, geometry, and SIMD helpers |
+| Utilities | `Pyramid::Util` | Logging, image loading, bit reading, DEFLATE, and zlib |
 
-## Startup and frame lifecycle
+Input, audio, physics, editor, scripting, and asset-pipeline systems are not currently present.
+
+## Application lifecycle
 
 1. `Game` creates `Win32OpenGLWindow` for `GraphicsAPI::OpenGL`.
-2. The window bootstraps WGL with a temporary context, then attempts core contexts from OpenGL 4.6 down to 3.3. If that path is unavailable, the temporary legacy context can remain active.
-3. `IGraphicsDevice::Create` constructs `OpenGLDevice`.
-4. `Game::run()` invokes virtual `onCreate()`.
-5. The base `Game::onCreate()` initializes the graphics device and enables the loop.
-6. Each frame processes Win32 messages, computes a clamped delta time, then calls `onUpdate(deltaTime)` and `onRender()`.
-7. Presentation occurs through `IGraphicsDevice::Present()` or `RenderSystem::EndFrame()`.
+2. The window creates a temporary WGL context to load extensions.
+3. It attempts core contexts from OpenGL 4.6 down to 3.3.
+4. Context creation fails if no OpenGL 3.3-or-newer core context is available.
+5. `IGraphicsDevice::Create` creates `OpenGLDevice`.
+6. `Game::run()` calls `onCreate()`, processes messages, computes clamped delta time, updates, renders, and shuts down.
 
-A derived `onCreate()` must call `Game::onCreate()` first. A derived `onRender()` replaces the base implementation and therefore owns clearing/presentation unless it delegates to `RenderSystem`.
+Derived `onCreate()` implementations must call `Game::onCreate()` before creating graphics resources.
 
-## Rendering architecture
+## Window contract
 
-### Device layer
+`Window` is a strict interface. Initialization, presentation, context activation, close state, title, size, position, visibility, and minimized/maximized queries are all required operations. `Win32OpenGLWindow` implements the complete contract and updates its dimensions on `WM_SIZE`.
 
-`IGraphicsDevice` exposes creation and binding for vertex/index/instance/uniform/storage buffers, vertex arrays, shaders, textures, viewports, draw calls, and common raster state. The only factory implementation is `OpenGLDevice`.
+## Graphics device
 
-`OpenGLStateManager` caches OpenGL state to reduce redundant binds. Resource classes use RAII-style ownership, although several interfaces also expose optional no-op defaults that should be tightened as the API stabilizes.
+`IGraphicsDevice` is the backend-neutral resource and draw interface. Only its OpenGL implementation exists. DirectX and Vulkan enum values are reserved and return no device.
 
-### Command buffers
+OpenGL resources use RAII wrappers, but raw pointers passed into binding and command APIs are non-owning. Their owners must outlive command execution.
 
-`Pyramid::Renderer::CommandBuffer` records resource bindings, clears, indexed/instanced draws, and dispatch requests. ID-based commands require registration; pointer-based commands bind resources directly.
+## Renderer
 
-Compute `Dispatch` is currently diagnostic only and does not call `glDispatchCompute`.
+`RenderSystem` records and executes command buffers. The public render-pass set contains only implemented types:
 
-### Render passes
+- `ForwardRenderPass`;
+- `ShadowMapPass`;
+- `DeferredGeometryPass`;
+- `DeferredLightingPass`.
 
-The default pipeline created by `RenderSystem::Initialize()` is:
+The default pipeline uses shadow and forward rendering. The deferred setup uses shadow, geometry, and lighting passes.
 
-1. `ShadowMapPass`
-2. `ForwardRenderPass`
+Known constraints:
 
-`SetupDeferredPipeline()` replaces it with shadow, deferred geometry, and deferred lighting passes. The deferred pipeline currently uses a fixed 1920×1080 setup and still has incomplete shadow-map-array binding. `TransparentPass`, `PostProcessPass`, `UIRenderPass`, `DebugRenderPass`, and `RenderPassFactory` are declared in public headers but have no definitions in this snapshot.
+- compute `Dispatch` commands are logged but not executed;
+- deferred setup still uses fixed initial dimensions and needs complete resize propagation;
+- generic framebuffer binding and some attachment paths remain incomplete;
+- render statistics do not yet represent complete GPU execution metrics.
 
-`BeginFrame()` starts command recording, `Render()` executes enabled passes in enum order, and `EndFrame()` executes trailing commands and presents.
+## Scene and spatial management
 
-### Scene data
+`Scene` owns render objects, lights, environment settings, and a root hierarchy node. `SceneManager` owns named scenes, selects the active scene, manages an octree, and exposes point, sphere, box, ray, nearest-object, and visibility queries.
 
-`Scene` owns nodes, render objects, lights, environment data, and a primary light. `Camera` maintains view/projection matrices and visibility helpers.
+Public scene-manager methods now link consistently. Unsupported persistence operations return `false` and log an error instead of producing linker failures.
 
-`SceneManager` can manage an active scene and an octree, and supports point, sphere, ray, nearest-object, and frustum-oriented query paths. Current limitations include:
+The octree supports insertion, removal, updates, rebuilding, configuration, nearest-neighbor queries, and public spatial helpers. Its current bounds are approximate and based on object position and scale, not imported mesh bounds.
 
-- missing definitions for declared load/save and serialization functions;
-- missing box-query, visibility-update, debug-draw, and test-scene definitions;
-- placeholder transform update and occlusion-culling behavior;
-- statistics fields that remain zero because source counts are not connected.
+Frustum-plane extraction and occlusion culling remain placeholder algorithms and must not be treated as production culling.
 
-Treat `SceneManager` as experimental until these gaps are closed and covered by tests.
+## Textures and framebuffers
 
-## Math and SIMD
+The basic specification and file constructors create `OpenGLTexture2D` instances. Size-based, render-target, and solid-color convenience factories are defined for the basic color-texture path.
 
-The math module provides `Vec2`, `Vec3`, `Vec4`, `Mat3`, `Mat4`, `Quat`, common constants/helpers, and SIMD support. It is integrated into camera, scene, and rendering types. Performance claims should be based on reproducible benchmarks; the repository currently contains implementation helpers but no maintained benchmark suite.
+Depth formats are not mapped by `OpenGLTexture2D`; `CreateDepthTarget` therefore logs an error and returns `nullptr`. Depth attachments should be created through `OpenGLFramebuffer` until the texture-format mapping is completed.
 
 ## Image loading
 
-`Pyramid::Util::Image::Load` dispatches by file extension:
+`Image::Load` dispatches by extension:
 
-- TGA: uncompressed true-color, 24/32-bit
-- BMP: uncompressed `BITMAPINFOHEADER`, 24/32-bit
-- PNG: in-tree chunk/filter/zlib/DEFLATE path
-- JPEG: in-tree baseline decoder path
+- TGA: narrow uncompressed RGB/RGBA subset;
+- BMP: narrow uncompressed 24/32-bit subset;
+- PNG: custom non-interlaced path with DEFLATE/zlib handling;
+- JPEG: marker parsing and helper stages, followed by a generated test pattern rather than real block reconstruction.
 
-The caller owns `ImageData::Data` and must release it with `Image::Free`. PNG rejects interlaced images and the final conversion path currently accepts only 8-bit samples. JPEG marker parsing and helper stages exist, but the loader still produces a generated test pattern instead of decoded image blocks; JPEG files must therefore be treated as unsupported for real texture content.
+`ImageData::Data` is manually owned and must be released through `Image::Free`.
 
 ## Logging
 
-`Pyramid::Util::Logger` is a process-wide singleton with independent console/file thresholds, optional source/thread/timestamp fields, file rotation, structured fields, stream-style macros, and assertion integration. The singleton is mutex-protected; logging remains synchronous.
+The logger supports severity filtering, console/file output, rotation, structured fields, source locations, assertions, and thread synchronization. Engine subsystems use `PYRAMID_LOG_*` rather than direct console output.
 
-## Dependencies and build boundaries
+## Build and package model
 
-- GLAD is vendored and built as a separate target.
-- OpenGL is linked through Windows `opengl32`.
-- No external window, math, image, physics, or audio library is linked.
-- `CMake/Dependencies.cmake` is stale and not included by the active build.
-- `Game/CMakeLists.txt` is legacy and not added by the root build.
+- `PyramidEngine` is the engine target; `Pyramid::Engine` is its build-tree alias and installed name.
+- GLAD is a public dependency because OpenGL implementation headers expose GLAD types.
+- Public headers are installed separately rather than exported through `INTERFACE_SOURCES`, keeping the package relocatable.
+- CMake package configuration and version files support `find_package(PyramidEngine CONFIG REQUIRED)`.
+- Windows CI validates an external consumer after installation.
 
-## Ownership conventions
+## Dependency direction
 
-- Engine roots and major services generally use `std::unique_ptr`.
-- Shareable GPU resources, scenes, nodes, render objects, and passes generally use `std::shared_ptr`.
-- Raw pointers in command buffers and device interfaces are non-owning.
-- Image pixel memory is manually owned and must be freed explicitly.
+```text
+Application
+    ↓
+Core Game lifecycle
+    ↓
+Platform Window + Graphics Device
+    ↓
+Renderer / Scene / Camera / Resources
+    ↓
+Math + Utilities + GLAD + Win32/OpenGL
+```
 
-Avoid extending raw-pointer lifetime assumptions. Prefer handles or clearly documented non-owning views as the resource model matures.
+Avoid introducing platform handles into generic interfaces or renderer-specific ownership into scene data without an explicit lifetime model.

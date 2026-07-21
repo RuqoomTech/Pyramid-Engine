@@ -8,13 +8,13 @@
 
 // Vertex shader source
 const std::string vertexShaderSrc = R"(
-    #version 460 core
+    #version 330 core
     layout (location = 0) in vec3 a_Position;
     layout (location = 1) in vec3 a_Normal;
     layout (location = 2) in vec2 a_TexCoord;
     layout (location = 3) in vec3 a_Color;
 
-    layout(std140, binding = 0) uniform SceneData {
+    layout(std140) uniform SceneData {
         mat4 u_ViewMatrix;
         mat4 u_ProjectionMatrix;
         mat4 u_ViewProjectionMatrix;
@@ -24,7 +24,7 @@ const std::string vertexShaderSrc = R"(
         float u_Time;
     };
 
-    layout(std140, binding = 1) uniform MaterialData {
+    layout(std140) uniform MaterialData {
         vec4 u_BaseColor;
         vec4 u_EmissiveColor;
         float u_Metallic;
@@ -49,7 +49,7 @@ const std::string vertexShaderSrc = R"(
 
 // Fragment shader source
 const std::string fragmentShaderSrc = R"(
-    #version 460 core
+    #version 330 core
     out vec4 FragColor;
 
     in vec3 v_Color;
@@ -57,7 +57,7 @@ const std::string fragmentShaderSrc = R"(
     in vec3 v_WorldPos;
     in vec3 v_ViewPos;
 
-    layout(std140, binding = 0) uniform SceneData {
+    layout(std140) uniform SceneData {
         mat4 u_ViewMatrix;
         mat4 u_ProjectionMatrix;
         mat4 u_ViewProjectionMatrix;
@@ -67,7 +67,7 @@ const std::string fragmentShaderSrc = R"(
         float u_Time;
     };
 
-    layout(std140, binding = 1) uniform MaterialData {
+    layout(std140) uniform MaterialData {
         vec4 u_BaseColor;
         vec4 u_EmissiveColor;
         float u_Metallic;

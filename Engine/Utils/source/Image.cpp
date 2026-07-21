@@ -1,3 +1,4 @@
+#include <cstring>
 #include "Pyramid/Util/Image.hpp"
 #include "Pyramid/Util/PNGLoader.hpp"
 #include "Pyramid/Util/JPEGLoader.hpp"

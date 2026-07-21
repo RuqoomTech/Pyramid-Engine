@@ -16,7 +16,7 @@
 namespace
 {
     constexpr const char* kForwardVertexShader = R"(
-#version 460 core
+#version 330 core
 
 layout(location = 0) in vec3 a_Position;
 layout(location = 1) in vec4 a_Color;
@@ -41,7 +41,7 @@ void main()
 )";
 
     constexpr const char* kForwardFragmentShader = R"(
-#version 460 core
+#version 330 core
 
 in vec4 v_Color;
 in vec3 v_Normal;

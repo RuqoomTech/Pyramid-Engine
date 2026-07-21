@@ -2,66 +2,81 @@
 
 ## Workflow
 
-1. Create a focused branch from the current main branch.
-2. Configure and build with the checked-in presets.
-3. Add or update tests for behavior changes.
-4. Run CTest and the graphical smoke test when graphics/runtime code changes.
-5. Update the compact documentation set when public behavior, status, or build commands change.
-6. Submit a pull request with the exact commands and configurations tested.
+1. Create a focused branch.
+2. Configure a test preset.
+3. Build and run CTest before changing behavior.
+4. Make one coherent subsystem change.
+5. Add or update tests, including linkage coverage for public APIs.
+6. Run the graphical smoke test and visually inspect renderer changes.
+7. Update existing documentation and the changelog.
+8. Record exact validation commands in the pull request.
 
-## Coding conventions
-
-The existing codebase targets C++17 and generally uses:
-
-- four-space indentation;
-- braces on a new line;
-- `PascalCase` for types and most public methods;
-- `camelCase` for locals and parameters;
-- `m_` prefixes for fields;
-- `Pyramid`, `Pyramid::Renderer`, `Pyramid::SceneManagement`, `Pyramid::Math`, and `Pyramid::Util` namespaces;
-- RAII and smart pointers for ownership;
-- `PYRAMID_LOG_*` and assertion macros for diagnostics.
-
-Match the surrounding module when legacy naming is inconsistent. Avoid broad style-only rewrites in functional changes.
-
-## Architecture constraints
-
-- Do not advertise or select non-OpenGL `GraphicsAPI` values until a backend exists.
-- Keep Win32-specific types out of generic public headers except the Win32 implementation header.
-- Raw pointers passed into device/command APIs are non-owning; do not store them beyond the owning resource lifetime.
-- New public interfaces should not use silent no-op defaults for required behavior.
-- Keep render-pass ordering explicit and test state transitions across passes.
-- Treat scene serialization and unfinished `SceneManager` methods as unavailable until implemented and linked by tests.
-
-## Tests
-
-Build the registered suite:
+Recommended local validation:
 
 ```powershell
 cmake --preset vs2022-debug-tests
-cmake --build --preset build-debug-tests-clean
+cmake --build --preset build-debug-tests
 ctest --preset test-debug
+./scripts/run-smoke.ps1 -BuildDir build/debug-tests -Config Debug -DurationSeconds 5
 ```
 
-Tests are standalone executables registered from `Engine/Utils/test/CMakeLists.txt`. New tests should:
+## Conventions
 
-- use a `Test<Feature>.cpp` name;
-- return zero only when all checks pass;
-- print actionable failure context;
-- avoid depending on developer-specific absolute paths;
-- register with `add_utils_test` or an equivalent module-local helper.
+- C++17 with extensions disabled.
+- Four-space indentation and braces on new lines.
+- `PascalCase` for types and most public methods.
+- `camelCase` for locals and parameters.
+- `m_` prefix for fields.
+- RAII and smart pointers for ownership.
+- `PYRAMID_LOG_*` and assertion macros for diagnostics.
+- No required interface operation may silently default to a no-op.
+- Platform-specific APIs belong behind platform implementation headers.
 
-For renderer changes, run:
+The codebase enables MSVC `/W4` and `/permissive-`. Warnings are not yet errors by default because existing warnings still need cleanup. New code should not add warnings.
+
+## Public API discipline
+
+For every public method, choose one behavior:
+
+1. implement it;
+2. remove it before release;
+3. fail explicitly with a documented capability limitation.
+
+Do not leave declarations without definitions. Add the symbol to `Tests/PublicApiLinkage.cpp` when a factory or subsystem method is especially vulnerable to linker regressions.
+
+## Tests
+
+Utility tests live under `Engine/Utils/test` and are registered by `add_utils_test`. A test must:
+
+- return non-zero on failure;
+- avoid hidden skips that report success;
+- use standards-valid embedded fixtures;
+- clean up temporary files;
+- print enough context to diagnose a failure.
+
+`API.PublicApiLinkage` verifies selected exported symbols. Windows CI additionally validates Debug and Release builds, installation, and an external `find_package` consumer.
+
+Renderer changes require manual visual validation until image-regression tests exist.
+
+## CMake and package changes
+
+After changing targets, include directories, or installation:
 
 ```powershell
-./scripts/run-smoke.ps1 -BuildDir build -Config Debug -DurationSeconds 5
+cmake --preset vs2022-release-tests
+cmake --build --preset build-release-tests
+ctest --preset test-release
+cmake --install build/release-tests --config Release --prefix install
+cmake -S Tests/Consumer -B build/consumer -G "Visual Studio 17 2022" -A x64 `
+  -DCMAKE_PREFIX_PATH="$PWD/install"
+cmake --build build/consumer --config Release
 ```
 
-Then visually inspect both examples. A timed process check is not a pixel/rendering test.
+Keep build-tree paths out of installed target interfaces. Public headers should be installed as files, not exposed as absolute `INTERFACE_SOURCES`.
 
-## Documentation changes
+## Documentation
 
-The maintained set is:
+Maintain this fixed set:
 
 ```text
 README.md
@@ -75,36 +90,27 @@ docs/ROADMAP.md
 CHANGELOG.md
 ```
 
-Prefer updating an existing document instead of adding another status report, best-practices file, or overlapping setup guide.
+Do not add separate blocker reports, status snapshots, duplicated setup guides, or speculative API references.
 
-Check relative Markdown links from the repository root with:
+## Pull requests
 
-```powershell
-python -c "from pathlib import Path; import re; r=Path('.'); p=re.compile(r'\\[[^]]*\\]\\(([^)]+)\\)'); bad=[]; [(bad.extend([(str(f),x) for x in p.findall(f.read_text(encoding='utf-8')) if not x.startswith(('http://','https://','mailto:','#')) and not (f.parent/x.split('#')[0]).exists()])) for f in r.rglob('*.md')]; print(*bad, sep='\\n')"
-```
-
-Also review code samples against public headers. Documentation snippets are not compiled automatically in this snapshot.
-
-## Commit and pull-request expectations
-
-Use a concise imperative subject such as `Fix deferred pass target binding` or `Document Windows build requirements`.
-
-A pull request should include:
+Include:
 
 - purpose and affected modules;
-- noteworthy design or ownership decisions;
-- build/test commands and results;
-- screenshots or video for visible rendering changes;
-- known limitations or follow-up work;
-- documentation and changelog updates when applicable.
+- public API or ownership changes;
+- exact Debug/Release/test commands;
+- screenshots or video for visual changes;
+- known limitations and follow-up work;
+- documentation and changelog updates.
 
 ## Release hygiene
 
-Before tagging a release:
+Before tagging:
 
-1. synchronize the version in `CMakeLists.txt` with the changelog/tag;
-2. build a clean Release configuration;
-3. run all tests and examples on a supported Windows machine;
-4. verify install rules into an empty prefix;
-5. confirm public headers link for a minimal external consumer;
-6. remove unsupported claims and unresolved placeholder APIs from release notes.
+1. synchronize CMake version, status, tag, and changelog;
+2. pass clean Windows Debug and Release CI;
+3. run all registered tests;
+4. manually run and inspect both examples;
+5. install into an empty prefix and build the external consumer;
+6. verify every documented public method is implemented or explicitly unsupported;
+7. review the roadmap and remove completed P0 items.

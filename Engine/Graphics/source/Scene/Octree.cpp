@@ -254,6 +254,93 @@ namespace Pyramid
             }
         }
 
+        void OctreeNode::QueryRay(
+            const Math::Vec3 &origin,
+            const Math::Vec3 &direction,
+            f32 maxDistance,
+            std::vector<std::shared_ptr<RenderObject>> &results) const
+        {
+            f32 nodeDistance = 0.0f;
+            if (!m_bounds.IntersectsRay(origin, direction, nodeDistance) || nodeDistance > maxDistance)
+                return;
+
+            for (const auto &object : m_objects)
+            {
+                if (!object)
+                    continue;
+
+                f32 objectDistance = 0.0f;
+                if (CalculateObjectBounds(object).IntersectsRay(origin, direction, objectDistance) &&
+                    objectDistance <= maxDistance)
+                {
+                    results.push_back(object);
+                }
+            }
+
+            for (const auto &child : m_children)
+            {
+                if (child)
+                    child->QueryRay(origin, direction, maxDistance, results);
+            }
+        }
+
+        void OctreeNode::Update()
+        {
+            if (m_needsRebuild)
+                Rebuild();
+
+            for (auto &child : m_children)
+            {
+                if (child)
+                    child->Update();
+            }
+        }
+
+        void OctreeNode::Rebuild()
+        {
+            std::vector<std::shared_ptr<RenderObject>> objects;
+            objects.reserve(GetTotalObjectCount());
+
+            const auto collect = [&](const auto &self, const OctreeNode *node) -> void
+            {
+                objects.insert(objects.end(), node->m_objects.begin(), node->m_objects.end());
+                for (const auto &child : node->m_children)
+                {
+                    if (child)
+                        self(self, child.get());
+                }
+            };
+
+            collect(collect, this);
+            Clear();
+            for (const auto &object : objects)
+                Insert(object);
+            m_needsRebuild = false;
+        }
+
+        u32 OctreeNode::GetMaxDepth() const
+        {
+            u32 depth = m_depth;
+            for (const auto &child : m_children)
+            {
+                if (child)
+                    depth = Math::Max(depth, child->GetMaxDepth());
+            }
+            return depth;
+        }
+
+        AABB OctreeNode::CalculateObjectBounds(const std::shared_ptr<RenderObject> &object) const
+        {
+            if (!object)
+                return AABB();
+
+            const Math::Vec3 halfSize(
+                Math::Max(0.5f, Math::Abs(object->scale.x) * 0.5f),
+                Math::Max(0.5f, Math::Abs(object->scale.y) * 0.5f),
+                Math::Max(0.5f, Math::Abs(object->scale.z) * 0.5f));
+            return AABB(object->position - halfSize, object->position + halfSize);
+        }
+
         u32 OctreeNode::GetTotalObjectCount() const
         {
             u32 count = static_cast<u32>(m_objects.size());
@@ -415,6 +502,22 @@ namespace Pyramid
             }
         }
 
+        void Octree::Remove(std::shared_ptr<RenderObject> object)
+        {
+            if (!object || !m_root)
+                return;
+            m_root->Remove(object);
+            m_objectBounds.erase(object);
+        }
+
+        void Octree::Update(std::shared_ptr<RenderObject> object)
+        {
+            if (!object)
+                return;
+            Remove(object);
+            Insert(object);
+        }
+
         void Octree::Clear()
         {
             if (m_root)
@@ -459,15 +562,8 @@ namespace Pyramid
                                                                     f32 maxDistance) const
         {
             std::vector<std::shared_ptr<RenderObject>> results;
-            // Simple ray query implementation
             if (m_root)
-            {
-                // For now, use sphere query along the ray
-                Math::Vec3 endPoint = origin + direction * maxDistance;
-                Math::Vec3 center = (origin + endPoint) * 0.5f;
-                f32 radius = maxDistance * 0.5f;
-                m_root->Query(center, radius, results);
-            }
+                m_root->QueryRay(origin, direction.Normalized(), maxDistance, results);
             return results;
         }
 
@@ -494,26 +590,87 @@ namespace Pyramid
             return nearest;
         }
 
+        std::vector<std::shared_ptr<RenderObject>> Octree::FindKNearest(
+            const Math::Vec3 &position,
+            u32 k) const
+        {
+            std::vector<std::shared_ptr<RenderObject>> objects;
+            objects.reserve(m_objectBounds.size());
+            for (const auto &entry : m_objectBounds)
+            {
+                if (entry.first)
+                    objects.push_back(entry.first);
+            }
+
+            std::sort(objects.begin(), objects.end(), [&position](const auto &lhs, const auto &rhs)
+            {
+                return (lhs->position - position).LengthSquared() <
+                       (rhs->position - position).LengthSquared();
+            });
+
+            if (objects.size() > k)
+                objects.resize(k);
+            return objects;
+        }
+
+        void Octree::SetMaxDepth(u32 maxDepth)
+        {
+            m_maxDepth = maxDepth;
+            Rebuild();
+        }
+
+        void Octree::SetMaxObjectsPerNode(u32 maxObjects)
+        {
+            m_maxObjectsPerNode = Math::Max(1u, maxObjects);
+            Rebuild();
+        }
+
+        void Octree::SetBounds(const Math::Vec3 &center, const Math::Vec3 &size)
+        {
+            std::vector<std::shared_ptr<RenderObject>> objects;
+            objects.reserve(m_objectBounds.size());
+            for (const auto &entry : m_objectBounds)
+                objects.push_back(entry.first);
+
+            const Math::Vec3 halfSize = size * 0.5f;
+            m_root = std::make_unique<OctreeNode>(
+                AABB(center - halfSize, center + halfSize),
+                0,
+                m_maxDepth,
+                m_maxObjectsPerNode);
+            m_objectBounds.clear();
+            for (const auto &object : objects)
+                Insert(object);
+        }
+
+        void Octree::DrawDebugVisualization() const
+        {
+            const auto stats = GetStats();
+            PYRAMID_LOG_DEBUG(
+                "Octree stats: nodes=", stats.totalNodes,
+                ", objects=", stats.totalObjects,
+                ", maxDepth=", stats.maxDepth);
+        }
+
         void Octree::Rebuild()
         {
-            if (m_root)
-            {
-                // Simple rebuild - clear and re-insert all objects
-                std::vector<std::shared_ptr<RenderObject>> allObjects;
+            if (!m_root)
+                return;
 
-                // Collect all objects
-                for (const auto &pair : m_objectBounds)
-                {
-                    allObjects.push_back(pair.first);
-                }
+            std::vector<std::shared_ptr<RenderObject>> objects;
+            objects.reserve(m_objectBounds.size());
+            for (const auto &entry : m_objectBounds)
+                objects.push_back(entry.first);
 
-                // Clear and re-insert
-                Clear();
-                for (const auto &obj : allObjects)
-                {
-                    Insert(obj);
-                }
-            }
+            const AABB bounds = m_root->GetBounds();
+            m_root = std::make_unique<OctreeNode>(
+                bounds,
+                0,
+                m_maxDepth,
+                m_maxObjectsPerNode);
+            m_objectBounds.clear();
+            for (const auto &object : objects)
+                Insert(object);
         }
 
         Octree::OctreeStats Octree::GetStats() const
@@ -616,6 +773,24 @@ namespace Pyramid
                 }
 
                 return Math::Fast::Sqrt(sqDist);
+            }
+
+
+            bool RayAABBIntersection(
+                const Math::Vec3 &origin,
+                const Math::Vec3 &direction,
+                const AABB &aabb,
+                f32 &distance)
+            {
+                return aabb.IntersectsRay(origin, direction, distance);
+            }
+
+            bool SphereAABBIntersection(
+                const Math::Vec3 &center,
+                f32 radius,
+                const AABB &aabb)
+            {
+                return aabb.IntersectsSphere(center, radius);
             }
         }
 

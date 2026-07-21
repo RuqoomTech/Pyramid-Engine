@@ -4,6 +4,7 @@
 #include <Pyramid/Util/Log.hpp>
 #include <fstream>
 #include <chrono>
+#include <utility>
 
 namespace Pyramid
 {
@@ -24,7 +25,7 @@ namespace Pyramid
 
         std::shared_ptr<Pyramid::Scene> SceneManager::CreateScene(const std::string &name)
         {
-            auto scene = std::make_shared<Pyramid::Scene>();
+            auto scene = std::make_shared<Pyramid::Scene>(name);
             m_scenes[name] = scene;
 
             if (!m_activeScene)
@@ -34,6 +35,20 @@ namespace Pyramid
 
             PYRAMID_LOG_INFO("Created scene: ", name);
             return scene;
+        }
+
+        bool SceneManager::LoadScene(const std::string &filePath, SerializationFormat format)
+        {
+            (void)format;
+            PYRAMID_LOG_ERROR("Scene loading is not implemented: ", filePath);
+            return false;
+        }
+
+        bool SceneManager::SaveScene(const std::string &filePath, SerializationFormat format)
+        {
+            (void)format;
+            PYRAMID_LOG_ERROR("Scene saving is not implemented: ", filePath);
+            return false;
         }
 
         void SceneManager::SetActiveScene(std::shared_ptr<Pyramid::Scene> scene)
@@ -118,6 +133,9 @@ namespace Pyramid
                 case QueryType::Ray:
                     result.objects = m_octree->QueryRay(params.position, params.direction, params.maxDistance);
                     break;
+                case QueryType::Frustum:
+                    PYRAMID_LOG_WARN("QueryScene does not accept frustum planes; use GetVisibleObjects(camera)");
+                    break;
                 }
             }
             else
@@ -189,6 +207,17 @@ namespace Pyramid
             return result.objects;
         }
 
+        std::vector<std::shared_ptr<RenderObject>> SceneManager::GetObjectsInBox(
+            const Math::Vec3 &min,
+            const Math::Vec3 &max)
+        {
+            QueryParams params;
+            params.type = QueryType::Box;
+            params.position = (min + max) * 0.5f;
+            params.size = max - min;
+            return QueryScene(params).objects;
+        }
+
         std::shared_ptr<RenderObject> SceneManager::GetNearestObject(const Math::Vec3 &position)
         {
             if (m_spatialPartitioningEnabled && m_octree)
@@ -256,6 +285,14 @@ namespace Pyramid
             // TODO: Add scene update method when available
         }
 
+        void SceneManager::UpdateVisibility(const Camera &camera)
+        {
+            const auto visible = GetVisibleObjects(camera);
+            m_stats.visibleObjects = static_cast<u32>(visible.size());
+            const u32 total = m_activeScene ? static_cast<u32>(m_activeScene->GetObjectCount()) : 0;
+            m_stats.culledObjects = total > m_stats.visibleObjects ? total - m_stats.visibleObjects : 0;
+        }
+
         void SceneManager::UpdateSpatialPartition()
         {
             if (m_needsOctreeRebuild)
@@ -271,8 +308,9 @@ namespace Pyramid
         const SceneStats &SceneManager::GetStats() const
         {
             // Update stats
-            const_cast<SceneManager *>(this)->m_stats.totalNodes = 0;   // TODO: Add when scene has GetNodeCount
-            const_cast<SceneManager *>(this)->m_stats.totalObjects = 0; // TODO: Add when available
+            const_cast<SceneManager *>(this)->m_stats.totalNodes = m_activeScene ? 1u : 0u;
+            const_cast<SceneManager *>(this)->m_stats.totalObjects =
+                m_activeScene ? static_cast<u32>(m_activeScene->GetObjectCount()) : 0u;
 
             if (m_octree)
             {
@@ -287,6 +325,39 @@ namespace Pyramid
         void SceneManager::ResetStats()
         {
             m_stats = SceneStats{};
+        }
+
+        void SceneManager::RegisterEventCallback(const std::string &eventType, SceneEventCallback callback)
+        {
+            if (!eventType.empty() && callback)
+            {
+                m_eventCallbacks[eventType].push_back(std::move(callback));
+            }
+        }
+
+        void SceneManager::TriggerEvent(const std::string &eventType, std::shared_ptr<SceneNode> node)
+        {
+            const auto it = m_eventCallbacks.find(eventType);
+            if (it == m_eventCallbacks.end())
+                return;
+
+            for (const auto &callback : it->second)
+            {
+                callback(eventType, node);
+            }
+        }
+
+        void SceneManager::DrawDebugInfo()
+        {
+            if (!m_debugVisualization)
+                return;
+
+            const auto &stats = GetStats();
+            PYRAMID_LOG_DEBUG(
+                "Scene stats: objects=", stats.totalObjects,
+                ", visible=", stats.visibleObjects,
+                ", octreeNodes=", stats.octreeNodes,
+                ", octreeDepth=", stats.octreeDepth);
         }
 
         bool SceneManager::FrustumCull(const std::shared_ptr<RenderObject> &object, const Camera &camera)
@@ -324,6 +395,22 @@ namespace Pyramid
             std::unique_ptr<SceneManager> CreateSceneManager()
             {
                 return std::make_unique<SceneManager>();
+            }
+
+            std::shared_ptr<Pyramid::Scene> CreateSpatialTestScene(u32 objectCount)
+            {
+                auto scene = std::make_shared<Pyramid::Scene>("Spatial Test Scene");
+                for (u32 index = 0; index < objectCount; ++index)
+                {
+                    auto object = std::make_shared<RenderObject>();
+                    object->name = "SpatialObject" + std::to_string(index);
+                    object->position = Math::Vec3(
+                        static_cast<f32>(index % 10),
+                        static_cast<f32>((index / 10) % 10),
+                        static_cast<f32>(index / 100));
+                    scene->AddRenderObject(object);
+                }
+                return scene;
             }
 
             bool ValidateScene(const std::shared_ptr<Pyramid::Scene> &scene)

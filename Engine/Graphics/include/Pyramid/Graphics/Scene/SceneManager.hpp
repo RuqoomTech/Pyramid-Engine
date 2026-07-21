@@ -99,7 +99,7 @@ namespace Pyramid
         };
 
         /**
-         * @brief Advanced scene manager with spatial partitioning and serialization
+         * @brief Scene manager with spatial partitioning and explicit persistence capability checks
          */
         class SceneManager
         {
@@ -155,11 +155,6 @@ namespace Pyramid
         private:
             // Internal scene management
             void InitializeOctree();
-            void UpdateOctree();
-            void SerializeSceneBinary(const std::string &filePath);
-            void SerializeSceneJSON(const std::string &filePath);
-            void DeserializeSceneBinary(const std::string &filePath);
-            void DeserializeSceneJSON(const std::string &filePath);
 
             // Culling algorithms
             bool FrustumCull(const std::shared_ptr<RenderObject> &object, const Camera &camera);

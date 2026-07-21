@@ -1,59 +1,54 @@
 # Repository guidelines
 
-## Project structure
+## Scope
 
-- `Engine/` builds the `PyramidEngine` C++17 library.
-- Active modules use `include/` and `source/` directories: Core, Graphics, Math, Platform, and Utils.
-- Audio, Input, and Physics are placeholders and must not be described as implemented.
-- `Engine/Utils/test/` contains utility test executables.
-- `Examples/BasicGame` and `Examples/BasicRendering` are the current runnable examples.
-- `docs/` contains the maintained compact documentation set.
-- `vendor/glad/` is the bundled OpenGL/WGL loader.
-- Generated `build*` directories stay uncommitted.
+- `Engine/` builds the C++17 `PyramidEngine` library.
+- Active modules are Core, Graphics, Math, Platform, and Utils.
+- `Examples/BasicGame` and `Examples/BasicRendering` are the graphical references.
+- `Tests/PublicApiLinkage.cpp` protects selected public symbols.
+- `Tests/Consumer` validates the installed CMake package.
+- `vendor/glad` is a bundled public dependency.
+- Input, audio, physics, editor, scripting, DirectX, Vulkan, Linux, and macOS are not supported.
 
 ## Build and test
 
-Use the Windows/Visual Studio presets from the repository root:
-
-```powershell
-cmake --preset vs2022-debug
-cmake --build --preset build-debug
-```
-
-With tests:
-
 ```powershell
 cmake --preset vs2022-debug-tests
-cmake --build --preset build-debug-tests-clean
+cmake --build --preset build-debug-tests
 ctest --preset test-debug
+./scripts/run-smoke.ps1 -BuildDir build/debug-tests -Config Debug -DurationSeconds 5
 ```
 
-For graphics/runtime changes:
+Release validation:
 
 ```powershell
-./scripts/run-smoke.ps1 -BuildDir build -Config Debug -DurationSeconds 5
+cmake --preset vs2022-release-tests
+cmake --build --preset build-release-tests
+ctest --preset test-release
 ```
-
-The current source is Win32/OpenGL-specific. Do not present Linux, macOS, DirectX, or Vulkan as supported.
 
 ## Style
 
-- C++17, four-space indentation, braces on new lines.
-- Types and most public methods: `PascalCase`.
-- Locals and parameters: `camelCase`.
-- Fields: `m_` prefix.
-- Prefer RAII and explicit ownership.
-- Use `PYRAMID_LOG_*`, `PYRAMID_ASSERT`, and `PYRAMID_CORE_ASSERT` for diagnostics.
-- Avoid adding required interface methods with silent no-op defaults.
+- C++17, four spaces, braces on new lines.
+- Types/public methods use `PascalCase`; locals/parameters use `camelCase`; fields use `m_`.
+- Prefer RAII, explicit ownership, and `PYRAMID_LOG_*` diagnostics.
+- Do not add required interface methods with silent no-op defaults.
+- Do not expose source-tree absolute paths through installed target interfaces.
+
+## Public APIs
+
+Every public declaration must be implemented, removed, or documented as an explicit failure. Add linkage-sensitive symbols to `Tests/PublicApiLinkage.cpp`.
+
+Do not describe placeholder algorithms as complete. Current examples and engine shaders target GLSL 3.30; the runtime requires OpenGL 3.3 core or newer.
 
 ## Tests
 
-Add focused `Test<Feature>.cpp` executables and register them with CTest. Tests must return non-zero on failure and print actionable context. Renderer changes also require visual inspection; the smoke script only detects early process failure.
+Tests must fail visibly, use valid fixtures, avoid false-success skips, clean temporary files, and print actionable context. Renderer changes require visual inspection because process smoke testing is not pixel validation.
 
 ## Documentation
 
-Update an existing maintained document rather than adding overlapping guides or status reports. Verify paths, target names, namespaces, signatures, platform requirements, and implementation status against source. Planned behavior belongs in `docs/ROADMAP.md`, not `docs/API.md`.
+Update the maintained compact set instead of adding overlapping guides or status files. Planned work belongs in `docs/ROADMAP.md`; historical changes belong in `CHANGELOG.md`.
 
 ## Pull requests
 
-Use concise imperative commit subjects. Include the affected modules, design/lifetime decisions, exact build and test commands, visible-output evidence for rendering changes, known limitations, and documentation/changelog updates.
+Include affected modules, ownership/API decisions, exact validation commands, visible rendering evidence, known limitations, and documentation/changelog updates.

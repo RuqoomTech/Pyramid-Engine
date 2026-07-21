@@ -62,7 +62,7 @@ bool TestJPEGMarkerParsing()
 
         // DHT (Define Huffman Table) - Minimal DC table
         0xFF, 0xC4,
-        0x00, 0x13, // Length: 19 bytes (2 + 16 + 1)
+        0x00, 0x14, // Length: 20 bytes (2 + 1 + 16 + 1)
         0x00,       // Table class: 0 (DC), Table ID: 0
         // Code lengths (16 bytes) - simplified: 1 code of length 1
         0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,

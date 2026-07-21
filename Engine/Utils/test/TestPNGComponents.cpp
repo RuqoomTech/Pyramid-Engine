@@ -124,13 +124,13 @@ bool TestZLib()
     // Adler-32 calculation: a = 1 + sum of bytes, b = sum of a values
     // a = 1 + 72 + 101 + 108 + 108 + 111 = 501
     // b = 1 + 73 + 174 + 282 + 390 + 501 = 1421
-    // Adler-32 = (b << 16) | a = (1421 << 16) | 501 = 0x058D01F5
+    // Adler-32 = (b << 16) | a = (1421 << 16) | 501 = 0x058C01F5
 
     uint8_t zlibData[] = {
         0x78, 0x9C,                   // ZLIB header (CMF=0x78, FLG=0x9C)
         0x01, 0x05, 0x00, 0xFA, 0xFF, // DEFLATE: final uncompressed block, length=5
         'H', 'e', 'l', 'l', 'o',      // Data: "Hello"
-        0x05, 0x8D, 0x01, 0xF5        // Adler-32 checksum (big-endian): 0x058D01F5
+        0x05, 0x8C, 0x01, 0xF5        // Adler-32 checksum (big-endian): 0x058C01F5
     };
 
     std::vector<uint8_t> result;
@@ -138,12 +138,7 @@ bool TestZLib()
     if (!ZLib::Decompress(zlibData, sizeof(zlibData), result))
     {
         std::cout << "ERROR: ZLIB decompression failed: " << ZLib::GetLastError() << std::endl;
-
-        // Let's debug by calculating what our implementation thinks the checksum should be
-        std::vector<uint8_t> testData = {'H', 'e', 'l', 'l', 'o'};
-        // We can't access the private CalculateAdler32 method, so let's skip this test for now
-        std::cout << "NOTE: Skipping ZLib test due to checksum calculation differences" << std::endl;
-        return true; // Skip this test for now
+        return false;
     }
 
     if (result.size() != 5)

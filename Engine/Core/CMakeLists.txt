@@ -2,7 +2,7 @@ target_sources(PyramidEngine
     PRIVATE
         source/Game.cpp
         source/Prerequisites.cpp
-    PUBLIC
+    PRIVATE
         include/Pyramid/Core/Prerequisites.hpp
         include/Pyramid/Core/Game.hpp
 )

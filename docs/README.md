@@ -1,23 +1,24 @@
 # Pyramid Engine documentation
 
-The documentation is intentionally compact and source-oriented. Public claims should describe code that exists in this repository; planned work belongs in the roadmap rather than the API documentation.
+This documentation describes the source tree as it exists at the latest audit. Planned behavior belongs in the roadmap, not in API documentation.
 
 | Document | Purpose |
 |---|---|
-| [Building and testing](BUILDING.md) | Supported toolchain, presets, outputs, tests, smoke tests, and troubleshooting |
-| [Architecture](ARCHITECTURE.md) | Runtime layers, data flow, ownership, rendering pipeline, and module status |
-| [API overview](API.md) | Supported public interfaces with small, compilable usage patterns |
-| [Examples](EXAMPLES.md) | The two applications that currently exist and how to run them |
-| [Development guide](DEVELOPMENT.md) | Contribution workflow, coding conventions, tests, and documentation rules |
-| [Roadmap and known issues](ROADMAP.md) | Source-backed limitations and prioritized implementation work |
-| [Changelog](../CHANGELOG.md) | Historical project changes |
+| [Building and testing](BUILDING.md) | Supported platform, presets, tests, CI, installation, and troubleshooting |
+| [Architecture](ARCHITECTURE.md) | Runtime layers, rendering flow, ownership, packaging, and subsystem status |
+| [API overview](API.md) | Supported public interfaces and explicit capability limits |
+| [Examples](EXAMPLES.md) | Checked-in applications, output paths, and validation expectations |
+| [Development guide](DEVELOPMENT.md) | Engineering workflow, conventions, tests, documentation, and release hygiene |
+| [Roadmap and known issues](ROADMAP.md) | Completed stabilization work and remaining priorities |
+| [Changelog](../CHANGELOG.md) | Concise implementation history |
 
-## Documentation maintenance rules
+## Maintenance rules
 
-1. Verify names, namespaces, signatures, target names, and paths against source before merging documentation changes.
-2. Label partial behavior explicitly. Do not document a declared method as supported when it has no definition or contains a placeholder path.
-3. Keep tutorials tied to a checked-in example. Planned tutorials and systems belong in `ROADMAP.md`.
-4. Update `README.md`, `ARCHITECTURE.md`, `API.md`, and `ROADMAP.md` when a change affects public behavior or project status.
-5. Run the local Markdown-link check described in [Development guide](DEVELOPMENT.md) after moving documentation.
+1. Verify paths, targets, namespaces, signatures, and behavior against source.
+2. A public declaration must have a definition or fail explicitly and predictably.
+3. Do not describe reserved APIs, placeholder algorithms, or planned systems as supported.
+4. Keep setup instructions in `BUILDING.md`; do not add overlapping setup files.
+5. Update the status table, API overview, roadmap, and changelog when public behavior changes.
+6. Run the Markdown-link check and the public-API linkage test after reorganizing files or interfaces.
 
 Last source audit: **July 21, 2026**.

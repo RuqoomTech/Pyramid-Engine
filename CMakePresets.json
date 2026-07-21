@@ -11,20 +11,27 @@
       "displayName": "VS2022 Debug",
       "generator": "Visual Studio 17 2022",
       "architecture": "x64",
-      "binaryDir": "${sourceDir}/build",
+      "binaryDir": "${sourceDir}/build/debug",
       "cacheVariables": {
         "PYRAMID_BUILD_EXAMPLES": "ON",
         "PYRAMID_BUILD_TESTS": "OFF",
-        "PYRAMID_BUILD_TOOLS": "OFF"
+        "PYRAMID_WARNINGS_AS_ERRORS": "OFF"
       }
     },
     {
       "name": "vs2022-debug-tests",
       "displayName": "VS2022 Debug + Tests",
       "inherits": "vs2022-debug",
+      "binaryDir": "${sourceDir}/build/debug-tests",
       "cacheVariables": {
         "PYRAMID_BUILD_TESTS": "ON"
       }
+    },
+    {
+      "name": "vs2022-release-tests",
+      "displayName": "VS2022 Release + Tests",
+      "inherits": "vs2022-debug-tests",
+      "binaryDir": "${sourceDir}/build/release-tests"
     }
   ],
   "buildPresets": [
@@ -34,16 +41,14 @@
       "configuration": "Debug"
     },
     {
-      "name": "build-debug-clean",
-      "configurePreset": "vs2022-debug",
-      "configuration": "Debug",
-      "cleanFirst": true
+      "name": "build-debug-tests",
+      "configurePreset": "vs2022-debug-tests",
+      "configuration": "Debug"
     },
     {
-      "name": "build-debug-tests-clean",
-      "configurePreset": "vs2022-debug-tests",
-      "configuration": "Debug",
-      "cleanFirst": true
+      "name": "build-release-tests",
+      "configurePreset": "vs2022-release-tests",
+      "configuration": "Release"
     }
   ],
   "testPresets": [
@@ -54,7 +59,14 @@
       "output": {
         "outputOnFailure": true
       }
+    },
+    {
+      "name": "test-release",
+      "configurePreset": "vs2022-release-tests",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
     }
   ]
 }
-

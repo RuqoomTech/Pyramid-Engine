@@ -1,118 +1,104 @@
 # Roadmap and known issues
 
-This roadmap replaces separate implementation, blocker, and best-practices reports. It is based on the source snapshot audited on **July 21, 2026**. Priorities describe technical risk, not delivery dates.
+Priorities are based on technical risk. They are not delivery dates.
 
-## P0 — make the current engine trustworthy
+## Stabilization completed on July 21, 2026
 
-### Build and release consistency
+The current `0.6.0-pre-alpha` baseline includes:
 
-- Reconcile the CMake project version (`0.3.3`) with changelog entries through `0.6.0`.
-- Guard Win32 sources and `opengl32` behind platform checks; fail early with a clear message on unsupported hosts.
-- Remove or repair stale build files: `CMake/Dependencies.cmake`, `Game/CMakeLists.txt`, and the missing `Tools/AssetProcessor` path.
-- Validate `cmake --install` from a clean Release build, including missing placeholder include directories.
-- Add a Windows CI job for configure, build, CTest, and at least process-level example startup where a graphical runner is available.
+- synchronized CMake version and pre-alpha status;
+- explicit Windows-only configure guard;
+- removal of stale build files and empty Input/Audio/Physics module placeholders;
+- OpenGL 3.3/GLSL 3.30 minimum for the reference examples;
+- strict required window operations with Win32 implementations;
+- relocatable install/export package and external-consumer test;
+- Windows Debug/Release CI for build, CTest, install, and package consumption;
+- 11 registered tests, including previously omitted PNG/JPEG parser tests;
+- corrected standards-invalid PNG, zlib, and JPEG test fixtures;
+- public texture convenience definitions and explicit depth-target failure;
+- definitions for scene events, box queries, visibility statistics, spatial test scenes, and octree operations;
+- removal of public render-pass classes that had no implementations;
+- whole-object non-Windows static linkage validation with no unresolved symbols;
+- a missing `<cstring>` dependency fixed in the image loader.
 
-### API completeness and linker safety
+## P0 — verify and finish the current vertical slice
 
-Implement or remove public declarations that currently have no definition, especially in `SceneManager`:
+### Windows runtime verification
 
-- `LoadScene` / `SaveScene` and serialization helpers;
-- `GetObjectsInBox`;
-- `UpdateVisibility`;
-- `DrawDebugInfo`;
-- `SceneUtils::CreateSpatialTestScene`;
-- event callback registration/dispatch helpers;
-- public texture convenience factories (`Create(width, height, ...)`, render/depth targets, and color textures);
-- declared transparent, post-process, UI, debug, and render-pass factory classes.
-
-Replace required no-op/default methods in `Window` and texture interfaces with explicit capability reporting or pure virtual operations.
+- Run clean Debug and Release CI on the actual repository host.
+- Launch both examples on at least one supported GPU/driver.
+- Verify resize, minimize/restore, visibility changes, close handling, and shutdown.
+- Capture OpenGL errors and screenshots for the reference rendering path.
+- Tag the first verified pre-release only after these checks pass.
 
 ### Rendering correctness
 
-- Implement compute dispatch or remove `Dispatch` from the supported command set.
-- Complete generic framebuffer binding in `OpenGLDevice::BindFramebuffer`.
-- Remove fixed 1920×1080 sizing from `SetupDeferredPipeline`; use the active viewport/window and resize targets.
+- Implement compute dispatch or remove it from the command model.
+- Complete backend-neutral framebuffer binding.
+- Remove fixed deferred target dimensions and propagate window resize.
 - Complete deferred shadow-map-array binding.
-- Add state-transition tests for framebuffer, shader, texture, VAO, UBO, blending, depth, culling, and polygon modes.
-- Verify multisampled render-target creation, resolve behavior, attachment ownership, and resizing.
+- Verify multisampled targets, resolve behavior, and attachment ownership.
+- Add OpenGL debug-callback handling and render-state transition tests.
 
-### Image-loader correctness
+### Texture and image correctness
 
-- Complete the JPEG block-decoding TODO and remove generated test-pattern behavior from production paths.
-- Register all maintained image tests with CTest or delete obsolete debug test files.
-- Add corpus tests for valid, malformed, truncated, large, grayscale, alpha, interlaced/progressive, and unsupported files.
-- Document exact supported subsets and reject unsupported files deterministically.
-- Add fuzzing/sanitizer coverage for all parsers and decompressors.
+- Map all advertised texture formats or remove unsupported enum values.
+- Implement depth texture creation through the texture interface.
+- Apply sRGB intent, border color, anisotropy, mip filters, and `FlipY` consistently.
+- Replace JPEG test-pattern generation with real baseline block decoding.
+- Add malformed/truncated/large/progressive/interlaced image corpus tests.
+- Add parser fuzzing and sanitizer coverage.
 
-## P1 — stabilize engine subsystems
+### Scene correctness
 
-### Scene management
+- Implement hierarchy-wide transform dirty propagation.
+- Extract real camera frustum planes.
+- Replace placeholder occlusion culling with a supported technique or remove the setting.
+- Derive spatial bounds from geometry instead of approximate position/scale boxes.
+- Add focused octree tests for moving objects, rays, boxes, frusta, and configuration changes.
+- Implement scene persistence only after a stable resource identity model exists.
 
-- Implement scene transform propagation and dirty-state tracking.
-- Connect scene/object counts to `SceneStats`.
-- Define correct object bounds instead of deriving behavior from placeholder geometry where applicable.
-- Implement or explicitly defer occlusion culling and LOD application.
-- Add tests for octree insertion, removal, rebuild, ray/point/sphere/box/frustum queries, and moving objects.
-- Separate persistence from runtime scene management when serialization is implemented.
+## P1 — stable OpenGL core
 
-### Resource and lifetime model
+Target outcome: a trustworthy rendering SDK rather than a larger feature list.
 
-- Introduce stable resource handles or a registry with generation checks.
-- Remove integer-ID and raw-pointer duplication from command APIs once one model is selected.
-- Define ownership for render targets, attachment textures, and backend-native handles.
-- Add shader/texture caching and deterministic teardown-order tests.
-- Replace manual `ImageData` ownership with an RAII container while preserving an interoperable low-level view.
+- Stable resource ownership and teardown order.
+- Resize-safe camera and render targets.
+- Shader and texture caching.
+- Accurate frame statistics and GPU timings.
+- Automated render-image regression tests.
+- Warning cleanup followed by warnings-as-errors in CI.
+- AddressSanitizer/UndefinedBehaviorSanitizer coverage in a compatible toolchain.
+- RAII image data container while retaining a low-level view.
 
-### Renderer quality
+## P2 — scene and asset foundation
 
-- Make frame statistics reflect executed draws, triangles, vertices, and GPU timings.
-- Separate material data from pass-specific shader binding.
-- Add resize-aware camera/projection and render-target updates.
-- Validate forward, shadow, and deferred pipelines with render-image regression tests.
-- Decide which OpenGL baseline is supported; align embedded and file-based GLSL versions with it.
+- Stable resource handles with generation checks.
+- Mesh/material asset import and caching.
+- Shader preprocessing, dependency tracking, and reload.
+- Scene serialization with versioning and validation.
+- Asset packaging and path abstraction independent of the source checkout.
+- Debug UI and frame inspection tools.
 
-### Testing and diagnostics
+## P3 — additional engine systems
 
-- Add unit tests for math, camera, scene, state cache, buffer layout, and command buffers.
-- Enable compiler warnings at a strict but achievable level and treat new warnings as regressions.
-- Add AddressSanitizer/UndefinedBehaviorSanitizer in a compatible toolchain job.
-- Add structured GL error/debug callback handling in Debug builds.
+Add systems only as complete vertical slices with tests and an example:
 
-## P2 — expand capabilities after stabilization
+1. input and action mapping integrated with Win32;
+2. audio device, buffers/sources, streaming, and spatialization;
+3. physics integration using a proven library unless physics research is a project goal;
+4. a second platform implementation;
+5. another graphics backend after the contracts are backend-neutral.
 
-### Platform and backends
+## Pre-release exit criteria
 
-- Refactor platform selection so Win32/WGL is one implementation rather than a hard dependency.
-- Add one additional window/context platform before claiming cross-platform support.
-- Add another graphics backend only after the device/resource contracts are backend-neutral and tested.
+A credible tagged pre-release requires:
 
-### Engine systems
-
-`Audio`, `Input`, and `Physics` currently contain only CMake placeholders. For each system, either remove it from the build until work begins or deliver a minimal vertical slice with tests and an example before documenting it as available.
-
-Suggested order:
-
-1. Input: keyboard/mouse events and action mapping, integrated with Win32.
-2. Asset/resource management: paths, caching, lifetime, and reload behavior.
-3. Physics integration: begin with a proven external library unless writing physics is a core research goal.
-4. Audio integration: device lifecycle, buffers/sources, streaming, and spatialization.
-
-### Tooling
-
-- Asset conversion/validation pipeline.
-- Shader compilation/reflection tooling.
-- Frame capture and renderer debug UI.
-- Scene/editor tooling only after serialization and resource identities are stable.
-
-## Release readiness criteria
-
-A first credible public pre-release should meet all of the following:
-
-- version metadata, tag, and changelog agree;
-- clean Windows Debug and Release builds pass in CI;
-- all registered tests pass and image parsers have corpus coverage;
-- both examples run without GL errors on the declared minimum driver;
-- every documented public method is implemented or explicitly marked experimental;
-- unsupported platform/backend choices fail clearly;
-- install/export usage works from an external sample project;
-- no P0 item remains open.
+- version, status, tag, and changelog agreement;
+- green Windows Debug and Release CI;
+- all registered tests passing;
+- both examples visually verified on the declared OpenGL minimum;
+- clean install and external-consumer build;
+- no unresolved public symbol;
+- explicit behavior for every unsupported capability;
+- no remaining P0 issue that can corrupt data, crash normal usage, or misrepresent support.

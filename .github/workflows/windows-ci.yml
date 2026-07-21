@@ -1,0 +1,70 @@
+name: Windows CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [Debug, Release]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure
+        shell: pwsh
+        run: >-
+          cmake -S . -B build
+          -G "Visual Studio 17 2022"
+          -A x64
+          -DPYRAMID_BUILD_EXAMPLES=ON
+          -DPYRAMID_BUILD_TESTS=ON
+          -DPYRAMID_WARNINGS_AS_ERRORS=OFF
+
+      - name: Build
+        shell: pwsh
+        run: cmake --build build --config ${{ matrix.configuration }} --parallel
+
+      - name: Test
+        shell: pwsh
+        run: ctest --test-dir build -C ${{ matrix.configuration }} --output-on-failure
+
+      - name: Install smoke test
+        shell: pwsh
+        run: cmake --install build --config ${{ matrix.configuration }} --prefix build/install
+
+      - name: Configure external consumer
+        shell: pwsh
+        run: >-
+          cmake -S Tests/Consumer -B build/consumer
+          -G "Visual Studio 17 2022"
+          -A x64
+          -DCMAKE_PREFIX_PATH="${{ github.workspace }}/build/install"
+
+      - name: Build external consumer
+        shell: pwsh
+        run: cmake --build build/consumer --config ${{ matrix.configuration }} --parallel
+
+      - name: Run external consumer
+        shell: pwsh
+        run: ./build/consumer/${{ matrix.configuration }}/PyramidConsumer.exe
+
+      - name: Upload binaries
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pyramid-${{ matrix.configuration }}
+          path: |
+            build/bin/${{ matrix.configuration }}
+            build/Examples/BasicRendering/${{ matrix.configuration }}
+          if-no-files-found: warn
