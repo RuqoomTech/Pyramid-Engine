@@ -2,6 +2,17 @@
 
 All notable changes to the Pyramid Game Engine will be documented in this file.
 
+> **Versioning note:** the active CMake project metadata is `0.3.3`, while this historical file contains later milestones through `0.6.0`. Treat those entries as repository history, not verified release metadata, until the version, tags, and changelog are reconciled.
+
+## [Unreleased]
+
+### Documentation
+- Consolidated the documentation into a compact, maintained set.
+- Corrected platform, backend, OpenGL, build-target, test, and module-status claims against the source tree.
+- Replaced duplicate architecture/setup documents and speculative API references with source-backed architecture, API, development, examples, and roadmap guides.
+- Removed broken internal links and documentation for nonexistent examples and systems.
+- Documented the current version mismatch between CMake metadata and historical changelog milestones.
+
 ## [0.6.0] - 2025-07-13
 
 ### Added

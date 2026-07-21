@@ -1,50 +1,59 @@
-# Repository Guidelines
+# Repository guidelines
 
-## Project Structure & Module Organization
-`Engine/` contains the main `PyramidEngine` library. Active modules typically follow `include/` + `source/` layout (for example `Engine/Core`, `Engine/Graphics`, `Engine/Math`, `Engine/Platform`, `Engine/Utils`).  
-`Engine/Utils/test/` holds standalone C++ test executables for PNG/JPEG and utility components.  
-`Examples/BasicGame` and `Examples/BasicRendering` provide runnable sample apps.  
-`docs/` contains architecture, API, build, and contribution docs.  
-`vendor/glad/` is the bundled OpenGL loader dependency.  
-`build/` is generated output and should stay uncommitted.
+## Project structure
 
-## Build, Test, and Development Commands
-Use CMake from repo root:
+- `Engine/` builds the `PyramidEngine` C++17 library.
+- Active modules use `include/` and `source/` directories: Core, Graphics, Math, Platform, and Utils.
+- Audio, Input, and Physics are placeholders and must not be described as implemented.
+- `Engine/Utils/test/` contains utility test executables.
+- `Examples/BasicGame` and `Examples/BasicRendering` are the current runnable examples.
+- `docs/` contains the maintained compact documentation set.
+- `vendor/glad/` is the bundled OpenGL/WGL loader.
+- Generated `build*` directories stay uncommitted.
 
-```powershell
-cmake -B build -S . -DPYRAMID_BUILD_EXAMPLES=ON
-cmake --build build --config Debug
-```
+## Build and test
 
-Build with tests enabled:
+Use the Windows/Visual Studio presets from the repository root:
 
 ```powershell
-cmake -B build -S . -DPYRAMID_BUILD_TESTS=ON -DPYRAMID_BUILD_EXAMPLES=ON
-cmake --build build --config Debug --target PyramidEngine BasicGame BasicRenderingExample TestPNGComponents
+cmake --preset vs2022-debug
+cmake --build --preset build-debug
 ```
 
-Run binaries directly from the build tree (path varies by generator/config), for example:
+With tests:
 
 ```powershell
-.\build\bin\Debug\BasicGame*.exe
-.\build\bin\Debug\TestPNGComponents*.exe
+cmake --preset vs2022-debug-tests
+cmake --build --preset build-debug-tests-clean
+ctest --preset test-debug
 ```
 
-## Coding Style & Naming Conventions
-Target C++17. Follow existing style: 4-space indentation, braces on new lines, and small focused translation units.  
-Naming pattern in current codebase:
-- Types/functions: `PascalCase` (for example `GraphicsDevice`, `Initialize`)
-- Local variables/parameters: `camelCase` (for example `deltaTime`)
-- Member fields: `m_` prefix (for example `m_graphicsDevice`)
+For graphics/runtime changes:
 
-Prefer RAII and smart pointers; use engine logging/assert macros (`PYRAMID_LOG_*`, `PYRAMID_ASSERT`) for diagnostics and invariants.
+```powershell
+./scripts/run-smoke.ps1 -BuildDir build -Config Debug -DurationSeconds 5
+```
 
-## Testing Guidelines
-Current tests are executable-based (not fully wired into `ctest`). Add new tests under `Engine/Utils/test/` as `Test<Feature>.cpp`.  
-Each test binary should return non-zero on failure and print clear pass/fail output.  
-For graphics or runtime behavior changes, also validate with `BasicGame` and `BasicRenderingExample`.
+The current source is Win32/OpenGL-specific. Do not present Linux, macOS, DirectX, or Vulkan as supported.
 
-## Commit & Pull Request Guidelines
-Recent history favors short imperative commit subjects like `Add ...`, `Fix ...`, `Refactor ...` (without strict conventional prefixes). Keep subject lines concise and explain non-trivial rationale in the body.  
-PRs should include: change summary, affected modules, exact local build/test commands run, linked issue(s), and screenshots/video for visible rendering changes.  
-Update relevant docs in `docs/` when APIs, behavior, or build options change.
+## Style
+
+- C++17, four-space indentation, braces on new lines.
+- Types and most public methods: `PascalCase`.
+- Locals and parameters: `camelCase`.
+- Fields: `m_` prefix.
+- Prefer RAII and explicit ownership.
+- Use `PYRAMID_LOG_*`, `PYRAMID_ASSERT`, and `PYRAMID_CORE_ASSERT` for diagnostics.
+- Avoid adding required interface methods with silent no-op defaults.
+
+## Tests
+
+Add focused `Test<Feature>.cpp` executables and register them with CTest. Tests must return non-zero on failure and print actionable context. Renderer changes also require visual inspection; the smoke script only detects early process failure.
+
+## Documentation
+
+Update an existing maintained document rather than adding overlapping guides or status reports. Verify paths, target names, namespaces, signatures, platform requirements, and implementation status against source. Planned behavior belongs in `docs/ROADMAP.md`, not `docs/API.md`.
+
+## Pull requests
+
+Use concise imperative commit subjects. Include the affected modules, design/lifetime decisions, exact build and test commands, visible-output evidence for rendering changes, known limitations, and documentation/changelog updates.
