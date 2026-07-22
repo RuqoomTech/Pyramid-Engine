@@ -35,7 +35,10 @@ namespace Pyramid
         };
 
         /**
-         * @brief Query parameters for spatial queries
+         * @brief Query parameters for bounds-aware spatial queries
+         *
+         * Box size is the full extent. Sphere radius and ray max distance must
+         * be non-negative. Ray directions are normalized internally.
          */
         struct QueryParams
         {
@@ -49,6 +52,9 @@ namespace Pyramid
 
         /**
          * @brief Query results containing found objects
+         *
+         * Ray queries populate distances in the same nearest-first order as
+         * objects. Other query types leave distances empty.
          */
         struct QueryResult
         {
@@ -127,7 +133,8 @@ namespace Pyramid
             // Incrementally inserts, removes, and relocates changed render objects.
             void UpdateSpatialPartition();
 
-            // Scene queries
+            // Scene queries. Point, sphere, box, and ray queries test each
+            // object's complete world-space AABB and include hidden objects.
             QueryResult QueryScene(const QueryParams &params);
             std::vector<std::shared_ptr<RenderObject>> GetVisibleObjects(const Camera &camera);
             std::vector<std::shared_ptr<RenderObject>> GetObjectsInRadius(const Math::Vec3 &center, f32 radius);

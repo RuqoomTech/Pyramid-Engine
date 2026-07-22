@@ -13,7 +13,7 @@ The current `0.6.0-pre-alpha` baseline includes:
 - strict required window operations with Win32 implementations;
 - relocatable install/export package and external-consumer test;
 - Windows Debug/Release CI for build, CTest, install, and package consumption;
-- 14 registered tests, including real PNG/JPEG decoding, transactional texture loading, OpenGL diagnostics, window events, camera resize/frustum behavior, framebuffer resize, scene-hierarchy transforms, and incremental octree synchronization;
+- 15 registered tests, including real PNG/JPEG decoding, transactional texture loading, OpenGL diagnostics, window events, camera resize/frustum behavior, framebuffer resize, scene-hierarchy transforms, incremental octree synchronization, and bounds-accurate spatial queries;
 - corrected standards-invalid PNG, zlib, and JPEG test fixtures;
 - public texture convenience definitions and explicit depth-target failure;
 - definitions for scene events, box queries, visibility statistics, spatial test scenes, and octree operations;
@@ -25,7 +25,7 @@ The current `0.6.0-pre-alpha` baseline includes:
 - automatic default-viewport updates, active-camera projection synchronization, and minimized-window render suspension;
 - transactional framebuffer recreation, unified render-target ownership, and render-system resize propagation;
 - cycle-safe scene hierarchy operations with recursive world-transform invalidation and tested TRS composition;
-- normalized camera-frustum extraction, bounds-aware scene visibility, octree frustum queries, and incremental moving-object synchronization.
+- normalized camera-frustum extraction, bounds-aware scene visibility, octree frustum queries, incremental moving-object synchronization, and exact bounds-aware point/sphere/box/ray queries.
 
 ## P0 — verify and finish the current vertical slice
 
@@ -66,7 +66,8 @@ The current `0.6.0-pre-alpha` baseline includes:
 - Replace placeholder occlusion culling with a supported technique or remove the setting.
 - Derive local bounds automatically from imported mesh geometry; render objects currently expose explicit local bounds with a unit-cube default.
 - [x] Add focused octree synchronization tests for moving, inserted, removed, and unchanged objects.
-- Add focused octree tests for rays, exact box/sphere intersections, and configuration changes.
+- [x] Add focused octree tests for point, ray, exact box/sphere intersections, root-overflow objects, and linear/octree parity.
+- Add focused octree tests for configuration changes.
 - Implement scene persistence only after a stable resource identity model exists.
 
 ## P1 — stable OpenGL core

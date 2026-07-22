@@ -41,6 +41,15 @@ namespace
     volatile decltype(&SceneManager::LoadScene) g_loadScene = &SceneManager::LoadScene;
     volatile decltype(&SceneManager::SaveScene) g_saveScene = &SceneManager::SaveScene;
     volatile decltype(&SceneManager::GetObjectsInBox) g_getObjectsInBox = &SceneManager::GetObjectsInBox;
+    volatile decltype(&SceneManager::QueryScene) g_queryScene = &SceneManager::QueryScene;
+    volatile decltype(&Pyramid::SceneManagement::Octree::QueryPoint) g_queryOctreePoint =
+        &Pyramid::SceneManagement::Octree::QueryPoint;
+    volatile decltype(&Pyramid::SceneManagement::Octree::QuerySphere) g_queryOctreeSphere =
+        &Pyramid::SceneManagement::Octree::QuerySphere;
+    volatile decltype(&Pyramid::SceneManagement::Octree::QueryBox) g_queryOctreeBox =
+        &Pyramid::SceneManagement::Octree::QueryBox;
+    volatile decltype(&Pyramid::SceneManagement::Octree::QueryRay) g_queryOctreeRay =
+        &Pyramid::SceneManagement::Octree::QueryRay;
     volatile decltype(&SceneManager::UpdateVisibility) g_updateVisibility = &SceneManager::UpdateVisibility;
     volatile decltype(&SceneManager::RegisterEventCallback) g_registerEvent = &SceneManager::RegisterEventCallback;
     volatile decltype(&SceneManager::TriggerEvent) g_triggerEvent = &SceneManager::TriggerEvent;
@@ -88,6 +97,11 @@ int main()
                    g_loadScene &&
                    g_saveScene &&
                    g_getObjectsInBox &&
+                   g_queryScene &&
+                   g_queryOctreePoint &&
+                   g_queryOctreeSphere &&
+                   g_queryOctreeBox &&
+                   g_queryOctreeRay &&
                    g_updateVisibility &&
                    g_registerEvent &&
                    g_triggerEvent &&

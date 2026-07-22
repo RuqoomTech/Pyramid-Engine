@@ -13,6 +13,11 @@ namespace Pyramid
         // AABB Implementation
         bool AABB::IntersectsSphere(const Math::Vec3 &center, f32 radius) const
         {
+            if (radius < 0.0f)
+            {
+                return false;
+            }
+
             f32 sqDist = 0.0f;
 
             // Calculate squared distance from sphere center to AABB
@@ -33,6 +38,11 @@ namespace Pyramid
 
         bool AABB::IntersectsRay(const Math::Vec3 &origin, const Math::Vec3 &direction, f32 &distance) const
         {
+            if (direction.LengthSquared() <= 1e-12f)
+            {
+                return false;
+            }
+
             f32 tmin = 0.0f;
             f32 tmax = std::numeric_limits<f32>::max();
 
@@ -165,89 +175,75 @@ namespace Pyramid
 
         void OctreeNode::Query(const Math::Vec3 &point, std::vector<std::shared_ptr<RenderObject>> &results) const
         {
-            if (!m_bounds.Contains(point))
-                return;
-
-            // Add objects from this node
-            for (const auto &obj : m_objects)
+            // The root may retain objects outside its configured bounds. Child
+            // nodes are safe to prune because insertion descends only when an
+            // object's complete AABB fits inside the child.
+            if (m_depth > 0 && !m_bounds.Contains(point))
             {
-                if (obj)
+                return;
+            }
+
+            for (const auto &object : m_objects)
+            {
+                if (object && CalculateObjectBounds(object).Contains(point))
                 {
-                    results.push_back(obj);
+                    results.push_back(object);
                 }
             }
 
-            // Query children
-            if (!IsLeaf())
+            for (const auto &child : m_children)
             {
-                for (const auto &child : m_children)
+                if (child)
                 {
-                    if (child)
-                    {
-                        child->Query(point, results);
-                    }
+                    child->Query(point, results);
                 }
             }
         }
 
         void OctreeNode::Query(const AABB &bounds, std::vector<std::shared_ptr<RenderObject>> &results) const
         {
-            if (!m_bounds.Intersects(bounds))
-                return;
-
-            // Add objects from this node
-            for (const auto &obj : m_objects)
+            if (m_depth > 0 && !m_bounds.Intersects(bounds))
             {
-                if (obj)
+                return;
+            }
+
+            for (const auto &object : m_objects)
+            {
+                if (object && CalculateObjectBounds(object).Intersects(bounds))
                 {
-                    // Simple point-in-bounds check for now
-                    if (bounds.Contains(obj->position))
-                    {
-                        results.push_back(obj);
-                    }
+                    results.push_back(object);
                 }
             }
 
-            // Query children
-            if (!IsLeaf())
+            for (const auto &child : m_children)
             {
-                for (const auto &child : m_children)
+                if (child)
                 {
-                    if (child)
-                    {
-                        child->Query(bounds, results);
-                    }
+                    child->Query(bounds, results);
                 }
             }
         }
 
         void OctreeNode::Query(const Math::Vec3 &center, f32 radius, std::vector<std::shared_ptr<RenderObject>> &results) const
         {
-            if (!m_bounds.IntersectsSphere(center, radius))
-                return;
-
-            // Add objects from this node
-            for (const auto &obj : m_objects)
+            if (radius < 0.0f || (m_depth > 0 && !m_bounds.IntersectsSphere(center, radius)))
             {
-                if (obj)
+                return;
+            }
+
+            for (const auto &object : m_objects)
+            {
+                if (object && CalculateObjectBounds(object).IntersectsSphere(center, radius))
                 {
-                    f32 distance = (obj->position - center).Length();
-                    if (distance <= radius)
-                    {
-                        results.push_back(obj);
-                    }
+                    results.push_back(object);
                 }
             }
 
-            // Query children
-            if (!IsLeaf())
+            for (const auto &child : m_children)
             {
-                for (const auto &child : m_children)
+                if (child)
                 {
-                    if (child)
-                    {
-                        child->Query(center, radius, results);
-                    }
+                    child->Query(center, radius, results);
                 }
             }
         }
@@ -259,8 +255,11 @@ namespace Pyramid
             std::vector<std::shared_ptr<RenderObject>> &results) const
         {
             f32 nodeDistance = 0.0f;
-            if (!m_bounds.IntersectsRay(origin, direction, nodeDistance) || nodeDistance > maxDistance)
+            if (m_depth > 0 &&
+                (!m_bounds.IntersectsRay(origin, direction, nodeDistance) || nodeDistance > maxDistance))
+            {
                 return;
+            }
 
             for (const auto &object : m_objects)
             {
@@ -628,16 +627,32 @@ namespace Pyramid
             {
                 m_root->Query(point, results);
             }
+
+            std::unordered_set<std::shared_ptr<RenderObject>> seen;
+            results.erase(
+                std::remove_if(results.begin(), results.end(), [&seen](const auto &object)
+                {
+                    return !object || !seen.insert(object).second;
+                }),
+                results.end());
             return results;
         }
 
         std::vector<std::shared_ptr<RenderObject>> Octree::QuerySphere(const Math::Vec3 &center, f32 radius) const
         {
             std::vector<std::shared_ptr<RenderObject>> results;
-            if (m_root)
+            if (m_root && radius >= 0.0f)
             {
                 m_root->Query(center, radius, results);
             }
+
+            std::unordered_set<std::shared_ptr<RenderObject>> seen;
+            results.erase(
+                std::remove_if(results.begin(), results.end(), [&seen](const auto &object)
+                {
+                    return !object || !seen.insert(object).second;
+                }),
+                results.end());
             return results;
         }
 
@@ -648,6 +663,14 @@ namespace Pyramid
             {
                 m_root->Query(bounds, results);
             }
+
+            std::unordered_set<std::shared_ptr<RenderObject>> seen;
+            results.erase(
+                std::remove_if(results.begin(), results.end(), [&seen](const auto &object)
+                {
+                    return !object || !seen.insert(object).second;
+                }),
+                results.end());
             return results;
         }
 
@@ -656,8 +679,31 @@ namespace Pyramid
                                                                     f32 maxDistance) const
         {
             std::vector<std::shared_ptr<RenderObject>> results;
-            if (m_root)
-                m_root->QueryRay(origin, direction.Normalized(), maxDistance, results);
+            const f32 directionLengthSquared = direction.LengthSquared();
+            if (!m_root || maxDistance < 0.0f || directionLengthSquared <= 1e-12f)
+            {
+                return results;
+            }
+
+            const Math::Vec3 normalizedDirection = direction / Math::Fast::Sqrt(directionLengthSquared);
+            m_root->QueryRay(origin, normalizedDirection, maxDistance, results);
+
+            std::unordered_set<std::shared_ptr<RenderObject>> seen;
+            results.erase(
+                std::remove_if(results.begin(), results.end(), [&seen](const auto &object)
+                {
+                    return !object || !seen.insert(object).second;
+                }),
+                results.end());
+
+            std::sort(results.begin(), results.end(), [&](const auto &lhs, const auto &rhs)
+            {
+                f32 lhsDistance = 0.0f;
+                f32 rhsDistance = 0.0f;
+                SpatialUtils::CalculateAABB(lhs).IntersectsRay(origin, normalizedDirection, lhsDistance);
+                SpatialUtils::CalculateAABB(rhs).IntersectsRay(origin, normalizedDirection, rhsDistance);
+                return lhsDistance < rhsDistance;
+            });
             return results;
         }
 

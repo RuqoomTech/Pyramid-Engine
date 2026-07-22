@@ -4,6 +4,15 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 
 ## [Unreleased]
 
+### Bounds-accurate spatial queries
+
+- Corrected point, sphere, box, and ray octree queries to test complete world-space object AABBs instead of object centers or node membership.
+- Preserved root-retained objects outside configured octree bounds while keeping child-node pruning.
+- Canonicalized reversed AABB endpoints and rejected negative sphere radii, zero-length ray directions, and negative ray distances.
+- Deduplicated spatial-query results and ordered ray hits from nearest to farthest.
+- Made `SceneManager::QueryScene()` rebuild before the first query, match octree and linear fallback semantics, and return ordered ray-hit distances.
+- Added `Graphics.OctreeQueries` coverage for point/sphere/box/ray intersections, root-overflow objects, invalid inputs, hidden gameplay objects, result uniqueness, and spatial/linear parity.
+
 ### Incremental octree synchronization
 
 - Added `Octree::Synchronize()` to incrementally insert new objects, remove stale objects, and relocate only objects whose world-space AABBs changed.

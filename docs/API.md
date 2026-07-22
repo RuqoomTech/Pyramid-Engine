@@ -187,7 +187,9 @@ auto nearest = manager->GetNearestObject(position);
 
 `Octree::Synchronize()` accepts the active scene's current render-object snapshot and incrementally inserts additions, removes stale entries, and relocates only objects whose world AABBs changed. `UpdateIfMoved()` performs the same bounds comparison for one object. `SceneManager::Update()` includes this synchronization when `UpdateFlags::SpatialPartition` is set; the default `UpdateFlags::All` therefore keeps moving objects current each frame without a full rebuild. `SceneStats` reports the most recent inserted, removed, moved, and unchanged counts.
 
-Event callbacks, box queries, visibility-stat updates, test-scene creation, and octree configuration have definitions and are covered by linkage validation.
+`Octree::QueryPoint()`, `QuerySphere()`, `QueryBox()`, and `QueryRay()` test complete world-space AABBs and return unique objects. Ray hits are ordered nearest-first. `SceneManager::QueryScene()` uses the same semantics with or without spatial partitioning; ray results populate `QueryResult::distances` in object order. Spatial queries include hidden objects because they are gameplay/selection queries rather than rendering visibility filters. Negative sphere radii, zero-length ray directions, and negative ray distances return no hits.
+
+Event callbacks, scene and octree query entry points, visibility-stat updates, test-scene creation, and octree configuration have definitions and are covered by linkage validation.
 
 `LoadScene` and `SaveScene` deliberately return `false`; serialization is not implemented. Scene-node attachment does not yet replace the renderer's separate `RenderObject` transform path. Occlusion culling remains unimplemented and disabled by default.
 

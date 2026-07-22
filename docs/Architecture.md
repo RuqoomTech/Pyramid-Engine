@@ -67,7 +67,7 @@ Known constraints:
 
 World rotation is the normalized quaternion chain. World scale is reported as the positive length of each transformed basis vector; rotated non-uniform parent scale can introduce shear and therefore has no unique signed TRS decomposition.
 
-`SceneManager` owns named scenes, selects the active scene, manages an octree, and exposes point, sphere, box, ray, nearest-object, and visibility queries. Public scene-manager methods link consistently. Unsupported persistence operations return `false` and log an error instead of producing linker failures.
+`SceneManager` owns named scenes, selects the active scene, manages an octree, and exposes point, sphere, box, ray, nearest-object, and visibility queries. Point/sphere/box/ray queries test full world-space AABBs and produce the same results in octree and linear modes; ray hits are nearest-first. Public scene-manager methods link consistently. Unsupported persistence operations return `false` and log an error instead of producing linker failures.
 
 The camera extracts six normalized inward-facing frustum planes from its view-projection matrix. Camera point, sphere, and AABB tests share those planes. `RenderObject` transforms explicit local bounds into a world-space AABB, and both linear scene visibility and octree queries use that same bound. Objects spanning octree child boundaries remain in the parent node, allowing child-node rejection without hiding intersecting geometry.
 

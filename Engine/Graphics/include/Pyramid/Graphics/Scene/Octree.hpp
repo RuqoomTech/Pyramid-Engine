@@ -22,7 +22,17 @@ namespace Pyramid
             Math::Vec3 max = Math::Vec3::Zero;
 
             AABB() = default;
-            AABB(const Math::Vec3 &minPoint, const Math::Vec3 &maxPoint) : min(minPoint), max(maxPoint) {}
+            AABB(const Math::Vec3 &firstPoint, const Math::Vec3 &secondPoint)
+                : min(
+                      Math::Min(firstPoint.x, secondPoint.x),
+                      Math::Min(firstPoint.y, secondPoint.y),
+                      Math::Min(firstPoint.z, secondPoint.z)),
+                  max(
+                      Math::Max(firstPoint.x, secondPoint.x),
+                      Math::Max(firstPoint.y, secondPoint.y),
+                      Math::Max(firstPoint.z, secondPoint.z))
+            {
+            }
 
             // Utility functions
             Math::Vec3 GetCenter() const { return (min + max) * 0.5f; }
@@ -167,7 +177,8 @@ namespace Pyramid
             void Clear();
             void Rebuild();
 
-            // Spatial queries
+            // Spatial queries test complete world-space object AABBs. QueryRay
+            // returns unique hits ordered from nearest to farthest.
             std::vector<std::shared_ptr<RenderObject>> QueryPoint(const Math::Vec3 &point) const;
             std::vector<std::shared_ptr<RenderObject>> QuerySphere(const Math::Vec3 &center, f32 radius) const;
             std::vector<std::shared_ptr<RenderObject>> QueryBox(const AABB &bounds) const;

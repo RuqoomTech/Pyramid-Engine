@@ -2,9 +2,11 @@
 #include <Pyramid/Graphics/Scene/Octree.hpp>
 #include <Pyramid/Graphics/Camera.hpp>
 #include <Pyramid/Util/Log.hpp>
-#include <fstream>
+#include <algorithm>
 #include <chrono>
+#include <fstream>
 #include <utility>
+#include <vector>
 
 namespace Pyramid
 {
@@ -82,7 +84,7 @@ namespace Pyramid
             m_octree->Clear();
 
             // Spatial storage must not depend on the current camera. Hidden objects
-            // remain indexed and are filtered at query time.
+            // remain indexed; rendering visibility queries filter them separately.
             const auto &renderObjects = m_activeScene->GetRenderObjects();
             for (const auto &obj : renderObjects)
             {
@@ -107,13 +109,19 @@ namespace Pyramid
             QueryResult result;
 
             if (!m_activeScene)
+            {
                 return result;
+            }
 
-            auto start = std::chrono::high_resolution_clock::now();
+            const auto start = std::chrono::high_resolution_clock::now();
+
+            if (m_spatialPartitioningEnabled && m_octree && m_needsOctreeRebuild)
+            {
+                RebuildSpatialPartition();
+            }
 
             if (m_spatialPartitioningEnabled && m_octree)
             {
-                // Use spatial partitioning for efficient queries
                 switch (params.type)
                 {
                 case QueryType::Point:
@@ -123,14 +131,15 @@ namespace Pyramid
                     result.objects = m_octree->QuerySphere(params.position, params.radius);
                     break;
                 case QueryType::Box:
-                {
-                    AABB bounds(params.position - params.size * 0.5f,
-                                params.position + params.size * 0.5f);
-                    result.objects = m_octree->QueryBox(bounds);
-                }
-                break;
+                    result.objects = m_octree->QueryBox(AABB(
+                        params.position - params.size * 0.5f,
+                        params.position + params.size * 0.5f));
+                    break;
                 case QueryType::Ray:
-                    result.objects = m_octree->QueryRay(params.position, params.direction, params.maxDistance);
+                    result.objects = m_octree->QueryRay(
+                        params.position,
+                        params.direction,
+                        params.maxDistance);
                     break;
                 case QueryType::Frustum:
                     PYRAMID_LOG_WARN("QueryScene does not accept frustum planes; use GetVisibleObjects(camera)");
@@ -139,23 +148,104 @@ namespace Pyramid
             }
             else
             {
-                // Fallback to brute force search without introducing a dummy camera.
                 const auto &allObjects = m_activeScene->GetRenderObjects();
-                for (const auto &obj : allObjects)
+                result.totalChecked = static_cast<u32>(allObjects.size());
+
+                const AABB queryBox(
+                    params.position - params.size * 0.5f,
+                    params.position + params.size * 0.5f);
+                const f32 directionLengthSquared = params.direction.LengthSquared();
+                const bool validRay = params.maxDistance >= 0.0f && directionLengthSquared > 1e-12f;
+                const Math::Vec3 rayDirection = validRay ? params.direction.Normalized() : Math::Vec3::Zero;
+                std::vector<std::pair<f32, std::shared_ptr<RenderObject>>> rayHits;
+
+                for (const auto &object : allObjects)
                 {
-                    // Simple distance check for demonstration
-                    if (obj && (obj->position - params.position).Length() <= params.radius)
+                    if (!object)
                     {
-                        result.objects.push_back(obj);
+                        continue;
+                    }
+
+                    const AABB objectBounds = SpatialUtils::CalculateAABB(object);
+                    switch (params.type)
+                    {
+                    case QueryType::Point:
+                        if (objectBounds.Contains(params.position))
+                        {
+                            result.objects.push_back(object);
+                        }
+                        break;
+                    case QueryType::Sphere:
+                        if (objectBounds.IntersectsSphere(params.position, params.radius))
+                        {
+                            result.objects.push_back(object);
+                        }
+                        break;
+                    case QueryType::Box:
+                        if (objectBounds.Intersects(queryBox))
+                        {
+                            result.objects.push_back(object);
+                        }
+                        break;
+                    case QueryType::Ray:
+                    {
+                        f32 distance = 0.0f;
+                        if (validRay &&
+                            objectBounds.IntersectsRay(params.position, rayDirection, distance) &&
+                            distance <= params.maxDistance)
+                        {
+                            rayHits.emplace_back(distance, object);
+                        }
+                        break;
+                    }
+                    case QueryType::Frustum:
+                        break;
+                    }
+                }
+
+                if (params.type == QueryType::Ray)
+                {
+                    std::sort(rayHits.begin(), rayHits.end(), [](const auto &lhs, const auto &rhs)
+                    {
+                        return lhs.first < rhs.first;
+                    });
+                    result.objects.reserve(rayHits.size());
+                    result.distances.reserve(rayHits.size());
+                    for (const auto &hit : rayHits)
+                    {
+                        result.distances.push_back(hit.first);
+                        result.objects.push_back(hit.second);
+                    }
+                }
+                else if (params.type == QueryType::Frustum)
+                {
+                    PYRAMID_LOG_WARN("QueryScene does not accept frustum planes; use GetVisibleObjects(camera)");
+                }
+            }
+
+            if (params.type == QueryType::Ray && result.distances.empty() && !result.objects.empty())
+            {
+                const f32 directionLengthSquared = params.direction.LengthSquared();
+                if (params.maxDistance >= 0.0f && directionLengthSquared > 1e-12f)
+                {
+                    const Math::Vec3 rayDirection = params.direction.Normalized();
+                    result.distances.reserve(result.objects.size());
+                    for (const auto &object : result.objects)
+                    {
+                        f32 distance = 0.0f;
+                        SpatialUtils::CalculateAABB(object).IntersectsRay(
+                            params.position,
+                            rayDirection,
+                            distance);
+                        result.distances.push_back(distance);
                     }
                 }
             }
 
-            auto end = std::chrono::high_resolution_clock::now();
-            auto duration = std::chrono::duration<float, std::milli>(end - start).count();
-
+            const auto end = std::chrono::high_resolution_clock::now();
             result.totalFound = static_cast<u32>(result.objects.size());
-            m_stats.lastQueryTime = duration;
+            m_stats.lastQueryTime =
+                std::chrono::duration<float, std::milli>(end - start).count();
 
             return result;
         }
