@@ -323,33 +323,57 @@ namespace Pyramid
 
         std::shared_ptr<RenderObject> SceneManager::GetNearestObject(const Math::Vec3 &position)
         {
-            if (m_spatialPartitioningEnabled && m_octree)
+            const auto nearestObjects = GetKNearestObjects(position, 1);
+            return nearestObjects.empty() ? nullptr : nearestObjects.front();
+        }
+
+        std::vector<std::shared_ptr<RenderObject>> SceneManager::GetKNearestObjects(
+            const Math::Vec3 &position,
+            u32 count)
+        {
+            if (!m_activeScene || count == 0)
             {
-                return m_octree->FindNearest(position);
+                return {};
             }
 
-            // Fallback implementation
-            if (!m_activeScene)
-                return nullptr;
-
-            const auto &allObjects = m_activeScene->GetRenderObjects();
-            std::shared_ptr<RenderObject> nearest = nullptr;
-            f32 nearestDistance = std::numeric_limits<f32>::max();
-
-            for (const auto &obj : allObjects)
+            if (m_spatialPartitioningEnabled && m_octree)
             {
-                if (obj)
+                if (m_needsOctreeRebuild)
                 {
-                    f32 distance = (obj->position - position).Length();
-                    if (distance < nearestDistance)
-                    {
-                        nearestDistance = distance;
-                        nearest = obj;
-                    }
+                    RebuildSpatialPartition();
+                }
+                return m_octree->FindKNearest(position, count);
+            }
+
+            std::vector<std::pair<f32, std::shared_ptr<RenderObject>>> candidates;
+            candidates.reserve(m_activeScene->GetRenderObjects().size());
+            for (const auto &object : m_activeScene->GetRenderObjects())
+            {
+                if (object)
+                {
+                    candidates.emplace_back(
+                        SpatialUtils::CalculateAABB(object).DistanceSquaredToPoint(position),
+                        object);
                 }
             }
 
-            return nearest;
+            std::sort(candidates.begin(), candidates.end(),
+                      [](const auto &lhs, const auto &rhs)
+                      {
+                          return lhs.first < rhs.first;
+                      });
+            if (candidates.size() > count)
+            {
+                candidates.resize(count);
+            }
+
+            std::vector<std::shared_ptr<RenderObject>> results;
+            results.reserve(candidates.size());
+            for (const auto &candidate : candidates)
+            {
+                results.push_back(candidate.second);
+            }
+            return results;
         }
 
         void SceneManager::Update(f32 deltaTime, UpdateFlags flags)

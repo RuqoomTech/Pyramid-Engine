@@ -52,3 +52,8 @@ add_executable(OctreeQueryTests OctreeQueryTests.cpp)
 target_link_libraries(OctreeQueryTests PRIVATE Pyramid::Engine)
 set_target_properties(OctreeQueryTests PROPERTIES FOLDER "Tests/Graphics")
 add_test(NAME Graphics.OctreeQueries COMMAND $<TARGET_FILE:OctreeQueryTests>)
+
+add_executable(NearestQueryTests NearestQueryTests.cpp)
+target_link_libraries(NearestQueryTests PRIVATE Pyramid::Engine)
+set_target_properties(NearestQueryTests PROPERTIES FOLDER "Tests/Graphics")
+add_test(NAME Graphics.NearestQueries COMMAND $<TARGET_FILE:NearestQueryTests>)

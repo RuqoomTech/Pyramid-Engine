@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <limits>
 #include <unordered_set>
+#include <queue>
+#include <cmath>
 
 namespace Pyramid
 {
@@ -11,6 +13,30 @@ namespace Pyramid
     {
 
         // AABB Implementation
+        f32 AABB::DistanceSquaredToPoint(const Math::Vec3 &point) const
+        {
+            f32 distanceSquared = 0.0f;
+            for (u32 axis = 0; axis < 3; ++axis)
+            {
+                if (point[axis] < min[axis])
+                {
+                    const f32 delta = min[axis] - point[axis];
+                    distanceSquared += delta * delta;
+                }
+                else if (point[axis] > max[axis])
+                {
+                    const f32 delta = point[axis] - max[axis];
+                    distanceSquared += delta * delta;
+                }
+            }
+            return distanceSquared;
+        }
+
+        f32 AABB::DistanceToPoint(const Math::Vec3 &point) const
+        {
+            return std::sqrt(DistanceSquaredToPoint(point));
+        }
+
         bool AABB::IntersectsSphere(const Math::Vec3 &center, f32 radius) const
         {
             if (radius < 0.0f)
@@ -719,38 +745,131 @@ namespace Pyramid
 
         std::shared_ptr<RenderObject> Octree::FindNearest(const Math::Vec3 &position) const
         {
-            std::shared_ptr<RenderObject> nearest = nullptr;
-            f32 nearestDistance = std::numeric_limits<f32>::max();
-
-            if (m_root)
-            {
-                FindNearestRecursive(position, nearest, nearestDistance, m_root.get());
-            }
-
-            return nearest;
+            const auto nearestObjects = FindKNearest(position, 1);
+            return nearestObjects.empty() ? nullptr : nearestObjects.front();
         }
 
         std::vector<std::shared_ptr<RenderObject>> Octree::FindKNearest(
             const Math::Vec3 &position,
             u32 k) const
         {
-            std::vector<std::shared_ptr<RenderObject>> objects;
-            objects.reserve(m_objectBounds.size());
-            for (const auto &entry : m_objectBounds)
+            if (!m_root || k == 0)
             {
-                if (entry.first)
-                    objects.push_back(entry.first);
+                return {};
             }
 
-            std::sort(objects.begin(), objects.end(), [&position](const auto &lhs, const auto &rhs)
+            struct Candidate
             {
-                return (lhs->position - position).LengthSquared() <
-                       (rhs->position - position).LengthSquared();
-            });
+                f32 distanceSquared = 0.0f;
+                std::shared_ptr<RenderObject> object;
+            };
 
-            if (objects.size() > k)
-                objects.resize(k);
-            return objects;
+            struct FarthestFirst
+            {
+                bool operator()(const Candidate &lhs, const Candidate &rhs) const
+                {
+                    return lhs.distanceSquared < rhs.distanceSquared;
+                }
+            };
+
+            std::priority_queue<Candidate, std::vector<Candidate>, FarthestFirst> nearest;
+            std::unordered_set<const RenderObject *> visited;
+
+            const auto considerObject = [&](const std::shared_ptr<RenderObject> &object)
+            {
+                if (!object || !visited.insert(object.get()).second)
+                {
+                    return;
+                }
+
+                const f32 distanceSquared =
+                    SpatialUtils::CalculateAABB(object).DistanceSquaredToPoint(position);
+                if (nearest.size() < k)
+                {
+                    nearest.push({distanceSquared, object});
+                }
+                else if (distanceSquared < nearest.top().distanceSquared)
+                {
+                    nearest.pop();
+                    nearest.push({distanceSquared, object});
+                }
+            };
+
+            const auto visitNode = [&](const auto &self, const OctreeNode *node) -> void
+            {
+                if (!node)
+                {
+                    return;
+                }
+
+                // Node-local objects must always be tested. In particular, the
+                // root can retain objects outside its configured bounds, while
+                // objects spanning child boundaries remain in their parent.
+                for (const auto &object : node->m_objects)
+                {
+                    considerObject(object);
+                }
+
+                if (node->IsLeaf())
+                {
+                    return;
+                }
+
+                std::vector<std::pair<f32, const OctreeNode *>> orderedChildren;
+                orderedChildren.reserve(node->m_children.size());
+                for (const auto &child : node->m_children)
+                {
+                    if (child)
+                    {
+                        orderedChildren.emplace_back(
+                            child->m_bounds.DistanceSquaredToPoint(position),
+                            child.get());
+                    }
+                }
+
+                std::sort(orderedChildren.begin(), orderedChildren.end(),
+                          [](const auto &lhs, const auto &rhs)
+                          {
+                              return lhs.first < rhs.first;
+                          });
+
+                for (const auto &[minimumDistanceSquared, child] : orderedChildren)
+                {
+                    const f32 rejectionDistanceSquared =
+                        nearest.size() < k
+                            ? std::numeric_limits<f32>::max()
+                            : nearest.top().distanceSquared;
+                    if (minimumDistanceSquared > rejectionDistanceSquared)
+                    {
+                        break;
+                    }
+
+                    self(self, child);
+                }
+            };
+
+            visitNode(visitNode, m_root.get());
+
+            std::vector<Candidate> ordered;
+            ordered.reserve(nearest.size());
+            while (!nearest.empty())
+            {
+                ordered.push_back(nearest.top());
+                nearest.pop();
+            }
+            std::sort(ordered.begin(), ordered.end(),
+                      [](const Candidate &lhs, const Candidate &rhs)
+                      {
+                          return lhs.distanceSquared < rhs.distanceSquared;
+                      });
+
+            std::vector<std::shared_ptr<RenderObject>> results;
+            results.reserve(ordered.size());
+            for (const auto &candidate : ordered)
+            {
+                results.push_back(candidate.object);
+            }
+            return results;
         }
 
         void Octree::SetMaxDepth(u32 maxDepth)
@@ -849,41 +968,6 @@ namespace Pyramid
                    nearlyEqual(lhs.max.x, rhs.max.x) &&
                    nearlyEqual(lhs.max.y, rhs.max.y) &&
                    nearlyEqual(lhs.max.z, rhs.max.z);
-        }
-
-        void Octree::FindNearestRecursive(const Math::Vec3 &position,
-                                          std::shared_ptr<RenderObject> &nearest,
-                                          f32 &nearestDistance,
-                                          const OctreeNode *node) const
-        {
-            if (!node)
-                return;
-
-            // Check objects in this node
-            for (const auto &obj : node->m_objects)
-            {
-                if (obj)
-                {
-                    f32 distance = (obj->position - position).Length();
-                    if (distance < nearestDistance)
-                    {
-                        nearestDistance = distance;
-                        nearest = obj;
-                    }
-                }
-            }
-
-            // Recursively check children
-            if (!node->IsLeaf())
-            {
-                for (const auto &child : node->m_children)
-                {
-                    if (child)
-                    {
-                        FindNearestRecursive(position, nearest, nearestDistance, child.get());
-                    }
-                }
-            }
         }
 
         // Spatial utility functions

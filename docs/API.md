@@ -181,6 +181,7 @@ manager->RebuildSpatialPartition();
 auto nearby = manager->GetObjectsInRadius(position, 10.0f);
 auto boxed = manager->GetObjectsInBox(minBounds, maxBounds);
 auto nearest = manager->GetNearestObject(position);
+auto nearestFive = manager->GetKNearestObjects(position, 5);
 ```
 
 `RenderObject` exposes local bounds with a unit-cube default. `GetWorldBounds()` transforms all eight corners through the object's translation, normalized rotation, and scale. `Scene`, `SceneManager`, and octree frustum queries use these AABBs; objects that span octree child boundaries remain at the parent node to avoid false rejection. Imported meshes do not yet populate local bounds automatically.
@@ -188,6 +189,8 @@ auto nearest = manager->GetNearestObject(position);
 `Octree::Synchronize()` accepts the active scene's current render-object snapshot and incrementally inserts additions, removes stale entries, and relocates only objects whose world AABBs changed. `UpdateIfMoved()` performs the same bounds comparison for one object. `SceneManager::Update()` includes this synchronization when `UpdateFlags::SpatialPartition` is set; the default `UpdateFlags::All` therefore keeps moving objects current each frame without a full rebuild. `SceneStats` reports the most recent inserted, removed, moved, and unchanged counts.
 
 `Octree::QueryPoint()`, `QuerySphere()`, `QueryBox()`, and `QueryRay()` test complete world-space AABBs and return unique objects. Ray hits are ordered nearest-first. `SceneManager::QueryScene()` uses the same semantics with or without spatial partitioning; ray results populate `QueryResult::distances` in object order. Spatial queries include hidden objects because they are gameplay/selection queries rather than rendering visibility filters. Negative sphere radii, zero-length ray directions, and negative ray distances return no hits.
+
+`AABB::DistanceSquaredToPoint()` and `DistanceToPoint()` measure the shortest distance to a box, returning zero for points inside it. `Octree::FindNearest()` and `FindKNearest()` use that world-bound distance, not the object's origin. K-nearest results are ordered nearest-first, `k == 0` returns an empty result, and counts larger than the scene return all objects. Octree traversal orders child nodes by their minimum possible point distance and prunes branches that cannot improve the current candidate set. `SceneManager::GetNearestObject()` and `GetKNearestObjects()` provide identical semantics in octree and linear modes.
 
 Event callbacks, scene and octree query entry points, visibility-stat updates, test-scene creation, and octree configuration have definitions and are covered by linkage validation.
 

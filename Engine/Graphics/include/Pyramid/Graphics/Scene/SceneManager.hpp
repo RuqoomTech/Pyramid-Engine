@@ -139,7 +139,11 @@ namespace Pyramid
             std::vector<std::shared_ptr<RenderObject>> GetVisibleObjects(const Camera &camera);
             std::vector<std::shared_ptr<RenderObject>> GetObjectsInRadius(const Math::Vec3 &center, f32 radius);
             std::vector<std::shared_ptr<RenderObject>> GetObjectsInBox(const Math::Vec3 &min, const Math::Vec3 &max);
+            // Nearest queries measure distance to complete world-space AABBs.
             std::shared_ptr<RenderObject> GetNearestObject(const Math::Vec3 &position);
+            std::vector<std::shared_ptr<RenderObject>> GetKNearestObjects(
+                const Math::Vec3 &position,
+                u32 count);
 
             // Scene updates
             void Update(f32 deltaTime, UpdateFlags flags = UpdateFlags::All);

@@ -4,6 +4,14 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 
 ## [Unreleased]
 
+### Bounds-aware nearest-neighbor queries
+
+- Corrected nearest-object and K-nearest queries to measure distance to the closest point on each complete world-space AABB rather than object origins.
+- Added public AABB point-distance helpers and `SceneManager::GetKNearestObjects()`.
+- Added nearest-first K-result ordering, zero-count handling, hidden gameplay-object inclusion, and octree/linear parity.
+- Added best-first child traversal with AABB lower-bound pruning so branches that cannot improve the current result set are skipped.
+- Added `Graphics.NearestQueries` coverage for bounds distance, root-overflow objects, K limits, ordering, and scene-manager parity.
+
 ### Bounds-accurate spatial queries
 
 - Corrected point, sphere, box, and ray octree queries to test complete world-space object AABBs instead of object centers or node membership.

@@ -72,6 +72,11 @@ namespace Pyramid
                 max.z = Math::Max(max.z, point.z);
             }
 
+            // Distance is measured to the closest point on the box. Points
+            // inside the box have zero distance.
+            f32 DistanceSquaredToPoint(const Math::Vec3 &point) const;
+            f32 DistanceToPoint(const Math::Vec3 &point) const;
+
             // Additional methods implemented in source file
             bool IntersectsSphere(const Math::Vec3 &center, f32 radius) const;
             bool IntersectsRay(const Math::Vec3 &origin, const Math::Vec3 &direction, f32 &distance) const;
@@ -189,7 +194,9 @@ namespace Pyramid
             // Frustum culling
             std::vector<std::shared_ptr<RenderObject>> QueryFrustum(const std::array<Math::Vec4, 6> &frustumPlanes) const;
 
-            // Nearest neighbor queries
+            // Nearest-neighbor queries measure distance to each object's
+            // complete world-space AABB. K-nearest results are ordered from
+            // nearest to farthest and include hidden gameplay objects.
             std::shared_ptr<RenderObject> FindNearest(const Math::Vec3 &position) const;
             std::vector<std::shared_ptr<RenderObject>> FindKNearest(const Math::Vec3 &position, u32 k) const;
 
@@ -222,11 +229,6 @@ namespace Pyramid
 
         private:
             static bool BoundsEqual(const AABB &lhs, const AABB &rhs);
-
-            void FindNearestRecursive(const Math::Vec3 &position,
-                                      std::shared_ptr<RenderObject> &nearest,
-                                      f32 &nearestDistance,
-                                      const OctreeNode *node) const;
 
             // Root node
             std::unique_ptr<OctreeNode> m_root;

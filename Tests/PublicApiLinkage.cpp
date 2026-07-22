@@ -42,6 +42,18 @@ namespace
     volatile decltype(&SceneManager::SaveScene) g_saveScene = &SceneManager::SaveScene;
     volatile decltype(&SceneManager::GetObjectsInBox) g_getObjectsInBox = &SceneManager::GetObjectsInBox;
     volatile decltype(&SceneManager::QueryScene) g_queryScene = &SceneManager::QueryScene;
+    volatile decltype(&SceneManager::GetNearestObject) g_getNearestObject =
+        &SceneManager::GetNearestObject;
+    volatile decltype(&SceneManager::GetKNearestObjects) g_getKNearestObjects =
+        &SceneManager::GetKNearestObjects;
+    volatile decltype(&Pyramid::SceneManagement::AABB::DistanceSquaredToPoint) g_aabbDistanceSquared =
+        &Pyramid::SceneManagement::AABB::DistanceSquaredToPoint;
+    volatile decltype(&Pyramid::SceneManagement::AABB::DistanceToPoint) g_aabbDistance =
+        &Pyramid::SceneManagement::AABB::DistanceToPoint;
+    volatile decltype(&Pyramid::SceneManagement::Octree::FindNearest) g_findOctreeNearest =
+        &Pyramid::SceneManagement::Octree::FindNearest;
+    volatile decltype(&Pyramid::SceneManagement::Octree::FindKNearest) g_findOctreeKNearest =
+        &Pyramid::SceneManagement::Octree::FindKNearest;
     volatile decltype(&Pyramid::SceneManagement::Octree::QueryPoint) g_queryOctreePoint =
         &Pyramid::SceneManagement::Octree::QueryPoint;
     volatile decltype(&Pyramid::SceneManagement::Octree::QuerySphere) g_queryOctreeSphere =
@@ -98,6 +110,12 @@ int main()
                    g_saveScene &&
                    g_getObjectsInBox &&
                    g_queryScene &&
+                   g_getNearestObject &&
+                   g_getKNearestObjects &&
+                   g_aabbDistanceSquared &&
+                   g_aabbDistance &&
+                   g_findOctreeNearest &&
+                   g_findOctreeKNearest &&
                    g_queryOctreePoint &&
                    g_queryOctreeSphere &&
                    g_queryOctreeBox &&
