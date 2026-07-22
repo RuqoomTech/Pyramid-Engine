@@ -63,13 +63,15 @@ Known constraints:
 
 ## Scene and spatial management
 
-`Scene` owns render objects, lights, environment settings, and a root hierarchy node. `SceneManager` owns named scenes, selects the active scene, manages an octree, and exposes point, sphere, box, ray, nearest-object, and visibility queries.
+`Scene` owns render objects, lights, environment settings, and a root hierarchy node. `SceneNode` stores local TRS and lazily cached local/world matrices. Nodes participating in a hierarchy require `std::shared_ptr` ownership, matching the `enable_shared_from_this` parent-link model; unmanaged nodes reject hierarchy mutation. Local edits, reparenting, detachment, and parent destruction recursively invalidate descendant world caches. Parent-before-local matrix composition is used throughout; hierarchy cycles and duplicate direct children are rejected. Reparenting preserves local TRS rather than preserving world space.
 
-Public scene-manager methods now link consistently. Unsupported persistence operations return `false` and log an error instead of producing linker failures.
+World rotation is the normalized quaternion chain. World scale is reported as the positive length of each transformed basis vector; rotated non-uniform parent scale can introduce shear and therefore has no unique signed TRS decomposition.
 
-The octree supports insertion, removal, updates, rebuilding, configuration, nearest-neighbor queries, and public spatial helpers. Its current bounds are approximate and based on object position and scale, not imported mesh bounds.
+`SceneManager` owns named scenes, selects the active scene, manages an octree, and exposes point, sphere, box, ray, nearest-object, and visibility queries. Public scene-manager methods link consistently. Unsupported persistence operations return `false` and log an error instead of producing linker failures.
 
-Frustum-plane extraction and occlusion culling remain placeholder algorithms and must not be treated as production culling.
+The camera extracts six normalized inward-facing frustum planes from its view-projection matrix. Camera point, sphere, and AABB tests share those planes. `RenderObject` transforms explicit local bounds into a world-space AABB, and both linear scene visibility and octree queries use that same bound. Objects spanning octree child boundaries remain in the parent node, allowing child-node rejection without hiding intersecting geometry.
+
+The octree supports insertion, removal, updates, rebuilding, configuration, nearest-neighbor queries, and public spatial helpers. Local bounds default to a unit cube and must currently be assigned by asset code; imported meshes do not yet derive them automatically. Moving objects require an octree update/rebuild before spatial results reflect the new transform. Occlusion culling remains a placeholder and is disabled by default.
 
 ## Textures and framebuffers
 

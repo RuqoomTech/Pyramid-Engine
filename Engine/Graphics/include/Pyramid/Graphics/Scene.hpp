@@ -27,6 +27,10 @@ namespace Pyramid
         std::shared_ptr<IVertexArray> vertexArray;
         Renderer::Material material;
 
+        // Local-space bounds. The default represents a unit cube centered at the origin.
+        Math::Vec3 localBoundsMin = Math::Vec3(-0.5f);
+        Math::Vec3 localBoundsMax = Math::Vec3(0.5f);
+
         // Metadata
         std::string name;
         bool visible = true;
@@ -37,6 +41,8 @@ namespace Pyramid
         Math::Mat4 GetTransformMatrix() const;
         Math::Vec3 GetWorldPosition() const { return position; }
         void SetWorldPosition(const Math::Vec3 &pos) { position = pos; }
+        void SetLocalBounds(const Math::Vec3 &minPoint, const Math::Vec3 &maxPoint);
+        void GetWorldBounds(Math::Vec3 &minPoint, Math::Vec3 &maxPoint) const;
     };
 
     /**
@@ -111,30 +117,23 @@ namespace Pyramid
     {
     public:
         SceneNode(const std::string &name = "Node");
-        ~SceneNode() = default;
+        ~SceneNode();
 
-        // Hierarchy management
+        // Hierarchy management. Reparenting preserves the local transform.
         void AddChild(std::shared_ptr<SceneNode> child);
         void RemoveChild(std::shared_ptr<SceneNode> child);
         void SetParent(std::shared_ptr<SceneNode> parent);
 
+        std::shared_ptr<SceneNode> GetParent() const { return m_parent.lock(); }
+        const std::vector<std::shared_ptr<SceneNode>> &GetChildren() const { return m_children; }
+        size_t GetChildCount() const { return m_children.size(); }
+        bool HasParent() const { return !m_parent.expired(); }
+
         // Transform operations
         void SetLocalTransform(const Math::Vec3 &position, const Math::Quat &rotation, const Math::Vec3 &scale);
-        void SetLocalPosition(const Math::Vec3 &position)
-        {
-            m_localPosition = position;
-            m_transformDirty = true;
-        }
-        void SetLocalRotation(const Math::Quat &rotation)
-        {
-            m_localRotation = rotation;
-            m_transformDirty = true;
-        }
-        void SetLocalScale(const Math::Vec3 &scale)
-        {
-            m_localScale = scale;
-            m_transformDirty = true;
-        }
+        void SetLocalPosition(const Math::Vec3 &position);
+        void SetLocalRotation(const Math::Quat &rotation);
+        void SetLocalScale(const Math::Vec3 &scale);
 
         // Accessors
         const Math::Vec3 &GetLocalPosition() const { return m_localPosition; }
@@ -147,6 +146,8 @@ namespace Pyramid
 
         const Math::Mat4 &GetLocalTransform() const;
         const Math::Mat4 &GetWorldTransform() const;
+        Math::Vec3 TransformPointToWorld(const Math::Vec3 &point) const;
+        Math::Vec3 TransformDirectionToWorld(const Math::Vec3 &direction) const;
 
         // Metadata
         const std::string &GetName() const { return m_name; }
@@ -160,6 +161,9 @@ namespace Pyramid
         std::shared_ptr<RenderObject> GetRenderObject() const { return m_renderObject; }
 
     private:
+        bool HasAncestor(const SceneNode *node) const;
+        void MarkLocalTransformDirty();
+        void MarkWorldTransformDirty();
         void UpdateLocalTransform() const;
         void UpdateWorldTransform() const;
 
@@ -177,6 +181,8 @@ namespace Pyramid
 
         mutable Math::Mat4 m_localTransform = Math::Mat4::Identity;
         mutable Math::Mat4 m_worldTransform = Math::Mat4::Identity;
+        mutable Math::Quat m_worldRotation = Math::Quat::Identity;
+        mutable Math::Vec3 m_worldScale = Math::Vec3::One;
         mutable bool m_transformDirty = true;
         mutable bool m_worldTransformDirty = true;
 

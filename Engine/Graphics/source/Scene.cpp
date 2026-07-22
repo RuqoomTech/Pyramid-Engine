@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <vector>
 #include <cmath>
+#include <limits>
 
 namespace Pyramid
 {
@@ -11,11 +12,85 @@ namespace Pyramid
     // RenderObject Implementation
     Math::Mat4 RenderObject::GetTransformMatrix() const
     {
-        Math::Mat4 scaleMatrix = Math::Mat4::CreateScale(scale);
-        Math::Mat4 rotationMatrix = rotation.ToMatrix4();
-        Math::Mat4 translationMatrix = Math::Mat4::CreateTranslation(position);
+        const Math::Quat normalizedRotation = Math::IsZero(rotation.LengthSquared())
+                                                  ? Math::Quat::Identity
+                                                  : rotation.Normalized();
+        const Math::Mat4 scaleMatrix = Math::Mat4::CreateScale(scale);
+        const Math::Mat4 rotationMatrix = normalizedRotation.ToMatrix4();
+        const Math::Mat4 translationMatrix = Math::Mat4::CreateTranslation(position);
 
         return translationMatrix * rotationMatrix * scaleMatrix;
+    }
+
+    void RenderObject::SetLocalBounds(const Math::Vec3 &minPoint, const Math::Vec3 &maxPoint)
+    {
+        localBoundsMin = Math::Vec3(
+            Math::Min(minPoint.x, maxPoint.x),
+            Math::Min(minPoint.y, maxPoint.y),
+            Math::Min(minPoint.z, maxPoint.z));
+        localBoundsMax = Math::Vec3(
+            Math::Max(minPoint.x, maxPoint.x),
+            Math::Max(minPoint.y, maxPoint.y),
+            Math::Max(minPoint.z, maxPoint.z));
+    }
+
+    void RenderObject::GetWorldBounds(Math::Vec3 &minPoint, Math::Vec3 &maxPoint) const
+    {
+        const Math::Vec3 localMin(
+            Math::Min(localBoundsMin.x, localBoundsMax.x),
+            Math::Min(localBoundsMin.y, localBoundsMax.y),
+            Math::Min(localBoundsMin.z, localBoundsMax.z));
+        const Math::Vec3 localMax(
+            Math::Max(localBoundsMin.x, localBoundsMax.x),
+            Math::Max(localBoundsMin.y, localBoundsMax.y),
+            Math::Max(localBoundsMin.z, localBoundsMax.z));
+
+        const Math::Mat4 transform = GetTransformMatrix();
+        const f32 maximum = std::numeric_limits<f32>::max();
+        minPoint = Math::Vec3(maximum);
+        maxPoint = Math::Vec3(-maximum);
+
+        for (u32 corner = 0; corner < 8; ++corner)
+        {
+            const Math::Vec3 localCorner(
+                (corner & 1u) != 0u ? localMax.x : localMin.x,
+                (corner & 2u) != 0u ? localMax.y : localMin.y,
+                (corner & 4u) != 0u ? localMax.z : localMin.z);
+            const Math::Vec3 worldCorner = (transform * Math::Vec4(localCorner, 1.0f)).ToVec3();
+
+            minPoint.x = Math::Min(minPoint.x, worldCorner.x);
+            minPoint.y = Math::Min(minPoint.y, worldCorner.y);
+            minPoint.z = Math::Min(minPoint.z, worldCorner.z);
+            maxPoint.x = Math::Max(maxPoint.x, worldCorner.x);
+            maxPoint.y = Math::Max(maxPoint.y, worldCorner.y);
+            maxPoint.z = Math::Max(maxPoint.z, worldCorner.z);
+        }
+    }
+
+    namespace
+    {
+        Math::Quat NormalizeRotation(const Math::Quat &rotation)
+        {
+            if (Math::IsZero(rotation.LengthSquared()))
+            {
+                return Math::Quat::Identity;
+            }
+
+            return rotation.Normalized();
+        }
+
+        Math::Vec3 ExtractWorldScale(const Math::Mat4 &transform)
+        {
+            const auto axisLength = [](f32 x, f32 y, f32 z)
+            {
+                return std::sqrt(x * x + y * y + z * z);
+            };
+
+            return Math::Vec3(
+                axisLength(transform.m[0], transform.m[1], transform.m[2]),
+                axisLength(transform.m[4], transform.m[5], transform.m[6]),
+                axisLength(transform.m[8], transform.m[9], transform.m[10]));
+        }
     }
 
     // SceneNode Implementation
@@ -24,51 +99,143 @@ namespace Pyramid
     {
     }
 
-    void SceneNode::AddChild(std::shared_ptr<SceneNode> child)
+    SceneNode::~SceneNode()
     {
-        if (!child || child.get() == this)
-            return;
-
-        // Remove from previous parent
-        if (auto oldParent = child->m_parent.lock())
+        for (const auto &child : m_children)
         {
-            oldParent->RemoveChild(child);
+            if (!child)
+            {
+                continue;
+            }
+
+            child->m_parent.reset();
+            child->MarkWorldTransformDirty();
         }
 
-        child->m_parent = shared_from_this();
+        m_children.clear();
+    }
+
+    bool SceneNode::HasAncestor(const SceneNode *node) const
+    {
+        if (!node)
+        {
+            return false;
+        }
+
+        auto ancestor = m_parent.lock();
+        while (ancestor)
+        {
+            if (ancestor.get() == node)
+            {
+                return true;
+            }
+
+            ancestor = ancestor->m_parent.lock();
+        }
+
+        return false;
+    }
+
+    void SceneNode::AddChild(std::shared_ptr<SceneNode> child)
+    {
+        if (!child || child.get() == this || HasAncestor(child.get()))
+        {
+            return;
+        }
+
+        auto self = weak_from_this().lock();
+        if (!self)
+        {
+            return;
+        }
+
+        if (auto currentParent = child->m_parent.lock())
+        {
+            if (currentParent.get() == this)
+            {
+                return;
+            }
+
+            currentParent->RemoveChild(child);
+        }
+
+        child->m_parent = self;
         m_children.push_back(child);
-        child->m_worldTransformDirty = true;
+        child->MarkWorldTransformDirty();
     }
 
     void SceneNode::RemoveChild(std::shared_ptr<SceneNode> child)
     {
-        auto it = std::find(m_children.begin(), m_children.end(), child);
-        if (it != m_children.end())
+        if (!child)
         {
-            (*it)->m_parent.reset();
-            m_children.erase(it);
+            return;
         }
+
+        const auto oldSize = m_children.size();
+        m_children.erase(
+            std::remove(m_children.begin(), m_children.end(), child),
+            m_children.end());
+
+        if (m_children.size() == oldSize)
+        {
+            return;
+        }
+
+        if (auto currentParent = child->m_parent.lock(); currentParent.get() == this)
+        {
+            child->m_parent.reset();
+        }
+
+        child->MarkWorldTransformDirty();
     }
 
     void SceneNode::SetParent(std::shared_ptr<SceneNode> parent)
     {
+        auto self = weak_from_this().lock();
+        if (!self)
+        {
+            return;
+        }
+
         if (parent)
         {
-            parent->AddChild(shared_from_this());
+            parent->AddChild(self);
+            return;
         }
-        else if (auto oldParent = m_parent.lock())
+
+        if (auto oldParent = m_parent.lock())
         {
-            oldParent->RemoveChild(shared_from_this());
+            oldParent->RemoveChild(self);
         }
     }
 
-    void SceneNode::SetLocalTransform(const Math::Vec3 &position, const Math::Quat &rotation, const Math::Vec3 &scale)
+    void SceneNode::SetLocalTransform(
+        const Math::Vec3 &position,
+        const Math::Quat &rotation,
+        const Math::Vec3 &scale)
     {
         m_localPosition = position;
-        m_localRotation = rotation;
+        m_localRotation = NormalizeRotation(rotation);
         m_localScale = scale;
-        m_transformDirty = true;
-        m_worldTransformDirty = true;
+        MarkLocalTransformDirty();
+    }
+
+    void SceneNode::SetLocalPosition(const Math::Vec3 &position)
+    {
+        m_localPosition = position;
+        MarkLocalTransformDirty();
+    }
+
+    void SceneNode::SetLocalRotation(const Math::Quat &rotation)
+    {
+        m_localRotation = NormalizeRotation(rotation);
+        MarkLocalTransformDirty();
+    }
+
+    void SceneNode::SetLocalScale(const Math::Vec3 &scale)
+    {
+        m_localScale = scale;
+        MarkLocalTransformDirty();
     }
 
     Math::Vec3 SceneNode::GetWorldPosition() const
@@ -79,23 +246,14 @@ namespace Pyramid
 
     Math::Quat SceneNode::GetWorldRotation() const
     {
-        if (auto parent = m_parent.lock())
-        {
-            return parent->GetWorldRotation() * m_localRotation;
-        }
-        return m_localRotation;
+        GetWorldTransform();
+        return m_worldRotation;
     }
 
     Math::Vec3 SceneNode::GetWorldScale() const
     {
-        if (auto parent = m_parent.lock())
-        {
-            Math::Vec3 parentScale = parent->GetWorldScale();
-            return Math::Vec3(parentScale.x * m_localScale.x,
-                              parentScale.y * m_localScale.y,
-                              parentScale.z * m_localScale.z);
-        }
-        return m_localScale;
+        GetWorldTransform();
+        return m_worldScale;
     }
 
     const Math::Mat4 &SceneNode::GetLocalTransform() const
@@ -116,11 +274,40 @@ namespace Pyramid
         return m_worldTransform;
     }
 
+    Math::Vec3 SceneNode::TransformPointToWorld(const Math::Vec3 &point) const
+    {
+        return (GetWorldTransform() * Math::Vec4(point, 1.0f)).ToVec3();
+    }
+
+    Math::Vec3 SceneNode::TransformDirectionToWorld(const Math::Vec3 &direction) const
+    {
+        return (GetWorldTransform() * Math::Vec4(direction, 0.0f)).ToVec3();
+    }
+
+    void SceneNode::MarkLocalTransformDirty()
+    {
+        m_transformDirty = true;
+        MarkWorldTransformDirty();
+    }
+
+    void SceneNode::MarkWorldTransformDirty()
+    {
+        m_worldTransformDirty = true;
+
+        for (const auto &child : m_children)
+        {
+            if (child)
+            {
+                child->MarkWorldTransformDirty();
+            }
+        }
+    }
+
     void SceneNode::UpdateLocalTransform() const
     {
-        Math::Mat4 scaleMatrix = Math::Mat4::CreateScale(m_localScale);
-        Math::Mat4 rotationMatrix = m_localRotation.ToMatrix4();
-        Math::Mat4 translationMatrix = Math::Mat4::CreateTranslation(m_localPosition);
+        const Math::Mat4 scaleMatrix = Math::Mat4::CreateScale(m_localScale);
+        const Math::Mat4 rotationMatrix = m_localRotation.ToMatrix4();
+        const Math::Mat4 translationMatrix = Math::Mat4::CreateTranslation(m_localPosition);
 
         m_localTransform = translationMatrix * rotationMatrix * scaleMatrix;
         m_transformDirty = false;
@@ -130,12 +317,17 @@ namespace Pyramid
     {
         if (auto parent = m_parent.lock())
         {
-            m_worldTransform = parent->GetWorldTransform() * GetLocalTransform();
+            const Math::Mat4 &parentTransform = parent->GetWorldTransform();
+            m_worldTransform = parentTransform * GetLocalTransform();
+            m_worldRotation = NormalizeRotation(parent->m_worldRotation * m_localRotation);
         }
         else
         {
             m_worldTransform = GetLocalTransform();
+            m_worldRotation = m_localRotation;
         }
+
+        m_worldScale = ExtractWorldScale(m_worldTransform);
         m_worldTransformDirty = false;
     }
 
@@ -227,13 +419,17 @@ namespace Pyramid
 
         for (const auto &object : m_renderObjects)
         {
-            if (object && object->visible)
+            if (!object || !object->visible)
             {
-                // Simple visibility test - could be enhanced with proper frustum culling
-                if (camera.IsPointVisible(object->position))
-                {
-                    visibleObjects.push_back(object);
-                }
+                continue;
+            }
+
+            Math::Vec3 boundsMin;
+            Math::Vec3 boundsMax;
+            object->GetWorldBounds(boundsMin, boundsMax);
+            if (camera.IsAABBVisible(boundsMin, boundsMax))
+            {
+                visibleObjects.push_back(object);
             }
         }
 
@@ -242,6 +438,7 @@ namespace Pyramid
 
     std::vector<std::shared_ptr<Light>> Scene::GetVisibleLights(const Camera &camera) const
     {
+        (void)camera;
         std::vector<std::shared_ptr<Light>> visibleLights;
 
         for (const auto &light : m_lights)
@@ -288,10 +485,10 @@ namespace Pyramid
         {
             auto object = std::make_shared<RenderObject>();
             object->name = "Cube";
-            object->scale = Math::Vec3(size, size, size);
 
             // Create cube geometry
             f32 halfSize = size * 0.5f;
+            object->SetLocalBounds(Math::Vec3(-halfSize), Math::Vec3(halfSize));
             
             // Cube vertices (position + color)
             std::vector<Vertex> vertices = {
@@ -359,7 +556,7 @@ namespace Pyramid
         {
             auto object = std::make_shared<RenderObject>();
             object->name = "Sphere";
-            object->scale = Math::Vec3(radius, radius, radius);
+            object->SetLocalBounds(Math::Vec3(-radius), Math::Vec3(radius));
 
             // Create sphere geometry using UV sphere algorithm
             segments = (std::max)(segments, 8u); // Minimum 8 segments
@@ -420,11 +617,13 @@ namespace Pyramid
         {
             auto object = std::make_shared<RenderObject>();
             object->name = "Plane";
-            object->scale = Math::Vec3(width, 1.0f, height);
 
             // Create plane geometry (XZ plane, facing up)
             f32 halfWidth = width * 0.5f;
             f32 halfHeight = height * 0.5f;
+            object->SetLocalBounds(
+                Math::Vec3(-halfWidth, 0.0f, -halfHeight),
+                Math::Vec3(halfWidth, 0.0f, halfHeight));
             
             std::vector<Vertex> vertices = {
                 // Plane vertices (white color)

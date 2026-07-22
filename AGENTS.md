@@ -5,7 +5,7 @@
 - `Engine/` builds the C++17 `PyramidEngine` library.
 - Active modules are Core, Graphics, Math, Platform, and Utils.
 - `Examples/BasicGame` and `Examples/BasicRendering` are the graphical references.
-- `Tests/PublicApiLinkage.cpp` protects selected public symbols; `Tests/WindowResizeEventTests.cpp` protects resize callback semantics; `Tests/CameraViewportTests.cpp` protects projection resizing; `Tests/FramebufferResizeTests.cpp` protects framebuffer specification and zero-area resize behavior; `Tests/TextureLoadingTests.cpp` protects transactional file loading and OpenGL upload state.
+- `Tests/PublicApiLinkage.cpp` protects selected public symbols; `Tests/WindowResizeEventTests.cpp` protects resize callback semantics; `Tests/CameraViewportTests.cpp` protects projection resizing; `Tests/FramebufferResizeTests.cpp` protects framebuffer specification and zero-area resize behavior; `Tests/TextureLoadingTests.cpp` protects transactional file loading and OpenGL upload state; `Tests/SceneTransformTests.cpp` protects hierarchy composition, invalidation, reparenting, cycle rejection, and parent-destruction behavior; `Tests/CameraFrustumTests.cpp` protects camera orientation, frustum extraction, transformed bounds, and linear/octree scene visibility.
 - `Tests/Consumer` validates the installed CMake package.
 - `vendor/glad` is a bundled public dependency. libjpeg-turbo is an external open-source dependency resolved through CMake `FindJPEG`.
 - The supported Windows toolchain is MSYS2 UCRT64 with MinGW-w64 GCC; Clang is also validated. Visual Studio is not required.
@@ -40,7 +40,7 @@ ctest --preset test-gcc-release
 
 Every public declaration must be implemented, removed, or documented as an explicit failure. Add linkage-sensitive symbols to `Tests/PublicApiLinkage.cpp`.
 
-Do not describe placeholder algorithms as complete. Current examples and engine shaders target GLSL 3.30; the runtime requires OpenGL 3.3 core or newer.
+Do not describe placeholder algorithms as complete. Frustum culling is implemented; occlusion culling is not. Current examples and engine shaders target GLSL 3.30; the runtime requires OpenGL 3.3 core or newer.
 
 ## Tests
 

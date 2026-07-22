@@ -141,7 +141,12 @@ SetActiveCamera(&camera);
 
 `Camera::SetViewportSize(width, height)` updates perspective aspect ratio or preserves an orthographic camera's vertical span while adjusting its horizontal span. It rejects zero-sized surfaces. `Game::SetActiveCamera()` stores a non-owning pointer and applies this update automatically for the current window and later resize events.
 
-The camera also provides quaternion/Euler rotation, local movement, view/projection matrices, coordinate conversion, and point/sphere visibility helpers.
+The camera uses OpenGL's local negative-Z forward convention. `GetFrustumPlanes()` returns six normalized inward-facing world-space planes. `IsPointVisible()`, `IsSphereVisible()`, and `IsAABBVisible()` classify full near/far/side-plane intersections rather than using distance-only approximations.
+
+```cpp
+const auto& planes = camera.GetFrustumPlanes();
+bool visible = camera.IsAABBVisible(worldBoundsMin, worldBoundsMax);
+```
 
 ## Scene
 
@@ -152,9 +157,25 @@ Headers:
 - `Pyramid/Graphics/Scene/Octree.hpp`
 
 ```cpp
+auto scene = std::make_shared<Pyramid::Scene>("Main");
+auto parent = scene->CreateNode("Vehicle");
+auto child = scene->CreateNode("Wheel");
+
+parent->SetLocalTransform(position, rotation, scale);
+parent->AddChild(child); // The child's local transform is preserved.
+child->SetLocalPosition({1.0f, -0.5f, 0.0f});
+
+auto world = child->GetWorldTransform();
+auto worldPosition = child->GetWorldPosition();
+auto pointInWorld = child->TransformPointToWorld(localPoint);
+```
+
+`SceneNode` caches local and world matrices. Any local transform or hierarchy change invalidates the complete descendant subtree, so previously queried child matrices cannot remain stale. Reparenting and detaching preserve local TRS, duplicate direct children are ignored, and operations that would create a hierarchy cycle are rejected. Hierarchy nodes must be owned by `std::shared_ptr`; unmanaged nodes reject parent/child mutation safely. Local rotations are normalized. `GetWorldScale()` reports positive effective basis magnitudes; a hierarchy containing rotated non-uniform scale can produce shear, so no unique signed TRS decomposition exists for that matrix.
+
+```cpp
 auto manager = Pyramid::SceneManagement::SceneUtils::CreateSceneManager();
-auto scene = manager->CreateScene("Main");
-manager->SetActiveScene(scene);
+auto managedScene = manager->CreateScene("Managed");
+manager->SetActiveScene(managedScene);
 manager->RebuildSpatialPartition();
 
 auto nearby = manager->GetObjectsInRadius(position, 10.0f);
@@ -162,9 +183,11 @@ auto boxed = manager->GetObjectsInBox(minBounds, maxBounds);
 auto nearest = manager->GetNearestObject(position);
 ```
 
+`RenderObject` exposes local bounds with a unit-cube default. `GetWorldBounds()` transforms all eight corners through the object's translation, normalized rotation, and scale. `Scene`, `SceneManager`, and octree frustum queries use these AABBs; objects that span octree child boundaries remain at the parent node to avoid false rejection. Imported meshes do not yet populate local bounds automatically.
+
 Event callbacks, box queries, visibility-stat updates, test-scene creation, and octree configuration have definitions and are covered by linkage validation.
 
-`LoadScene` and `SaveScene` deliberately return `false`; serialization is not implemented. Frustum and occlusion algorithms are not production-ready.
+`LoadScene` and `SaveScene` deliberately return `false`; serialization is not implemented. Scene-node attachment does not yet replace the renderer's separate `RenderObject` transform path. Occlusion culling remains unimplemented and disabled by default.
 
 ## Math
 

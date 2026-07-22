@@ -32,3 +32,13 @@ add_executable(TextureLoadingTests TextureLoadingTests.cpp)
 target_link_libraries(TextureLoadingTests PRIVATE Pyramid::Engine)
 set_target_properties(TextureLoadingTests PROPERTIES FOLDER "Tests/Graphics")
 add_test(NAME Graphics.TextureLoading COMMAND $<TARGET_FILE:TextureLoadingTests>)
+
+add_executable(SceneTransformTests SceneTransformTests.cpp)
+target_link_libraries(SceneTransformTests PRIVATE Pyramid::Engine)
+set_target_properties(SceneTransformTests PROPERTIES FOLDER "Tests/Graphics")
+add_test(NAME Graphics.SceneTransforms COMMAND $<TARGET_FILE:SceneTransformTests>)
+
+add_executable(CameraFrustumTests CameraFrustumTests.cpp)
+target_link_libraries(CameraFrustumTests PRIVATE Pyramid::Engine)
+set_target_properties(CameraFrustumTests PROPERTIES FOLDER "Tests/Graphics")
+add_test(NAME Graphics.CameraFrustum COMMAND $<TARGET_FILE:CameraFrustumTests>)

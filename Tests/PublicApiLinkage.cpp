@@ -1,6 +1,7 @@
 #include <Pyramid/Core/Game.hpp>
 #include <Pyramid/Graphics/Texture.hpp>
 #include <Pyramid/Graphics/Scene/SceneManager.hpp>
+#include <Pyramid/Graphics/Scene.hpp>
 #include <Pyramid/Graphics/Camera.hpp>
 #include <Pyramid/Graphics/OpenGL/OpenGLFramebuffer.hpp>
 #include <Pyramid/Graphics/Renderer/RenderSystem.hpp>
@@ -45,6 +46,12 @@ namespace
     volatile decltype(&SceneManager::DrawDebugInfo) g_drawDebugInfo = &SceneManager::DrawDebugInfo;
     volatile decltype(&Pyramid::Camera::SetViewportSize) g_setCameraViewport =
         &Pyramid::Camera::SetViewportSize;
+    volatile decltype(&Pyramid::Camera::GetFrustumPlanes) g_getCameraFrustumPlanes =
+        &Pyramid::Camera::GetFrustumPlanes;
+    volatile decltype(&Pyramid::Camera::IsAABBVisible) g_isCameraAABBVisible =
+        &Pyramid::Camera::IsAABBVisible;
+    volatile decltype(&Pyramid::RenderObject::GetWorldBounds) g_getRenderObjectWorldBounds =
+        &Pyramid::RenderObject::GetWorldBounds;
     volatile decltype(&Pyramid::OpenGLFramebuffer::Resize) g_resizeFramebuffer =
         &Pyramid::OpenGLFramebuffer::Resize;
     volatile decltype(&Pyramid::Renderer::RenderTarget::Resize) g_resizeRenderTarget =
@@ -53,6 +60,16 @@ namespace
         &Pyramid::Renderer::RenderSystem::Resize;
     volatile decltype(&GameLinkageProbe::SetRenderSystem) g_setRenderSystem =
         &GameLinkageProbe::SetRenderSystem;
+    volatile decltype(&Pyramid::SceneNode::SetLocalPosition) g_setNodeLocalPosition =
+        &Pyramid::SceneNode::SetLocalPosition;
+    volatile decltype(&Pyramid::SceneNode::SetLocalRotation) g_setNodeLocalRotation =
+        &Pyramid::SceneNode::SetLocalRotation;
+    volatile decltype(&Pyramid::SceneNode::SetLocalScale) g_setNodeLocalScale =
+        &Pyramid::SceneNode::SetLocalScale;
+    volatile decltype(&Pyramid::SceneNode::TransformPointToWorld) g_transformPointToWorld =
+        &Pyramid::SceneNode::TransformPointToWorld;
+    volatile decltype(&Pyramid::SceneNode::TransformDirectionToWorld) g_transformDirectionToWorld =
+        &Pyramid::SceneNode::TransformDirectionToWorld;
 }
 
 int main()
@@ -71,10 +88,18 @@ int main()
                    g_triggerEvent &&
                    g_drawDebugInfo &&
                    g_setCameraViewport &&
+                   g_getCameraFrustumPlanes &&
+                   g_isCameraAABBVisible &&
+                   g_getRenderObjectWorldBounds &&
                    g_resizeFramebuffer &&
                    g_resizeRenderTarget &&
                    g_resizeRenderSystem &&
-                   g_setRenderSystem
+                   g_setRenderSystem &&
+                   g_setNodeLocalPosition &&
+                   g_setNodeLocalRotation &&
+                   g_setNodeLocalScale &&
+                   g_transformPointToWorld &&
+                   g_transformDirectionToWorld
                ? 0
                : 1;
 }

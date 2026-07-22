@@ -40,6 +40,11 @@ namespace Pyramid
                        point.z >= min.z && point.z <= max.z;
             }
 
+            bool Contains(const AABB &other) const
+            {
+                return Contains(other.min) && Contains(other.max);
+            }
+
             bool Intersects(const AABB &other) const
             {
                 return min.x <= other.max.x && max.x >= other.min.x &&
@@ -200,9 +205,6 @@ namespace Pyramid
             // Object tracking for updates
             std::unordered_map<std::shared_ptr<RenderObject>, AABB> m_objectBounds;
 
-            // Performance tracking
-            mutable u32 m_lastQueryCount = 0;
-            mutable f32 m_lastQueryTime = 0.0f;
         };
 
         /**

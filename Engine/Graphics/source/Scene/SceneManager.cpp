@@ -81,10 +81,9 @@ namespace Pyramid
 
             m_octree->Clear();
 
-            // Add all render objects from active scene to octree
-            // Create a dummy camera for getting all objects
-            Camera dummyCamera;
-            auto renderObjects = m_activeScene->GetVisibleObjects(dummyCamera);
+            // Spatial storage must not depend on the current camera. Hidden objects
+            // remain indexed and are filtered at query time.
+            const auto &renderObjects = m_activeScene->GetRenderObjects();
             for (const auto &obj : renderObjects)
             {
                 if (obj)
@@ -140,9 +139,8 @@ namespace Pyramid
             }
             else
             {
-                // Fallback to brute force search
-                Camera dummyCamera;
-                auto allObjects = m_activeScene->GetVisibleObjects(dummyCamera);
+                // Fallback to brute force search without introducing a dummy camera.
+                const auto &allObjects = m_activeScene->GetRenderObjects();
                 for (const auto &obj : allObjects)
                 {
                     // Simple distance check for demonstration
@@ -169,16 +167,31 @@ namespace Pyramid
             if (!m_activeScene)
                 return visibleObjects;
 
-            if (m_spatialPartitioningEnabled && m_octree && m_frustumCullingEnabled)
+            if (m_spatialPartitioningEnabled && m_octree && m_needsOctreeRebuild)
             {
-                // Use frustum culling with spatial partitioning
-                auto frustumPlanes = SpatialUtils::CalculateFrustumPlanes(camera);
-                visibleObjects = m_octree->QueryFrustum(frustumPlanes);
+                RebuildSpatialPartition();
+            }
+
+            if (m_frustumCullingEnabled)
+            {
+                if (m_spatialPartitioningEnabled && m_octree)
+                {
+                    visibleObjects = m_octree->QueryFrustum(camera.GetFrustumPlanes());
+                }
+                else
+                {
+                    visibleObjects = m_activeScene->GetVisibleObjects(camera);
+                }
             }
             else
             {
-                // Fallback to all objects
-                visibleObjects = m_activeScene->GetVisibleObjects(camera);
+                for (const auto &object : m_activeScene->GetRenderObjects())
+                {
+                    if (object && object->visible)
+                    {
+                        visibleObjects.push_back(object);
+                    }
+                }
             }
 
             // Apply additional culling if enabled
@@ -229,8 +242,7 @@ namespace Pyramid
             if (!m_activeScene)
                 return nullptr;
 
-            Camera dummyCamera;
-            auto allObjects = m_activeScene->GetVisibleObjects(dummyCamera);
+            const auto &allObjects = m_activeScene->GetRenderObjects();
             std::shared_ptr<RenderObject> nearest = nullptr;
             f32 nearestDistance = std::numeric_limits<f32>::max();
 
@@ -362,15 +374,23 @@ namespace Pyramid
 
         bool SceneManager::FrustumCull(const std::shared_ptr<RenderObject> &object, const Camera &camera)
         {
-            // Simple frustum culling implementation
-            // This would be more sophisticated in a real implementation
-            return false; // For now, don't cull anything
+            if (!object || !object->visible)
+            {
+                return true;
+            }
+
+            Math::Vec3 boundsMin;
+            Math::Vec3 boundsMax;
+            object->GetWorldBounds(boundsMin, boundsMax);
+            return !camera.IsAABBVisible(boundsMin, boundsMax);
         }
 
         bool SceneManager::OcclusionCull(const std::shared_ptr<RenderObject> &object, const Camera &camera)
         {
-            // Occlusion culling implementation would go here
-            return false; // For now, don't cull anything
+            (void)object;
+            (void)camera;
+            // Occlusion culling is not implemented yet.
+            return false;
         }
 
         f32 SceneManager::CalculateLOD(const std::shared_ptr<RenderObject> &object, const Camera &camera)

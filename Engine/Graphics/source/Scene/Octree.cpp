@@ -96,41 +96,41 @@ namespace Pyramid
         void OctreeNode::Insert(std::shared_ptr<RenderObject> object)
         {
             if (!object)
+            {
                 return;
+            }
 
-            // If we're at max depth or under object limit, store here
             if (m_depth >= m_maxDepth || (IsLeaf() && m_objects.size() < m_maxObjects))
             {
                 m_objects.push_back(object);
                 return;
             }
 
-            // If we're a leaf and over the limit, subdivide
-            if (IsLeaf() && m_objects.size() >= m_maxObjects)
+            if (IsLeaf())
             {
                 Subdivide();
 
-                // Redistribute existing objects
-                auto objectsCopy = m_objects;
+                auto existingObjects = std::move(m_objects);
                 m_objects.clear();
-
-                for (const auto &obj : objectsCopy)
+                for (const auto &existingObject : existingObjects)
                 {
-                    Insert(obj);
+                    Insert(existingObject);
                 }
             }
 
-            // Try to insert into appropriate child
-            u32 childIndex = GetChildIndex(object->position);
-            if (childIndex < 8 && m_children[childIndex])
+            const AABB objectBounds = CalculateObjectBounds(object);
+            for (const auto &child : m_children)
             {
-                m_children[childIndex]->Insert(object);
+                if (child && child->m_bounds.Contains(objectBounds))
+                {
+                    child->Insert(object);
+                    return;
+                }
             }
-            else
-            {
-                // Fallback: store in this node
-                m_objects.push_back(object);
-            }
+
+            // Objects spanning child boundaries stay in this node so child-node
+            // rejection can never hide geometry that extends into the frustum.
+            m_objects.push_back(object);
         }
 
         void OctreeNode::Remove(std::shared_ptr<RenderObject> object)
@@ -332,13 +332,14 @@ namespace Pyramid
         AABB OctreeNode::CalculateObjectBounds(const std::shared_ptr<RenderObject> &object) const
         {
             if (!object)
+            {
                 return AABB();
+            }
 
-            const Math::Vec3 halfSize(
-                Math::Max(0.5f, Math::Abs(object->scale.x) * 0.5f),
-                Math::Max(0.5f, Math::Abs(object->scale.y) * 0.5f),
-                Math::Max(0.5f, Math::Abs(object->scale.z) * 0.5f));
-            return AABB(object->position - halfSize, object->position + halfSize);
+            Math::Vec3 boundsMin;
+            Math::Vec3 boundsMax;
+            object->GetWorldBounds(boundsMin, boundsMax);
+            return AABB(boundsMin, boundsMax);
         }
 
         u32 OctreeNode::GetTotalObjectCount() const
@@ -380,24 +381,32 @@ namespace Pyramid
         void OctreeNode::QueryFrustum(const std::array<Math::Vec4, 6> &frustumPlanes,
                                       std::vector<std::shared_ptr<RenderObject>> &results) const
         {
-            // Simple frustum culling - for now just add all objects
-            for (const auto &obj : m_objects)
+            // The root may retain objects that lie outside its configured bounds.
+            // Child nodes are safe to reject because insertion only descends when
+            // the complete object AABB fits inside that child.
+            if (m_depth > 0 && !SpatialUtils::AABBInFrustum(m_bounds, frustumPlanes))
             {
-                if (obj)
+                return;
+            }
+
+            for (const auto &object : m_objects)
+            {
+                if (!object || !object->visible)
                 {
-                    results.push_back(obj);
+                    continue;
+                }
+
+                if (SpatialUtils::AABBInFrustum(CalculateObjectBounds(object), frustumPlanes))
+                {
+                    results.push_back(object);
                 }
             }
 
-            // Query children
-            if (!IsLeaf())
+            for (const auto &child : m_children)
             {
-                for (const auto &child : m_children)
+                if (child)
                 {
-                    if (child)
-                    {
-                        child->QueryFrustum(frustumPlanes, results);
-                    }
+                    child->QueryFrustum(frustumPlanes, results);
                 }
             }
         }
@@ -406,9 +415,6 @@ namespace Pyramid
         {
             if (m_depth >= m_maxDepth)
                 return;
-
-            Math::Vec3 center = m_bounds.GetCenter();
-            Math::Vec3 size = m_bounds.GetSize() * 0.5f;
 
             // Create 8 child nodes
             for (u32 i = 0; i < 8; ++i)
@@ -436,7 +442,6 @@ namespace Pyramid
         AABB OctreeNode::GetChildBounds(u32 index) const
         {
             Math::Vec3 center = m_bounds.GetCenter();
-            Math::Vec3 size = m_bounds.GetSize() * 0.5f;
 
             Math::Vec3 childMin = center;
             Math::Vec3 childMax = center;
@@ -479,7 +484,7 @@ namespace Pyramid
 
         // Octree Implementation
         Octree::Octree(const Math::Vec3 &center, const Math::Vec3 &size, u32 maxDepth, u32 maxObjectsPerNode)
-            : m_maxDepth(maxDepth), m_maxObjectsPerNode(maxObjectsPerNode), m_lastQueryCount(0), m_lastQueryTime(0.0f)
+            : m_maxDepth(maxDepth), m_maxObjectsPerNode(maxObjectsPerNode)
         {
             Math::Vec3 halfSize = size * 0.5f;
             AABB rootBounds(center - halfSize, center + halfSize);
@@ -496,9 +501,8 @@ namespace Pyramid
             {
                 m_root->Insert(object);
 
-                // Track object bounds for updates
-                AABB objBounds(object->position - Math::Vec3(0.5f), object->position + Math::Vec3(0.5f));
-                m_objectBounds[object] = objBounds;
+                // Track the transformed world bounds used by spatial queries.
+                m_objectBounds[object] = SpatialUtils::CalculateAABB(object);
             }
         }
 
@@ -731,31 +735,39 @@ namespace Pyramid
             AABB CalculateAABB(const std::shared_ptr<RenderObject> &object)
             {
                 if (!object)
+                {
                     return AABB();
+                }
 
-                // Simple AABB calculation - in real implementation this would consider mesh bounds
-                Math::Vec3 halfSize(0.5f, 0.5f, 0.5f);
-                return AABB(object->position - halfSize, object->position + halfSize);
+                Math::Vec3 boundsMin;
+                Math::Vec3 boundsMax;
+                object->GetWorldBounds(boundsMin, boundsMax);
+                return AABB(boundsMin, boundsMax);
             }
 
             std::array<Math::Vec4, 6> CalculateFrustumPlanes(const Camera &camera)
             {
-                // Simplified frustum plane calculation
-                // In real implementation, this would extract planes from view-projection matrix
-                std::array<Math::Vec4, 6> planes;
-
-                // For now, return dummy planes
-                for (auto &plane : planes)
-                {
-                    plane = Math::Vec4(0, 1, 0, -1000); // Ground plane far below
-                }
-
-                return planes;
+                return camera.GetFrustumPlanes();
             }
 
             bool AABBInFrustum(const AABB &aabb, const std::array<Math::Vec4, 6> &frustumPlanes)
             {
-                // Simplified frustum culling - always return true for now
+                constexpr f32 tolerance = 0.0001f;
+                for (const auto &plane : frustumPlanes)
+                {
+                    const Math::Vec3 positiveVertex(
+                        plane.x >= 0.0f ? aabb.max.x : aabb.min.x,
+                        plane.y >= 0.0f ? aabb.max.y : aabb.min.y,
+                        plane.z >= 0.0f ? aabb.max.z : aabb.min.z);
+
+                    const f32 distance = plane.x * positiveVertex.x +
+                                         plane.y * positiveVertex.y +
+                                         plane.z * positiveVertex.z + plane.w;
+                    if (distance < -tolerance)
+                    {
+                        return false;
+                    }
+                }
                 return true;
             }
 

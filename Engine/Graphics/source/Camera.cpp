@@ -2,9 +2,26 @@
 #include <Pyramid/Math/Math.hpp>
 
 #include <cmath>
+#include <algorithm>
 
 namespace Pyramid
 {
+    namespace
+    {
+        constexpr f32 FrustumTolerance = 0.0001f;
+
+        f32 PlaneDistance(const Math::Vec4 &plane, const Math::Vec3 &point)
+        {
+            return plane.x * point.x + plane.y * point.y + plane.z * point.z + plane.w;
+        }
+
+        Math::Quat NormalizeCameraRotation(const Math::Quat &rotation)
+        {
+            return Math::IsZero(rotation.LengthSquared())
+                       ? Math::Quat::Identity
+                       : rotation.Normalized();
+        }
+    }
 
     Camera::Camera()
         : Camera(Math::Radians(60.0f), 16.0f / 9.0f, 0.1f, 1000.0f)
@@ -28,7 +45,7 @@ namespace Pyramid
 
     void Camera::SetRotation(f32 pitch, f32 yaw, f32 roll)
     {
-        m_rotation = Math::Quat::FromEuler(pitch, yaw, roll);
+        m_rotation = NormalizeCameraRotation(Math::Quat::FromEuler(pitch, yaw, roll));
         m_viewMatrixDirty = true;
         m_viewProjectionMatrixDirty = true;
         m_frustumPlanesDirty = true;
@@ -36,7 +53,7 @@ namespace Pyramid
 
     void Camera::SetRotation(const Math::Quat &rotation)
     {
-        m_rotation = rotation;
+        m_rotation = NormalizeCameraRotation(rotation);
         m_viewMatrixDirty = true;
         m_viewProjectionMatrixDirty = true;
         m_frustumPlanesDirty = true;
@@ -44,25 +61,28 @@ namespace Pyramid
 
     void Camera::LookAt(const Math::Vec3 &target, const Math::Vec3 &up)
     {
-        Math::Vec3 forward = (target - m_position).Normalized();
-        Math::Vec3 right = forward.Cross(up).Normalized();
-        Math::Vec3 newUp = right.Cross(forward).Normalized();
+        const Math::Vec3 targetDirection = target - m_position;
+        if (targetDirection.LengthSquared() <= Math::EPSILON)
+        {
+            return;
+        }
 
-        // Create rotation matrix from basis vectors
-        Math::Mat4 rotMatrix = Math::Mat4::Identity;
-        rotMatrix.m[0] = right.x;
-        rotMatrix.m[4] = right.y;
-        rotMatrix.m[8] = right.z;
-        rotMatrix.m[1] = newUp.x;
-        rotMatrix.m[5] = newUp.y;
-        rotMatrix.m[9] = newUp.z;
-        rotMatrix.m[2] = -forward.x;
-        rotMatrix.m[6] = -forward.y;
-        rotMatrix.m[10] = -forward.z;
+        const Math::Vec3 forward = targetDirection.Normalized();
+        Math::Vec3 correctedUp = up;
+        if (correctedUp.LengthSquared() <= Math::EPSILON)
+        {
+            correctedUp = Math::Vec3::Up;
+        }
+        correctedUp.Normalize();
 
-        // Convert to quaternion
-        m_rotation = Math::Quat::FromMatrix(rotMatrix);
+        if (Math::Abs(forward.Dot(correctedUp)) >= 1.0f - Math::EPSILON)
+        {
+            correctedUp = Math::Abs(forward.Dot(Math::Vec3::Up)) < 1.0f - Math::EPSILON
+                              ? Math::Vec3::Up
+                              : Math::Vec3::Right;
+        }
 
+        m_rotation = NormalizeCameraRotation(Math::Quat::LookRotation(forward, correctedUp));
         m_viewMatrixDirty = true;
         m_viewProjectionMatrixDirty = true;
         m_frustumPlanesDirty = true;
@@ -217,7 +237,8 @@ namespace Pyramid
 
     Math::Vec3 Camera::GetForward() const
     {
-        return m_rotation.RotateVector(Math::Vec3::Forward);
+        // OpenGL cameras look down their local negative Z axis.
+        return m_rotation.RotateVector(-Math::Vec3::Forward).Normalized();
     }
 
     Math::Vec3 Camera::GetRight() const
@@ -281,29 +302,86 @@ namespace Pyramid
 
     bool Camera::IsPointVisible(const Math::Vec3 &point) const
     {
-        // Simple frustum culling - for now just check if in front of camera
-        Math::Vec3 toPoint = point - m_position;
-        return toPoint.Dot(GetForward()) > m_nearPlane;
+        const auto &planes = GetFrustumPlanes();
+        for (const auto &plane : planes)
+        {
+            if (PlaneDistance(plane, point) < -FrustumTolerance)
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     bool Camera::IsSphereVisible(const Math::Vec3 &center, f32 radius) const
     {
-        // Simple sphere culling - for now just check distance from camera
-        f32 distance = (center - m_position).Length();
-        return distance <= (m_farPlane + radius) && distance >= (m_nearPlane - radius);
+        if (radius < 0.0f)
+        {
+            return false;
+        }
+
+        const auto &planes = GetFrustumPlanes();
+        for (const auto &plane : planes)
+        {
+            if (PlaneDistance(plane, center) < -radius - FrustumTolerance)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool Camera::IsAABBVisible(const Math::Vec3 &minPoint, const Math::Vec3 &maxPoint) const
+    {
+        const Math::Vec3 boxMin(
+            Math::Min(minPoint.x, maxPoint.x),
+            Math::Min(minPoint.y, maxPoint.y),
+            Math::Min(minPoint.z, maxPoint.z));
+        const Math::Vec3 boxMax(
+            Math::Max(minPoint.x, maxPoint.x),
+            Math::Max(minPoint.y, maxPoint.y),
+            Math::Max(minPoint.z, maxPoint.z));
+
+        const auto &planes = GetFrustumPlanes();
+        for (const auto &plane : planes)
+        {
+            // The support point furthest along the inward-facing plane normal.
+            const Math::Vec3 positiveVertex(
+                plane.x >= 0.0f ? boxMax.x : boxMin.x,
+                plane.y >= 0.0f ? boxMax.y : boxMin.y,
+                plane.z >= 0.0f ? boxMax.z : boxMin.z);
+
+            if (PlaneDistance(plane, positiveVertex) < -FrustumTolerance)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    const FrustumPlanes &Camera::GetFrustumPlanes() const
+    {
+        if (m_frustumPlanesDirty)
+        {
+            UpdateFrustumPlanes();
+        }
+        return m_frustumPlanes;
     }
 
     void Camera::UpdateViewMatrix() const
     {
-        // Create view matrix from position and rotation
-        Math::Mat4 rotationMatrix = m_rotation.ToMatrix4();
-        Math::Mat4 translationMatrix = Math::Mat4::CreateTranslation(-m_position);
+        // m_rotation describes the camera's local-to-world orientation. The view
+        // transform therefore uses the inverse rotation followed by translation.
+        const Math::Quat normalizedRotation = NormalizeCameraRotation(m_rotation);
+        const Math::Mat4 inverseRotation = normalizedRotation.Inverse().ToMatrix4();
+        const Math::Mat4 inverseTranslation = Math::Mat4::CreateTranslation(-m_position);
 
-        m_viewMatrix = rotationMatrix * translationMatrix;
-        m_inverseViewMatrix = m_viewMatrix.Inverse();
+        m_viewMatrix = inverseRotation * inverseTranslation;
+        m_inverseViewMatrix = Math::Mat4::CreateTranslation(m_position) * normalizedRotation.ToMatrix4();
 
         m_viewMatrixDirty = false;
         m_viewProjectionMatrixDirty = true;
+        m_frustumPlanesDirty = true;
     }
 
     void Camera::UpdateProjectionMatrix() const
@@ -321,6 +399,7 @@ namespace Pyramid
 
         m_projectionMatrixDirty = false;
         m_viewProjectionMatrixDirty = true;
+        m_frustumPlanesDirty = true;
     }
 
     void Camera::UpdateViewProjectionMatrix() const
@@ -332,77 +411,36 @@ namespace Pyramid
 
         m_viewProjectionMatrix = m_projectionMatrix * m_viewMatrix;
         m_viewProjectionMatrixDirty = false;
+        m_frustumPlanesDirty = true;
     }
 
     void Camera::UpdateFrustumPlanes() const
     {
-        // Ensure view-projection matrix is up to date
-        if (m_viewProjectionMatrixDirty)
-            UpdateViewProjectionMatrix();
+        const Math::Mat4 &viewProjection = GetViewProjectionMatrix();
+        const Math::Vec4 row0 = viewProjection.GetRow(0);
+        const Math::Vec4 row1 = viewProjection.GetRow(1);
+        const Math::Vec4 row2 = viewProjection.GetRow(2);
+        const Math::Vec4 row3 = viewProjection.GetRow(3);
 
-        const Math::Mat4& vp = m_viewProjectionMatrix;
+        m_frustumPlanes[static_cast<std::size_t>(FrustumPlane::Left)] = row3 + row0;
+        m_frustumPlanes[static_cast<std::size_t>(FrustumPlane::Right)] = row3 - row0;
+        m_frustumPlanes[static_cast<std::size_t>(FrustumPlane::Bottom)] = row3 + row1;
+        m_frustumPlanes[static_cast<std::size_t>(FrustumPlane::Top)] = row3 - row1;
+        m_frustumPlanes[static_cast<std::size_t>(FrustumPlane::Near)] = row3 + row2;
+        m_frustumPlanes[static_cast<std::size_t>(FrustumPlane::Far)] = row3 - row2;
 
-        // Extract frustum planes from view-projection matrix
-        // Plane equations are in the form: ax + by + cz + d = 0
-        
-        // Left plane: row4 + row1
-        m_frustumPlanes[0] = Math::Vec4(
-            vp.m[3] + vp.m[0],   // a
-            vp.m[7] + vp.m[4],   // b
-            vp.m[11] + vp.m[8],  // c
-            vp.m[15] + vp.m[12]  // d
-        );
-
-        // Right plane: row4 - row1
-        m_frustumPlanes[1] = Math::Vec4(
-            vp.m[3] - vp.m[0],   // a
-            vp.m[7] - vp.m[4],   // b
-            vp.m[11] - vp.m[8],  // c
-            vp.m[15] - vp.m[12]  // d
-        );
-
-        // Bottom plane: row4 + row2
-        m_frustumPlanes[2] = Math::Vec4(
-            vp.m[3] + vp.m[1],   // a
-            vp.m[7] + vp.m[5],   // b
-            vp.m[11] + vp.m[9],  // c
-            vp.m[15] + vp.m[13]  // d
-        );
-
-        // Top plane: row4 - row2
-        m_frustumPlanes[3] = Math::Vec4(
-            vp.m[3] - vp.m[1],   // a
-            vp.m[7] - vp.m[5],   // b
-            vp.m[11] - vp.m[9],  // c
-            vp.m[15] - vp.m[13]  // d
-        );
-
-        // Near plane: row4 + row3
-        m_frustumPlanes[4] = Math::Vec4(
-            vp.m[3] + vp.m[2],   // a
-            vp.m[7] + vp.m[6],   // b
-            vp.m[11] + vp.m[10], // c
-            vp.m[15] + vp.m[14]  // d
-        );
-
-        // Far plane: row4 - row3
-        m_frustumPlanes[5] = Math::Vec4(
-            vp.m[3] - vp.m[2],   // a
-            vp.m[7] - vp.m[6],   // b
-            vp.m[11] - vp.m[10], // c
-            vp.m[15] - vp.m[14]  // d
-        );
-
-        // Normalize the planes
-        for (int i = 0; i < 6; ++i)
+        for (auto &plane : m_frustumPlanes)
         {
-            Math::Vec3 normal(m_frustumPlanes[i].x, m_frustumPlanes[i].y, m_frustumPlanes[i].z);
-            f32 length = normal.Length();
-            
-            if (length > Math::EPSILON)
+            const f32 normalLength = Math::Vec3(plane.x, plane.y, plane.z).Length();
+            if (normalLength > Math::EPSILON)
             {
-                f32 invLength = 1.0f / length;
-                m_frustumPlanes[i] = m_frustumPlanes[i] * invLength;
+                plane *= 1.0f / normalLength;
+            }
+            else
+            {
+                // Invalid projection state must reject geometry rather than leave
+                // an unnormalized plane with undefined classification behavior.
+                plane = Math::Vec4(0.0f, 0.0f, 0.0f, -1.0f);
             }
         }
 

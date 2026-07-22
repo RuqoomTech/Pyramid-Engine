@@ -3,6 +3,9 @@
 #include <Pyramid/Math/Math.hpp>
 #include <Pyramid/Core/Prerequisites.hpp>
 
+#include <array>
+#include <cstddef>
+
 namespace Pyramid
 {
 
@@ -14,6 +17,24 @@ namespace Pyramid
         Perspective,
         Orthographic
     };
+
+    /**
+     * @brief Camera-frustum plane order.
+     *
+     * Plane equations use the form ax + by + cz + d = 0 and point inward.
+     */
+    enum class FrustumPlane : u32
+    {
+        Left = 0,
+        Right,
+        Bottom,
+        Top,
+        Near,
+        Far,
+        Count
+    };
+
+    using FrustumPlanes = std::array<Math::Vec4, static_cast<std::size_t>(FrustumPlane::Count)>;
 
     /**
      * @brief Camera class for 3D rendering
@@ -263,6 +284,19 @@ namespace Pyramid
          */
         bool IsSphereVisible(const Math::Vec3 &center, f32 radius) const;
 
+        /**
+         * @brief Check whether an axis-aligned world-space box intersects the camera frustum.
+         * @param minPoint Minimum world-space corner. Component order is normalized internally.
+         * @param maxPoint Maximum world-space corner. Component order is normalized internally.
+         * @return true when the box is fully or partially visible.
+         */
+        bool IsAABBVisible(const Math::Vec3 &minPoint, const Math::Vec3 &maxPoint) const;
+
+        /**
+         * @brief Get the six normalized inward-facing world-space frustum planes.
+         */
+        const FrustumPlanes &GetFrustumPlanes() const;
+
     private:
         void UpdateViewMatrix() const;
         void UpdateProjectionMatrix() const;
@@ -293,7 +327,7 @@ namespace Pyramid
         mutable Math::Mat4 m_inverseViewMatrix = Math::Mat4::Identity;
 
         // Frustum planes for culling (ax + by + cz + d = 0)
-        mutable Math::Vec4 m_frustumPlanes[6];
+        mutable FrustumPlanes m_frustumPlanes{};
 
         // Dirty flags
         mutable bool m_viewMatrixDirty = true;

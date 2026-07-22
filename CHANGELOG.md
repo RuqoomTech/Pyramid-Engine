@@ -4,6 +4,27 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 
 ## [Unreleased]
 
+### Camera frustum and scene visibility
+
+- Corrected camera orientation conventions so OpenGL forward is local negative Z and view matrices use inverse camera rotation.
+- Added robust `LookAt()` handling for zero-length and collinear-up inputs.
+- Extracted and normalized six inward-facing world-space frustum planes from the view-projection matrix.
+- Added public frustum-plane access plus accurate point, sphere, and AABB visibility tests.
+- Added explicit local bounds to `RenderObject` and transformed all eight corners into world-space AABBs.
+- Replaced center-point scene visibility with bounds-aware culling.
+- Implemented octree node/object frustum rejection, safe storage for objects spanning child boundaries, hidden-object filtering, and camera-independent spatial rebuilds.
+- Made scene-manager frustum enable/disable behavior consistent across octree and linear paths.
+- Added `Graphics.CameraFrustum` coverage for perspective, orthographic, translated, rotated, scene, scene-manager, and octree classifications.
+
+### Scene transform hierarchy
+
+- Added hierarchy-wide world-transform invalidation for every local transform and parent change.
+- Added cycle rejection, duplicate-child prevention, safe detach/reparent behavior, unmanaged-node guards, and cleanup for externally retained children when a parent is destroyed.
+- Normalized local and composed world rotations before matrix use.
+- Cached world rotation and effective basis scale alongside the world matrix.
+- Added parent/children accessors plus point and direction conversion to world space.
+- Added `Graphics.SceneTransforms` coverage for multi-generation TRS composition, cache invalidation, reparenting, detachment, cycle rejection, and destruction behavior.
+
 ### Image and texture loading
 
 - Replaced JPEG test-pattern generation with real baseline and progressive JPEG decoding through libjpeg-turbo.
@@ -55,7 +76,7 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 
 - Windows runtime verification for Debug and Release.
 - Texture-format and depth-target completion.
-- Scene transform and culling correctness.
+- Moving-object octree updates and geometry-derived bounds.
 
 ## [0.6.0-pre-alpha] - 2026-07-21
 
@@ -112,7 +133,7 @@ Introduced scene management, octree structures, AABB helpers, spatial-query APIs
 
 ### 0.4 image-processing milestone — 2025-07
 
-Introduced custom TGA, BMP, PNG, zlib/DEFLATE, and JPEG helper components. PNG is operational for the tested subset; JPEG image reconstruction is still incomplete.
+Introduced custom TGA, BMP, PNG, zlib/DEFLATE, and JPEG helper components. PNG is operational for the tested subset; the original incomplete JPEG reconstruction path was later replaced by libjpeg-turbo.
 
 ### 0.3.9 logging milestone — 2025-06
 

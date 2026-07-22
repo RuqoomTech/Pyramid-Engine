@@ -21,4 +21,4 @@ This documentation describes the source tree as it exists at the latest audit. P
 5. Update the status table, API overview, roadmap, and changelog when public behavior changes.
 6. Run the Markdown-link check and the public-API linkage test after reorganizing files or interfaces.
 
-Last source audit: **July 21, 2026**.
+Last source audit: **July 22, 2026**.
