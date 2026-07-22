@@ -165,6 +165,17 @@ namespace Pyramid
         };
 
         /**
+         * @brief Complete octree configuration used for atomic rebuilds
+         */
+        struct OctreeConfiguration
+        {
+            Math::Vec3 center = Math::Vec3::Zero;
+            Math::Vec3 size = Math::Vec3(1000.0f);
+            u32 maxDepth = 8;
+            u32 maxObjectsPerNode = 10;
+        };
+
+        /**
          * @brief Main octree spatial partitioning structure
          */
         class Octree
@@ -200,7 +211,11 @@ namespace Pyramid
             std::shared_ptr<RenderObject> FindNearest(const Math::Vec3 &position) const;
             std::vector<std::shared_ptr<RenderObject>> FindKNearest(const Math::Vec3 &position, u32 k) const;
 
-            // Configuration
+            // Configuration. Configure() validates the complete request and
+            // transactionally swaps in a rebuilt tree only after every tracked
+            // object has been inserted successfully.
+            bool Configure(const OctreeConfiguration &configuration);
+            OctreeConfiguration GetConfiguration() const;
             void SetMaxDepth(u32 maxDepth);
             void SetMaxObjectsPerNode(u32 maxObjects);
             void SetBounds(const Math::Vec3 &center, const Math::Vec3 &size);
@@ -228,6 +243,8 @@ namespace Pyramid
             bool Contains(const std::shared_ptr<RenderObject> &object) const;
 
         private:
+            bool RebuildWithConfiguration(const OctreeConfiguration &configuration);
+            static bool IsValidConfiguration(const OctreeConfiguration &configuration);
             static bool BoundsEqual(const AABB &lhs, const AABB &rhs);
 
             // Root node

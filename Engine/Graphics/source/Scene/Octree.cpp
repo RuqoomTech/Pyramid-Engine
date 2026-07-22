@@ -6,11 +6,44 @@
 #include <unordered_set>
 #include <queue>
 #include <cmath>
+#include <exception>
 
 namespace Pyramid
 {
     namespace SceneManagement
     {
+        namespace
+        {
+            bool IsFiniteVector(const Math::Vec3 &value)
+            {
+                return std::isfinite(value.x) &&
+                       std::isfinite(value.y) &&
+                       std::isfinite(value.z);
+            }
+
+            AABB ConfigurationBounds(const OctreeConfiguration &configuration)
+            {
+                const Math::Vec3 halfSize = configuration.size * 0.5f;
+                return AABB(configuration.center - halfSize, configuration.center + halfSize);
+            }
+
+            Math::Vec3 SanitizeConstructionSize(const Math::Vec3 &size)
+            {
+                const auto sanitizeAxis = [](f32 value)
+                {
+                    if (!std::isfinite(value) || Math::Abs(value) <= 0.0001f)
+                    {
+                        return 1.0f;
+                    }
+                    return Math::Abs(value);
+                };
+
+                return Math::Vec3(
+                    sanitizeAxis(size.x),
+                    sanitizeAxis(size.y),
+                    sanitizeAxis(size.z));
+            }
+        }
 
         // AABB Implementation
         f32 AABB::DistanceSquaredToPoint(const Math::Vec3 &point) const
@@ -507,13 +540,38 @@ namespace Pyramid
 
         // Octree Implementation
         Octree::Octree(const Math::Vec3 &center, const Math::Vec3 &size, u32 maxDepth, u32 maxObjectsPerNode)
-            : m_maxDepth(maxDepth), m_maxObjectsPerNode(maxObjectsPerNode)
+            : m_maxDepth(maxDepth), m_maxObjectsPerNode(Math::Max(1u, maxObjectsPerNode))
         {
-            Math::Vec3 halfSize = size * 0.5f;
-            AABB rootBounds(center - halfSize, center + halfSize);
-            m_root = std::make_unique<OctreeNode>(rootBounds, 0, maxDepth, maxObjectsPerNode);
+            OctreeConfiguration configuration;
+            configuration.center = IsFiniteVector(center) ? center : Math::Vec3::Zero;
+            configuration.size = SanitizeConstructionSize(size);
+            configuration.maxDepth = maxDepth;
+            configuration.maxObjectsPerNode = m_maxObjectsPerNode;
 
-            PYRAMID_LOG_INFO("Octree created with max depth: ", maxDepth, ", max objects per node: ", maxObjectsPerNode);
+            if (!IsFiniteVector(center) ||
+                configuration.size.x != size.x ||
+                configuration.size.y != size.y ||
+                configuration.size.z != size.z ||
+                maxObjectsPerNode == 0)
+            {
+                PYRAMID_LOG_WARN(
+                    "Invalid octree construction values were normalized to center=",
+                    configuration.center.x, ",", configuration.center.y, ",", configuration.center.z,
+                    " size=", configuration.size.x, ",", configuration.size.y, ",", configuration.size.z,
+                    " maxObjectsPerNode=", configuration.maxObjectsPerNode);
+            }
+
+            m_root = std::make_unique<OctreeNode>(
+                ConfigurationBounds(configuration),
+                0,
+                configuration.maxDepth,
+                configuration.maxObjectsPerNode);
+
+            PYRAMID_LOG_INFO(
+                "Octree created with max depth: ",
+                configuration.maxDepth,
+                ", max objects per node: ",
+                configuration.maxObjectsPerNode);
         }
 
         Octree::~Octree() = default;
@@ -872,34 +930,64 @@ namespace Pyramid
             return results;
         }
 
+        bool Octree::Configure(const OctreeConfiguration &configuration)
+        {
+            OctreeConfiguration normalized = configuration;
+            normalized.maxObjectsPerNode = Math::Max(1u, normalized.maxObjectsPerNode);
+
+            if (!IsValidConfiguration(normalized))
+            {
+                PYRAMID_LOG_ERROR(
+                    "Rejected invalid octree configuration: center and size must be finite, ",
+                    "and every size component must be greater than zero");
+                return false;
+            }
+
+            const AABB requestedBounds = ConfigurationBounds(normalized);
+            if (m_root &&
+                BoundsEqual(m_root->GetBounds(), requestedBounds) &&
+                m_maxDepth == normalized.maxDepth &&
+                m_maxObjectsPerNode == normalized.maxObjectsPerNode)
+            {
+                return true;
+            }
+
+            return RebuildWithConfiguration(normalized);
+        }
+
+        OctreeConfiguration Octree::GetConfiguration() const
+        {
+            OctreeConfiguration configuration;
+            if (m_root)
+            {
+                configuration.center = m_root->GetBounds().GetCenter();
+                configuration.size = m_root->GetBounds().GetSize();
+            }
+            configuration.maxDepth = m_maxDepth;
+            configuration.maxObjectsPerNode = m_maxObjectsPerNode;
+            return configuration;
+        }
+
         void Octree::SetMaxDepth(u32 maxDepth)
         {
-            m_maxDepth = maxDepth;
-            Rebuild();
+            auto configuration = GetConfiguration();
+            configuration.maxDepth = maxDepth;
+            Configure(configuration);
         }
 
         void Octree::SetMaxObjectsPerNode(u32 maxObjects)
         {
-            m_maxObjectsPerNode = Math::Max(1u, maxObjects);
-            Rebuild();
+            auto configuration = GetConfiguration();
+            configuration.maxObjectsPerNode = maxObjects;
+            Configure(configuration);
         }
 
         void Octree::SetBounds(const Math::Vec3 &center, const Math::Vec3 &size)
         {
-            std::vector<std::shared_ptr<RenderObject>> objects;
-            objects.reserve(m_objectBounds.size());
-            for (const auto &entry : m_objectBounds)
-                objects.push_back(entry.first);
-
-            const Math::Vec3 halfSize = size * 0.5f;
-            m_root = std::make_unique<OctreeNode>(
-                AABB(center - halfSize, center + halfSize),
-                0,
-                m_maxDepth,
-                m_maxObjectsPerNode);
-            m_objectBounds.clear();
-            for (const auto &object : objects)
-                Insert(object);
+            auto configuration = GetConfiguration();
+            configuration.center = center;
+            configuration.size = size;
+            Configure(configuration);
         }
 
         void Octree::DrawDebugVisualization() const
@@ -913,23 +1001,65 @@ namespace Pyramid
 
         void Octree::Rebuild()
         {
-            if (!m_root)
-                return;
+            RebuildWithConfiguration(GetConfiguration());
+        }
 
-            std::vector<std::shared_ptr<RenderObject>> objects;
-            objects.reserve(m_objectBounds.size());
-            for (const auto &entry : m_objectBounds)
-                objects.push_back(entry.first);
+        bool Octree::RebuildWithConfiguration(const OctreeConfiguration &configuration)
+        {
+            if (!IsValidConfiguration(configuration))
+            {
+                return false;
+            }
 
-            const AABB bounds = m_root->GetBounds();
-            m_root = std::make_unique<OctreeNode>(
-                bounds,
-                0,
-                m_maxDepth,
-                m_maxObjectsPerNode);
-            m_objectBounds.clear();
-            for (const auto &object : objects)
-                Insert(object);
+            try
+            {
+                auto replacementRoot = std::make_unique<OctreeNode>(
+                    ConfigurationBounds(configuration),
+                    0,
+                    configuration.maxDepth,
+                    configuration.maxObjectsPerNode);
+
+                std::unordered_map<std::shared_ptr<RenderObject>, AABB> replacementBounds;
+                replacementBounds.reserve(m_objectBounds.size());
+
+                for (const auto &entry : m_objectBounds)
+                {
+                    const auto &object = entry.first;
+                    if (!object)
+                    {
+                        continue;
+                    }
+
+                    replacementRoot->Insert(object);
+                    replacementBounds.emplace(object, SpatialUtils::CalculateAABB(object));
+                }
+
+                m_root.swap(replacementRoot);
+                m_objectBounds.swap(replacementBounds);
+                m_maxDepth = configuration.maxDepth;
+                m_maxObjectsPerNode = configuration.maxObjectsPerNode;
+                return true;
+            }
+            catch (const std::exception &error)
+            {
+                PYRAMID_LOG_ERROR("Octree reconfiguration failed; previous tree preserved: ", error.what());
+            }
+            catch (...)
+            {
+                PYRAMID_LOG_ERROR("Octree reconfiguration failed; previous tree preserved");
+            }
+
+            return false;
+        }
+
+        bool Octree::IsValidConfiguration(const OctreeConfiguration &configuration)
+        {
+            return IsFiniteVector(configuration.center) &&
+                   IsFiniteVector(configuration.size) &&
+                   configuration.size.x > 0.0f &&
+                   configuration.size.y > 0.0f &&
+                   configuration.size.z > 0.0f &&
+                   configuration.maxObjectsPerNode > 0;
         }
 
         Octree::OctreeStats Octree::GetStats() const

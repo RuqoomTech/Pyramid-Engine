@@ -70,6 +70,10 @@ namespace
         &Pyramid::SceneManagement::Octree::UpdateIfMoved;
     volatile decltype(&Pyramid::SceneManagement::Octree::Synchronize) g_synchronizeOctree =
         &Pyramid::SceneManagement::Octree::Synchronize;
+    volatile decltype(&Pyramid::SceneManagement::Octree::Configure) g_configureOctree =
+        &Pyramid::SceneManagement::Octree::Configure;
+    volatile decltype(&Pyramid::SceneManagement::Octree::GetConfiguration) g_getOctreeConfiguration =
+        &Pyramid::SceneManagement::Octree::GetConfiguration;
     volatile decltype(&Pyramid::Camera::SetViewportSize) g_setCameraViewport =
         &Pyramid::Camera::SetViewportSize;
     volatile decltype(&Pyramid::Camera::GetFrustumPlanes) g_getCameraFrustumPlanes =
@@ -126,6 +130,8 @@ int main()
                    g_drawDebugInfo &&
                    g_updateOctreeIfMoved &&
                    g_synchronizeOctree &&
+                   g_configureOctree &&
+                   g_getOctreeConfiguration &&
                    g_setCameraViewport &&
                    g_getCameraFrustumPlanes &&
                    g_isCameraAABBVisible &&

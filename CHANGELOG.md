@@ -4,6 +4,15 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 
 ## [Unreleased]
 
+### Transactional octree configuration
+
+- Added `OctreeConfiguration`, `Octree::Configure()`, and `GetConfiguration()` for one atomic bounds/depth/capacity update.
+- Reworked octree reconfiguration to build a complete replacement tree first and swap it in only after every tracked object has been reinserted successfully.
+- Preserved the previous tree and tracked-object map when configuration validation or replacement construction fails.
+- Rejected non-finite centers and non-positive extents, normalized zero node capacity to one, and normalized invalid constructor extents to usable positive values.
+- Made individual bounds, depth, and capacity setters delegate to the same validated configuration path.
+- Added `Graphics.OctreeConfiguration` coverage for tracked-object preservation, root-overflow objects, invalid settings, constructor normalization, and combined updates.
+
 ### Bounds-aware nearest-neighbor queries
 
 - Corrected nearest-object and K-nearest queries to measure distance to the closest point on each complete world-space AABB rather than object origins.

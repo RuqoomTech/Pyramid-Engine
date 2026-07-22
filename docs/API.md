@@ -192,6 +192,8 @@ auto nearestFive = manager->GetKNearestObjects(position, 5);
 
 `AABB::DistanceSquaredToPoint()` and `DistanceToPoint()` measure the shortest distance to a box, returning zero for points inside it. `Octree::FindNearest()` and `FindKNearest()` use that world-bound distance, not the object's origin. K-nearest results are ordered nearest-first, `k == 0` returns an empty result, and counts larger than the scene return all objects. Octree traversal orders child nodes by their minimum possible point distance and prunes branches that cannot improve the current candidate set. `SceneManager::GetNearestObject()` and `GetKNearestObjects()` provide identical semantics in octree and linear modes.
 
+`OctreeConfiguration` groups root center/size, maximum depth, and node capacity. `Octree::Configure()` validates the complete request and transactionally constructs a replacement tree before changing live state; every tracked object, including root-retained objects outside the new bounds, is reinserted into the replacement. Invalid centers or extents leave the existing tree untouched. `SetBounds()`, `SetMaxDepth()`, and `SetMaxObjectsPerNode()` delegate to the same path, while `GetConfiguration()` returns the active normalized values. A zero capacity is normalized to one; zero maximum depth is valid and produces a root-only tree.
+
 Event callbacks, scene and octree query entry points, visibility-stat updates, test-scene creation, and octree configuration have definitions and are covered by linkage validation.
 
 `LoadScene` and `SaveScene` deliberately return `false`; serialization is not implemented. Scene-node attachment does not yet replace the renderer's separate `RenderObject` transform path. Occlusion culling remains unimplemented and disabled by default.
