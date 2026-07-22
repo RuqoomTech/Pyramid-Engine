@@ -10,7 +10,8 @@ Pyramid Engine currently supports native 64-bit Windows builds with an open-sour
 - optional Clang targeting the same MinGW-w64/UCRT runtime;
 - Ninja;
 - CMake 3.23 or newer;
-- OpenGL 3.3 core or newer.
+- OpenGL 3.3 core or newer;
+- libjpeg-turbo, installed by the bootstrap script.
 
 Visual Studio, MSVC, and the Visual Studio Build Tools are not required.
 
@@ -30,7 +31,7 @@ To install both GCC and Clang:
 ./scripts/bootstrap-msys2.ps1 -Compiler both
 ```
 
-The script installs the UCRT64 MinGW-w64 toolchain, CMake, and Ninja. It does not install Visual Studio.
+The script installs the UCRT64 MinGW-w64 toolchain, CMake, Ninja, and libjpeg-turbo. It does not install Visual Studio.
 
 After setup, use either:
 
@@ -125,25 +126,21 @@ ctest --test-dir build/manual --output-on-failure
 
 ## Tests
 
-CTest registers 15 executables:
+CTest registers 11 executables:
 
 - `Utils.TestPNGComponents`
 - `Utils.TestPNGLoader`
 - `Utils.TestJPEGSimple`
 - `Utils.TestJPEGParser`
-- `Utils.TestJPEGHuffman`
-- `Utils.TestJPEGHuffmanDebug`
-- `Utils.TestJPEGDequantizer`
-- `Utils.TestJPEGIDCT`
-- `Utils.TestJPEGColorConverter`
 - `Utils.TestJPEGIntegration`
 - `API.PublicApiLinkage`
 - `Graphics.OpenGLDiagnostics`
 - `Platform.WindowResizeEvents`
 - `Graphics.CameraViewportResize`
 - `Graphics.FramebufferResize`
+- `Graphics.TextureLoading`
 
-The API test takes addresses of public factory, scene-management, and camera-resize methods so missing definitions fail at link time. The OpenGL diagnostics test verifies readable error, source, type, and severity mappings without requiring a graphics context. The platform test verifies callback delivery, replacement, detachment, window state, and zero-area handling without opening a native window. The camera test verifies perspective and orthographic projection updates plus zero-sized viewport rejection. The framebuffer test verifies specification structure, multisample consistency, and state preservation for rejected zero-area resizes without creating a graphics context.
+The API test takes addresses of public factory, scene-management, and camera-resize methods so missing definitions fail at link time. The OpenGL diagnostics test verifies readable error, source, type, and severity mappings without requiring a graphics context. The platform test verifies callback delivery, replacement, detachment, window state, and zero-area handling without opening a native window. The camera test verifies perspective and orthographic projection updates plus zero-sized viewport rejection. The framebuffer test verifies specification structure, multisample consistency, and state preservation for rejected zero-area resizes without creating a graphics context. The texture test uses a fake OpenGL backend to verify sRGB upload formats, unpack alignment, non-mip filter safety, failed-reload preservation, and full-data updates. JPEG utility tests decode standards-valid baseline and progressive fixtures.
 
 ## Graphical smoke test
 

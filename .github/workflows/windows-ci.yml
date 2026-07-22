@@ -27,6 +27,7 @@ jobs:
               mingw-w64-ucrt-x86_64-toolchain
               mingw-w64-ucrt-x86_64-cmake
               mingw-w64-ucrt-x86_64-ninja
+              mingw-w64-ucrt-x86_64-libjpeg-turbo
           - name: gcc-release
             configuration: Release
             configure_preset: gcc-release-tests
@@ -38,6 +39,7 @@ jobs:
               mingw-w64-ucrt-x86_64-toolchain
               mingw-w64-ucrt-x86_64-cmake
               mingw-w64-ucrt-x86_64-ninja
+              mingw-w64-ucrt-x86_64-libjpeg-turbo
           - name: clang-debug
             configuration: Debug
             configure_preset: clang-debug-tests
@@ -51,6 +53,7 @@ jobs:
               mingw-w64-ucrt-x86_64-lld
               mingw-w64-ucrt-x86_64-cmake
               mingw-w64-ucrt-x86_64-ninja
+              mingw-w64-ucrt-x86_64-libjpeg-turbo
           - name: clang-release
             configuration: Release
             configure_preset: clang-release-tests
@@ -64,6 +67,7 @@ jobs:
               mingw-w64-ucrt-x86_64-lld
               mingw-w64-ucrt-x86_64-cmake
               mingw-w64-ucrt-x86_64-ninja
+              mingw-w64-ucrt-x86_64-libjpeg-turbo
 
     steps:
       - name: Checkout

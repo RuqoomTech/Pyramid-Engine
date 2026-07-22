@@ -4,6 +4,16 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 
 ## [Unreleased]
 
+### Image and texture loading
+
+- Replaced JPEG test-pattern generation with real baseline and progressive JPEG decoding through libjpeg-turbo.
+- Normalized JPEG output to tightly packed RGB pixels and added invalid-data, size-overflow, allocation, and scanline failure handling.
+- Removed the unused custom JPEG entropy/IDCT/color-conversion pipeline and its misleading public headers/tests.
+- Made file-backed OpenGL texture replacement transactional so failed reloads preserve the previous valid GPU object.
+- Added explicit texture load state/error reporting, RGB/RGBA format validation, sRGB internal formats, complete mip-filter mapping, border-color parameters, and unpack-alignment restoration.
+- Added validated baseline/progressive JPEG fixtures and `Graphics.TextureLoading` coverage for upload state, failed reload preservation, and data-size checks.
+- Added libjpeg-turbo to MSYS2 bootstrap, CI, installed package dependencies, and external-consumer resolution.
+
 ### Framebuffer resize safety
 
 - Made `OpenGLFramebuffer::Resize()` transactional so failed replacement creation preserves the last valid framebuffer and attachments.
@@ -44,7 +54,6 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 ### Next priorities
 
 - Windows runtime verification for Debug and Release.
-- Real JPEG block decoding.
 - Texture-format and depth-target completion.
 - Scene transform and culling correctness.
 

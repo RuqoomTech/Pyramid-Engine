@@ -26,9 +26,12 @@ target_include_directories(PyramidEngine
         "${PROJECT_SOURCE_DIR}/vendor"
 )
 
+find_package(JPEG REQUIRED)
+
 target_link_libraries(PyramidEngine
     PUBLIC
         glad
+        JPEG::JPEG
 )
 
 if(WIN32)

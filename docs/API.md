@@ -97,7 +97,7 @@ auto target = Pyramid::ITexture2D::CreateRenderTarget(1280, 720);
 auto white = Pyramid::ITexture2D::CreateFromColor(1, 1, Pyramid::Color::White);
 ```
 
-The basic RGB8/RGBA8 color path is the reliable texture path. Advanced declared formats and specification fields are not all mapped. `CreateDepthTarget` currently returns `nullptr` with an error; use `OpenGLFramebuffer` for depth attachments.
+The reliable texture path is RGB8/RGBA8, including file-backed JPEG/PNG/TGA/BMP images. File reload is transactional: decode or OpenGL upload failure preserves the previous valid texture. `IsLoaded()` and `GetLastError()` expose state, RGB rows use safe unpack alignment, sRGB uploads select sRGB internal formats, and mipmapped filters are mapped completely. Advanced declared formats, anisotropy, and `FlipY` are not yet implemented. `CreateDepthTarget` returns `nullptr` with an error; use `OpenGLFramebuffer` for depth attachments.
 
 ## Renderer
 
@@ -193,7 +193,7 @@ if (image.Data)
 }
 ```
 
-PNG is the most thoroughly tested real-image path. JPEG output is still a generated pattern after marker parsing and must not be used as decoded texture content.
+PNG uses the engine's custom non-interlaced decoder. JPEG uses libjpeg-turbo and is tested with baseline RGB and progressive grayscale fixtures; output is normalized to tightly packed 8-bit RGB. `ImageData::Data` remains manually owned and must be released with `Image::Free()`.
 
 ## Logging
 

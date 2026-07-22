@@ -2,6 +2,7 @@
 
 include(CMakeFindDependencyMacro)
 find_dependency(OpenGL)
+find_dependency(JPEG)
 
 include("${CMAKE_CURRENT_LIST_DIR}/PyramidEngineTargets.cmake")
 check_required_components(PyramidEngine)

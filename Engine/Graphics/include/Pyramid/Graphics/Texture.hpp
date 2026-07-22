@@ -90,14 +90,14 @@ public:
     virtual std::string GetLastError() const { return ""; }
 
     // Dynamic texture updates (optional - can have default implementations)
-    virtual void SetData(const void* data, u32 size) {}
-    virtual void SetSubData(const void* data, u32 x, u32 y, u32 width, u32 height) {}
+    virtual void SetData(const void*, u32) {}
+    virtual void SetSubData(const void*, u32, u32, u32, u32) {}
     
     // Texture parameters (optional - can have default implementations)
-    virtual void SetFilter(TextureFilter minFilter, TextureFilter magFilter) {}
-    virtual void SetWrap(TextureWrap wrapS, TextureWrap wrapT) {}
-    virtual void SetBorderColor(f32 r, f32 g, f32 b, f32 a) {}
-    virtual void SetMaxAnisotropy(f32 anisotropy) {}
+    virtual void SetFilter(TextureFilter, TextureFilter) {}
+    virtual void SetWrap(TextureWrap, TextureWrap) {}
+    virtual void SetBorderColor(f32, f32, f32, f32) {}
+    virtual void SetMaxAnisotropy(f32) {}
 };
 
 class ITexture2D : public ITexture
@@ -118,8 +118,8 @@ public:
     virtual u32 GetMipLevels() const { return 1; }
     
     // Texture streaming and loading (optional implementations)
-    virtual bool LoadFromFile(const std::string& filepath, bool srgb = false, bool generateMips = true) { return false; }
-    virtual bool SaveToFile(const std::string& filepath) const { return false; }
+    virtual bool LoadFromFile(const std::string&, bool = false, bool = true) { return false; }
+    virtual bool SaveToFile(const std::string&) const { return false; }
 };
 
 } // namespace Pyramid

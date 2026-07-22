@@ -17,8 +17,8 @@ The project is intended for engine development and experimentation. It is not ye
 | Renderer | Forward, shadow, and deferred passes; several advanced paths remain partial |
 | Scene | Scene graph, render objects, lights, scene manager, and octree queries |
 | Math | Vectors, matrices, quaternions, geometry helpers, and SIMD-oriented utilities |
-| Images | TGA/BMP subsets, non-interlaced PNG, and experimental JPEG components |
-| Tests | 15 CTest targets: 10 utility tests plus API linkage, OpenGL diagnostics, window events, camera resize, and framebuffer-resize coverage |
+| Images | TGA/BMP subsets, custom non-interlaced PNG, and libjpeg-turbo JPEG decoding |
+| Tests | 11 CTest targets: 5 image/utility tests plus API linkage and focused graphics/platform coverage |
 | CI | GCC and Clang, Debug and Release, package install, and external-consumer validation |
 
 ## Implemented
@@ -41,7 +41,7 @@ The project is intended for engine development and experimentation. It is not ye
 - Scene persistence methods fail explicitly because serialization is not implemented.
 - Occlusion culling and frustum-plane extraction remain placeholder algorithms.
 - `ITexture2D::CreateDepthTarget` fails explicitly; use the framebuffer API for depth attachments.
-- JPEG parsing and helper stages exist, but the loader still generates a test pattern instead of decoding real image blocks.
+- JPEG decoding requires the open-source libjpeg-turbo package installed by the MSYS2 bootstrap script.
 - Input, audio, and physics modules are not part of the current source tree.
 
 See [Roadmap and known issues](docs/ROADMAP.md) before building new systems on top of the engine.

@@ -29,7 +29,8 @@ if (-not $SkipUpdate) {
 $packages = @(
     "mingw-w64-ucrt-x86_64-toolchain",
     "mingw-w64-ucrt-x86_64-cmake",
-    "mingw-w64-ucrt-x86_64-ninja"
+    "mingw-w64-ucrt-x86_64-ninja",
+    "mingw-w64-ucrt-x86_64-libjpeg-turbo"
 )
 
 if ($Compiler -in @("clang", "both")) {

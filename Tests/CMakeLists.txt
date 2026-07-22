@@ -27,3 +27,8 @@ add_executable(FramebufferResizeTests FramebufferResizeTests.cpp)
 target_link_libraries(FramebufferResizeTests PRIVATE Pyramid::Engine)
 set_target_properties(FramebufferResizeTests PROPERTIES FOLDER "Tests/Graphics")
 add_test(NAME Graphics.FramebufferResize COMMAND $<TARGET_FILE:FramebufferResizeTests>)
+
+add_executable(TextureLoadingTests TextureLoadingTests.cpp)
+target_link_libraries(TextureLoadingTests PRIVATE Pyramid::Engine)
+set_target_properties(TextureLoadingTests PROPERTIES FOLDER "Tests/Graphics")
+add_test(NAME Graphics.TextureLoading COMMAND $<TARGET_FILE:TextureLoadingTests>)

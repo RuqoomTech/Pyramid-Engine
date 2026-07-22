@@ -54,7 +54,7 @@ Utility tests live under `Engine/Utils/test` and are registered by `add_utils_te
 - clean up temporary files;
 - print enough context to diagnose a failure.
 
-`API.PublicApiLinkage` verifies selected exported symbols. `Platform.WindowResizeEvents` verifies the platform-neutral callback contract without requiring a Win32 window. `Graphics.CameraViewportResize` verifies perspective/orthographic resize behavior and zero-area rejection. `Graphics.FramebufferResize` verifies structural attachment rules, multisample consistency, and zero-area resize preservation without requiring a graphics context. Windows CI validates GCC and Clang in Debug and Release, plus installation and an external `find_package` consumer.
+`API.PublicApiLinkage` verifies selected exported symbols. `Platform.WindowResizeEvents` verifies the platform-neutral callback contract without requiring a Win32 window. `Graphics.CameraViewportResize` verifies perspective/orthographic resize behavior and zero-area rejection. `Graphics.FramebufferResize` verifies structural attachment rules, multisample consistency, and zero-area resize preservation without requiring a graphics context. `Graphics.TextureLoading` uses a fake OpenGL backend to verify file upload state and transactional reload behavior. JPEG tests must use standards-valid encoded fixtures rather than marker-only pseudo-images. Windows CI validates GCC and Clang in Debug and Release, plus installation and an external `find_package` consumer.
 
 Renderer changes require manual visual validation until image-regression tests exist.
 
@@ -78,7 +78,7 @@ cmake -S Tests/Consumer -B build/consumer -G Ninja \
 cmake --build build/consumer --parallel
 ```
 
-Keep build-tree paths out of installed target interfaces. Public headers should be installed as files, not exposed as absolute `INTERFACE_SOURCES`.
+Keep build-tree paths out of installed target interfaces. Public headers should be installed as files, not exposed as absolute `INTERFACE_SOURCES`. Public static-library dependencies such as JPEG must be resolved in `PyramidEngineConfig.cmake.in` and installed by CI/bootstrap tooling.
 
 ## Documentation
 

@@ -15,7 +15,7 @@ Pyramid Engine is a monolithic C++17 library with a Win32/WGL platform implement
 | Scene | `Pyramid` | Scene graph, render objects, lights, and environment |
 | Spatial management | `Pyramid::SceneManagement` | Scene manager, octree, AABB, and query helpers |
 | Math | `Pyramid::Math` | Vectors, matrices, quaternions, geometry, and SIMD helpers |
-| Utilities | `Pyramid::Util` | Logging, image loading, bit reading, DEFLATE, and zlib |
+| Utilities | `Pyramid::Util` | Logging, image loading, bit reading, DEFLATE, zlib, and libjpeg integration |
 
 Input, audio, physics, editor, scripting, and asset-pipeline systems are not currently present.
 
@@ -86,7 +86,7 @@ Depth formats are not mapped by `OpenGLTexture2D`; `CreateDepthTarget` therefore
 - TGA: narrow uncompressed RGB/RGBA subset;
 - BMP: narrow uncompressed 24/32-bit subset;
 - PNG: custom non-interlaced path with DEFLATE/zlib handling;
-- JPEG: marker parsing and helper stages, followed by a generated test pattern rather than real block reconstruction.
+- JPEG: baseline and progressive decoding through libjpeg-turbo, normalized to tightly packed RGB output.
 
 `ImageData::Data` is manually owned and must be released through `Image::Free`.
 
@@ -98,6 +98,7 @@ The logger supports severity filtering, console/file output, rotation, structure
 
 - `PyramidEngine` is the engine target; `Pyramid::Engine` is its build-tree alias and installed name.
 - GLAD is a public dependency because OpenGL implementation headers expose GLAD types.
+- JPEG is a public link dependency for static-package consumers; the installed package resolves it through CMake `FindJPEG`.
 - Public headers are installed separately rather than exported through `INTERFACE_SOURCES`, keeping the package relocatable.
 - CMake package configuration and version files support `find_package(PyramidEngine CONFIG REQUIRED)`.
 - Windows CI validates an external consumer after installation.

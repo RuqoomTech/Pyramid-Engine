@@ -539,7 +539,7 @@ namespace Pyramid
                     for (size_t i = 0; i < imageData.size(); ++i)
                     {
                         uint8_t index = imageData[i];
-                        if (index * 3 + 2 >= palette.size())
+                        if (static_cast<std::size_t>(index) * 3U + 2U >= palette.size())
                         {
                             SetError("PNG palette index out of range");
                             return std::vector<uint8_t>();
