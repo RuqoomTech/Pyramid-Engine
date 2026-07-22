@@ -70,6 +70,10 @@ namespace Pyramid
             u32 culledObjects = 0;
             u32 octreeNodes = 0;
             u32 octreeDepth = 0;
+            u32 spatialObjectsInserted = 0;
+            u32 spatialObjectsRemoved = 0;
+            u32 spatialObjectsMoved = 0;
+            u32 spatialObjectsUnchanged = 0;
             f32 lastQueryTime = 0.0f;
             f32 lastUpdateTime = 0.0f;
         };
@@ -120,6 +124,8 @@ namespace Pyramid
             void SetOctreeDepth(u32 depth) { m_octreeMaxDepth = depth; }
             void SetOctreeSize(const Math::Vec3 &size) { m_octreeSize = size; }
             void RebuildSpatialPartition();
+            // Incrementally inserts, removes, and relocates changed render objects.
+            void UpdateSpatialPartition();
 
             // Scene queries
             QueryResult QueryScene(const QueryParams &params);
@@ -132,7 +138,6 @@ namespace Pyramid
             void Update(f32 deltaTime, UpdateFlags flags = UpdateFlags::All);
             void UpdateTransforms();
             void UpdateVisibility(const Camera &camera);
-            void UpdateSpatialPartition();
 
             // Performance monitoring
             const SceneStats &GetStats() const;

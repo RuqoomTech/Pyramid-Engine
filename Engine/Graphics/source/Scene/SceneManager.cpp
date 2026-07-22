@@ -307,13 +307,35 @@ namespace Pyramid
 
         void SceneManager::UpdateSpatialPartition()
         {
+            m_stats.spatialObjectsInserted = 0;
+            m_stats.spatialObjectsRemoved = 0;
+            m_stats.spatialObjectsMoved = 0;
+            m_stats.spatialObjectsUnchanged = 0;
+
+            if (!m_spatialPartitioningEnabled || !m_octree || !m_activeScene)
+            {
+                return;
+            }
+
             if (m_needsOctreeRebuild)
             {
                 RebuildSpatialPartition();
+                m_stats.spatialObjectsInserted = static_cast<u32>(m_activeScene->GetObjectCount());
+                return;
             }
-            else if (m_octree)
+
+            const auto syncStats = m_octree->Synchronize(m_activeScene->GetRenderObjects());
+            m_stats.spatialObjectsInserted = syncStats.insertedObjects;
+            m_stats.spatialObjectsRemoved = syncStats.removedObjects;
+            m_stats.spatialObjectsMoved = syncStats.movedObjects;
+            m_stats.spatialObjectsUnchanged = syncStats.unchangedObjects;
+
+            if (syncStats.HasChanges())
             {
-                m_octree->Rebuild();
+                PYRAMID_LOG_DEBUG(
+                    "Spatial partition synchronized: inserted=", syncStats.insertedObjects,
+                    ", removed=", syncStats.removedObjects,
+                    ", moved=", syncStats.movedObjects);
             }
         }
 
@@ -369,7 +391,10 @@ namespace Pyramid
                 "Scene stats: objects=", stats.totalObjects,
                 ", visible=", stats.visibleObjects,
                 ", octreeNodes=", stats.octreeNodes,
-                ", octreeDepth=", stats.octreeDepth);
+                ", octreeDepth=", stats.octreeDepth,
+                ", spatialMoved=", stats.spatialObjectsMoved,
+                ", spatialInserted=", stats.spatialObjectsInserted,
+                ", spatialRemoved=", stats.spatialObjectsRemoved);
         }
 
         bool SceneManager::FrustumCull(const std::shared_ptr<RenderObject> &object, const Camera &camera)

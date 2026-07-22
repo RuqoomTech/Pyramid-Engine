@@ -4,6 +4,15 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 
 ## [Unreleased]
 
+### Incremental octree synchronization
+
+- Added `Octree::Synchronize()` to incrementally insert new objects, remove stale objects, and relocate only objects whose world-space AABBs changed.
+- Added `Octree::UpdateIfMoved()`, tracked-object inspection, duplicate-insertion protection, and floating-point tolerance for stable bounds.
+- Replaced `SceneManager::UpdateSpatialPartition()` full-tree rebuilds with incremental synchronization after the initial scene build.
+- Added per-update spatial insertion, removal, movement, and unchanged-object statistics.
+- Hardened octree removal so duplicate legacy entries cannot survive an update.
+- Added `Graphics.OctreeUpdates` coverage for movement across branches, bounds-only changes, additions, removals, duplicate snapshots, and stable-scene no-op updates.
+
 ### Camera frustum and scene visibility
 
 - Corrected camera orientation conventions so OpenGL forward is local negative Z and view matrices use inverse camera rotation.
@@ -76,7 +85,7 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 
 - Windows runtime verification for Debug and Release.
 - Texture-format and depth-target completion.
-- Moving-object octree updates and geometry-derived bounds.
+- Geometry-derived local bounds during mesh import.
 
 ## [0.6.0-pre-alpha] - 2026-07-21
 

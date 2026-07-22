@@ -42,3 +42,8 @@ add_executable(CameraFrustumTests CameraFrustumTests.cpp)
 target_link_libraries(CameraFrustumTests PRIVATE Pyramid::Engine)
 set_target_properties(CameraFrustumTests PROPERTIES FOLDER "Tests/Graphics")
 add_test(NAME Graphics.CameraFrustum COMMAND $<TARGET_FILE:CameraFrustumTests>)
+
+add_executable(OctreeUpdateTests OctreeUpdateTests.cpp)
+target_link_libraries(OctreeUpdateTests PRIVATE Pyramid::Engine)
+set_target_properties(OctreeUpdateTests PROPERTIES FOLDER "Tests/Graphics")
+add_test(NAME Graphics.OctreeUpdates COMMAND $<TARGET_FILE:OctreeUpdateTests>)

@@ -3,6 +3,7 @@
 #include <Pyramid/Util/Log.hpp>
 #include <algorithm>
 #include <limits>
+#include <unordered_set>
 
 namespace Pyramid
 {
@@ -135,23 +136,20 @@ namespace Pyramid
 
         void OctreeNode::Remove(std::shared_ptr<RenderObject> object)
         {
-            // Remove from this node
-            auto it = std::find(m_objects.begin(), m_objects.end(), object);
-            if (it != m_objects.end())
+            if (!object)
             {
-                m_objects.erase(it);
                 return;
             }
 
-            // Try to remove from children
-            if (!IsLeaf())
+            m_objects.erase(
+                std::remove(m_objects.begin(), m_objects.end(), object),
+                m_objects.end());
+
+            for (auto &child : m_children)
             {
-                for (auto &child : m_children)
+                if (child)
                 {
-                    if (child)
-                    {
-                        child->Remove(object);
-                    }
+                    child->Remove(object);
                 }
             }
         }
@@ -497,29 +495,121 @@ namespace Pyramid
 
         void Octree::Insert(std::shared_ptr<RenderObject> object)
         {
-            if (m_root && object)
+            if (!m_root || !object)
             {
-                m_root->Insert(object);
-
-                // Track the transformed world bounds used by spatial queries.
-                m_objectBounds[object] = SpatialUtils::CalculateAABB(object);
+                return;
             }
+
+            if (m_objectBounds.find(object) != m_objectBounds.end())
+            {
+                UpdateIfMoved(object);
+                return;
+            }
+
+            m_root->Insert(object);
+            m_objectBounds.emplace(object, SpatialUtils::CalculateAABB(object));
         }
 
         void Octree::Remove(std::shared_ptr<RenderObject> object)
         {
             if (!object || !m_root)
+            {
                 return;
+            }
+
             m_root->Remove(object);
             m_objectBounds.erase(object);
         }
 
         void Octree::Update(std::shared_ptr<RenderObject> object)
         {
-            if (!object)
+            if (!object || !m_root)
+            {
                 return;
-            Remove(object);
-            Insert(object);
+            }
+
+            m_root->Remove(object);
+            m_root->Insert(object);
+            m_objectBounds[object] = SpatialUtils::CalculateAABB(object);
+        }
+
+        bool Octree::UpdateIfMoved(std::shared_ptr<RenderObject> object)
+        {
+            if (!object || !m_root)
+            {
+                return false;
+            }
+
+            const AABB currentBounds = SpatialUtils::CalculateAABB(object);
+            const auto tracked = m_objectBounds.find(object);
+            if (tracked == m_objectBounds.end())
+            {
+                m_root->Insert(object);
+                m_objectBounds.emplace(object, currentBounds);
+                return true;
+            }
+
+            if (BoundsEqual(tracked->second, currentBounds))
+            {
+                return false;
+            }
+
+            m_root->Remove(object);
+            m_root->Insert(object);
+            tracked->second = currentBounds;
+            return true;
+        }
+
+        OctreeSyncStats Octree::Synchronize(const std::vector<std::shared_ptr<RenderObject>> &objects)
+        {
+            OctreeSyncStats stats;
+            if (!m_root)
+            {
+                return stats;
+            }
+
+            std::unordered_set<std::shared_ptr<RenderObject>> liveObjects;
+            liveObjects.reserve(objects.size());
+
+            for (const auto &object : objects)
+            {
+                if (!object || !liveObjects.insert(object).second)
+                {
+                    continue;
+                }
+
+                if (m_objectBounds.find(object) == m_objectBounds.end())
+                {
+                    Insert(object);
+                    ++stats.insertedObjects;
+                }
+                else if (UpdateIfMoved(object))
+                {
+                    ++stats.movedObjects;
+                }
+                else
+                {
+                    ++stats.unchangedObjects;
+                }
+            }
+
+            std::vector<std::shared_ptr<RenderObject>> removedObjects;
+            removedObjects.reserve(m_objectBounds.size());
+            for (const auto &entry : m_objectBounds)
+            {
+                if (liveObjects.find(entry.first) == liveObjects.end())
+                {
+                    removedObjects.push_back(entry.first);
+                }
+            }
+
+            for (const auto &object : removedObjects)
+            {
+                Remove(object);
+                ++stats.removedObjects;
+            }
+
+            return stats;
         }
 
         void Octree::Clear()
@@ -692,6 +782,27 @@ namespace Pyramid
         const AABB &Octree::GetBounds() const
         {
             return m_root->GetBounds();
+        }
+
+        bool Octree::Contains(const std::shared_ptr<RenderObject> &object) const
+        {
+            return object && m_objectBounds.find(object) != m_objectBounds.end();
+        }
+
+        bool Octree::BoundsEqual(const AABB &lhs, const AABB &rhs)
+        {
+            constexpr f32 tolerance = 0.0001f;
+            const auto nearlyEqual = [](f32 a, f32 b)
+            {
+                return Math::Abs(a - b) <= tolerance;
+            };
+
+            return nearlyEqual(lhs.min.x, rhs.min.x) &&
+                   nearlyEqual(lhs.min.y, rhs.min.y) &&
+                   nearlyEqual(lhs.min.z, rhs.min.z) &&
+                   nearlyEqual(lhs.max.x, rhs.max.x) &&
+                   nearlyEqual(lhs.max.y, rhs.max.y) &&
+                   nearlyEqual(lhs.max.z, rhs.max.z);
         }
 
         void Octree::FindNearestRecursive(const Math::Vec3 &position,

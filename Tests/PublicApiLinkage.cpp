@@ -1,6 +1,7 @@
 #include <Pyramid/Core/Game.hpp>
 #include <Pyramid/Graphics/Texture.hpp>
 #include <Pyramid/Graphics/Scene/SceneManager.hpp>
+#include <Pyramid/Graphics/Scene/Octree.hpp>
 #include <Pyramid/Graphics/Scene.hpp>
 #include <Pyramid/Graphics/Camera.hpp>
 #include <Pyramid/Graphics/OpenGL/OpenGLFramebuffer.hpp>
@@ -44,6 +45,10 @@ namespace
     volatile decltype(&SceneManager::RegisterEventCallback) g_registerEvent = &SceneManager::RegisterEventCallback;
     volatile decltype(&SceneManager::TriggerEvent) g_triggerEvent = &SceneManager::TriggerEvent;
     volatile decltype(&SceneManager::DrawDebugInfo) g_drawDebugInfo = &SceneManager::DrawDebugInfo;
+    volatile decltype(&Pyramid::SceneManagement::Octree::UpdateIfMoved) g_updateOctreeIfMoved =
+        &Pyramid::SceneManagement::Octree::UpdateIfMoved;
+    volatile decltype(&Pyramid::SceneManagement::Octree::Synchronize) g_synchronizeOctree =
+        &Pyramid::SceneManagement::Octree::Synchronize;
     volatile decltype(&Pyramid::Camera::SetViewportSize) g_setCameraViewport =
         &Pyramid::Camera::SetViewportSize;
     volatile decltype(&Pyramid::Camera::GetFrustumPlanes) g_getCameraFrustumPlanes =
@@ -87,6 +92,8 @@ int main()
                    g_registerEvent &&
                    g_triggerEvent &&
                    g_drawDebugInfo &&
+                   g_updateOctreeIfMoved &&
+                   g_synchronizeOctree &&
                    g_setCameraViewport &&
                    g_getCameraFrustumPlanes &&
                    g_isCameraAABBVisible &&

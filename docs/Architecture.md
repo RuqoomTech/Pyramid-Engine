@@ -71,7 +71,7 @@ World rotation is the normalized quaternion chain. World scale is reported as th
 
 The camera extracts six normalized inward-facing frustum planes from its view-projection matrix. Camera point, sphere, and AABB tests share those planes. `RenderObject` transforms explicit local bounds into a world-space AABB, and both linear scene visibility and octree queries use that same bound. Objects spanning octree child boundaries remain in the parent node, allowing child-node rejection without hiding intersecting geometry.
 
-The octree supports insertion, removal, updates, rebuilding, configuration, nearest-neighbor queries, and public spatial helpers. Local bounds default to a unit cube and must currently be assigned by asset code; imported meshes do not yet derive them automatically. Moving objects require an octree update/rebuild before spatial results reflect the new transform. Occlusion culling remains a placeholder and is disabled by default.
+The octree supports insertion, removal, incremental synchronization, explicit rebuilding, configuration, nearest-neighbor queries, and public spatial helpers. It tracks the last world AABB for each object. During the normal `SceneManager::Update()` path, new and removed scene objects are reconciled and only objects with changed bounds are removed and reinserted; stable objects do not mutate the tree. A full rebuild remains reserved for active-scene or octree-configuration changes. Local bounds default to a unit cube and must currently be assigned by asset code; imported meshes do not yet derive them automatically. Occlusion culling remains a placeholder and is disabled by default.
 
 ## Textures and framebuffers
 

@@ -134,6 +134,22 @@ namespace Pyramid
         };
 
         /**
+         * @brief Result of incrementally synchronizing scene objects with an octree
+         */
+        struct OctreeSyncStats
+        {
+            u32 insertedObjects = 0;
+            u32 removedObjects = 0;
+            u32 movedObjects = 0;
+            u32 unchangedObjects = 0;
+
+            bool HasChanges() const
+            {
+                return insertedObjects > 0 || removedObjects > 0 || movedObjects > 0;
+            }
+        };
+
+        /**
          * @brief Main octree spatial partitioning structure
          */
         class Octree
@@ -146,6 +162,8 @@ namespace Pyramid
             void Insert(std::shared_ptr<RenderObject> object);
             void Remove(std::shared_ptr<RenderObject> object);
             void Update(std::shared_ptr<RenderObject> object);
+            bool UpdateIfMoved(std::shared_ptr<RenderObject> object);
+            OctreeSyncStats Synchronize(const std::vector<std::shared_ptr<RenderObject>> &objects);
             void Clear();
             void Rebuild();
 
@@ -188,8 +206,12 @@ namespace Pyramid
             const AABB &GetBounds() const;
             u32 GetMaxDepth() const { return m_maxDepth; }
             u32 GetMaxObjectsPerNode() const { return m_maxObjectsPerNode; }
+            u32 GetTrackedObjectCount() const { return static_cast<u32>(m_objectBounds.size()); }
+            bool Contains(const std::shared_ptr<RenderObject> &object) const;
 
         private:
+            static bool BoundsEqual(const AABB &lhs, const AABB &rhs);
+
             void FindNearestRecursive(const Math::Vec3 &position,
                                       std::shared_ptr<RenderObject> &nearest,
                                       f32 &nearestDistance,
