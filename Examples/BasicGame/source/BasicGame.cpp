@@ -2,7 +2,7 @@
 
 #include <Pyramid/Graphics/Buffer/BufferLayout.hpp>
 #include <Pyramid/Graphics/Geometry/Vertex.hpp>
-#include <Pyramid/Graphics/Geometry/Mesh.hpp>
+#include <Pyramid/Graphics/Geometry/MeshCache.hpp>
 #include <Pyramid/Graphics/GraphicsDevice.hpp>
 #include <Pyramid/Graphics/Shader/Shader.hpp>
 #include <Pyramid/Math/Math.hpp>
@@ -82,6 +82,8 @@ void BasicGame::onCreate()
         return;
     }
 
+    m_meshCache = std::make_unique<Pyramid::MeshCache>(*device);
+
     m_renderSystem = std::make_unique<Pyramid::Renderer::RenderSystem>();
     if (!m_renderSystem->Initialize(device))
     {
@@ -156,7 +158,7 @@ void BasicGame::onRender()
     m_renderSystem->EndFrame();
 }
 
-std::shared_ptr<Pyramid::Mesh> BasicGame::CreateColoredCube(float size) const
+std::shared_ptr<Pyramid::Mesh> BasicGame::CreateColoredCube(float size)
 {
     auto* device = GetGraphicsDevice();
     if (!device)
@@ -199,7 +201,9 @@ std::shared_ptr<Pyramid::Mesh> BasicGame::CreateColoredCube(float size) const
     specification.topology = Pyramid::PrimitiveTopology::Triangles;
     specification.name = "ColoredCube";
 
-    return Pyramid::Mesh::Create(*device, specification);
+    return m_meshCache
+        ? m_meshCache->GetOrCreate(specification)
+        : Pyramid::Mesh::Create(*device, specification);
 }
 
 bool BasicGame::SetupScene()
@@ -210,7 +214,8 @@ bool BasicGame::SetupScene()
     }
 
     auto cubeGeometry = CreateColoredCube(1.5f);
-    if (!cubeGeometry)
+    auto floorGeometry = CreateColoredCube(1.5f);
+    if (!cubeGeometry || !floorGeometry || cubeGeometry != floorGeometry)
     {
         return false;
     }
@@ -225,7 +230,7 @@ bool BasicGame::SetupScene()
 
     auto floorObject = std::make_shared<Pyramid::RenderObject>();
     floorObject->name = "Floor";
-    floorObject->mesh = cubeGeometry;
+    floorObject->mesh = floorGeometry;
     floorObject->position = Pyramid::Math::Vec3(0.0f, -1.2f, 0.0f);
     floorObject->scale = Pyramid::Math::Vec3(6.0f, 0.15f, 6.0f);
     floorObject->material.shader = m_shader;

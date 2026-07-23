@@ -7,10 +7,12 @@
 #include <Pyramid/Graphics/OpenGL/OpenGLFramebuffer.hpp>
 #include <Pyramid/Graphics/Geometry/MeshBounds.hpp>
 #include <Pyramid/Graphics/Geometry/Mesh.hpp>
+#include <Pyramid/Graphics/Geometry/MeshCache.hpp>
 #include <Pyramid/Graphics/Renderer/RenderSystem.hpp>
 
 #include <memory>
 #include <string>
+#include <string_view>
 
 namespace
 {
@@ -98,10 +100,29 @@ namespace
         &Pyramid::RenderObject::GetWorldBounds;
     volatile decltype(&Pyramid::Geometry::CalculateLocalBounds) g_calculateGeometryBounds =
         &Pyramid::Geometry::CalculateLocalBounds;
+    using MeshAssetIdFromString = Pyramid::MeshAssetId (*)(std::string_view);
+    volatile MeshAssetIdFromString g_meshAssetIdFromString =
+        static_cast<MeshAssetIdFromString>(&Pyramid::MeshAssetId::FromString);
+    volatile decltype(&Pyramid::MeshAssetId::ToString) g_meshAssetIdToString =
+        &Pyramid::MeshAssetId::ToString;
+    volatile decltype(&Pyramid::Mesh::CalculateContentId) g_calculateMeshContentId =
+        &Pyramid::Mesh::CalculateContentId;
     volatile decltype(&Pyramid::Mesh::Create) g_createMesh = &Pyramid::Mesh::Create;
     volatile decltype(&Pyramid::Mesh::IsValid) g_isMeshValid = &Pyramid::Mesh::IsValid;
     volatile decltype(&Pyramid::Mesh::GetLocalBounds) g_getMeshLocalBounds =
         &Pyramid::Mesh::GetLocalBounds;
+    volatile decltype(&Pyramid::MeshCache::GetOrCreate) g_getOrCreateCachedMesh =
+        &Pyramid::MeshCache::GetOrCreate;
+    volatile decltype(&Pyramid::MeshCache::Find) g_findCachedMesh =
+        &Pyramid::MeshCache::Find;
+    volatile decltype(&Pyramid::MeshCache::Evict) g_evictCachedMesh =
+        &Pyramid::MeshCache::Evict;
+    volatile decltype(&Pyramid::MeshCache::CollectUnused) g_collectUnusedMeshes =
+        &Pyramid::MeshCache::CollectUnused;
+    volatile decltype(&Pyramid::MeshCache::Clear) g_clearMeshCache =
+        &Pyramid::MeshCache::Clear;
+    volatile decltype(&Pyramid::MeshCache::GetStats) g_getMeshCacheStats =
+        &Pyramid::MeshCache::GetStats;
     volatile decltype(&Pyramid::Renderer::CommandBuffer::DrawMesh) g_drawMesh =
         &Pyramid::Renderer::CommandBuffer::DrawMesh;
     volatile decltype(&Pyramid::OpenGLFramebuffer::Resize) g_resizeFramebuffer =
@@ -165,9 +186,18 @@ int main()
                    g_useAutomaticBounds &&
                    g_getRenderObjectWorldBounds &&
                    g_calculateGeometryBounds &&
+                   g_meshAssetIdFromString &&
+                   g_meshAssetIdToString &&
+                   g_calculateMeshContentId &&
                    g_createMesh &&
                    g_isMeshValid &&
                    g_getMeshLocalBounds &&
+                   g_getOrCreateCachedMesh &&
+                   g_findCachedMesh &&
+                   g_evictCachedMesh &&
+                   g_collectUnusedMeshes &&
+                   g_clearMeshCache &&
+                   g_getMeshCacheStats &&
                    g_drawMesh &&
                    g_resizeFramebuffer &&
                    g_resizeRenderTarget &&

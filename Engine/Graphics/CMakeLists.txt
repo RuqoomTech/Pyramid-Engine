@@ -14,6 +14,7 @@ target_sources(PyramidEngine
         source/Buffer/UniformBuffer.cpp
         source/Geometry/MeshBounds.cpp
         source/Geometry/Mesh.cpp
+        source/Geometry/MeshCache.cpp
         source/OpenGL/Shader/OpenGLShader.cpp
         source/Texture.cpp
         source/OpenGL/OpenGLTexture.cpp
@@ -43,6 +44,7 @@ target_sources(PyramidEngine
         include/Pyramid/Graphics/Geometry/Vertex.hpp
         include/Pyramid/Graphics/Geometry/MeshBounds.hpp
         include/Pyramid/Graphics/Geometry/Mesh.hpp
+        include/Pyramid/Graphics/Geometry/MeshCache.hpp
         include/Pyramid/Graphics/PrimitiveTopology.hpp
         include/Pyramid/Graphics/Renderer/RenderSystem.hpp
         include/Pyramid/Graphics/Renderer/ShaderPathResolver.hpp

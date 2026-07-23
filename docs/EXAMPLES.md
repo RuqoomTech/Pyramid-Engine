@@ -12,6 +12,7 @@ Demonstrates:
 - base lifecycle initialization;
 - shader compilation;
 - engine-owned indexed mesh creation with validated layout, topology, draw count, and local bounds;
+- content-derived mesh-cache reuse: the cube and floor request identical geometry but perform one GPU upload;
 - texture loading;
 - frame update and rendering;
 - automatic default-viewport updates and active-camera projection resizing;
@@ -40,6 +41,7 @@ This is the lower-level reference rendering path. It demonstrates:
 
 - inline GLSL 3.30 shaders;
 - an engine-owned cube mesh with position, normal, texture-coordinate, and color attributes;
+- a caller-defined stable mesh asset identifier resolved through `MeshCache`;
 - scene and material uniform buffers;
 - perspective camera setup registered through `Game::SetActiveCamera()`;
 - topology-aware indexed rendering and basic lighting.

@@ -4,6 +4,15 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 
 ## [Unreleased]
 
+### Stable mesh identifiers and resource caching
+
+- Added deterministic 128-bit `MeshAssetId` values from caller-owned stable names or exact mesh content. Content fingerprints include vertex/index bytes, layout semantics, counts, normalization flags, and primitive topology while excluding debug names.
+- Added `MeshCache`, which owns one resident GPU mesh per unique content fingerprint and resolves any number of stable asset-ID aliases to that upload.
+- Added hard conflict detection when one explicit asset identifier is reused for different resident geometry.
+- Added explicit `Evict()`, `CollectUnused()`, and `Clear()` lifetime controls; cache eviction releases cache ownership without invalidating external `shared_ptr<Mesh>` instances.
+- Added mesh/cache residency statistics for hits, misses, creations, failures, conflicts, evictions, identifier aliases, externally referenced resources, and resident geometry bytes.
+- Migrated both examples to the cache and added `Graphics.MeshCache` coverage for deterministic IDs, alias deduplication, upload counts, conflicts, residency, collection, eviction, and external-owner lifetime.
+
 ### Engine-owned mesh resources
 
 - Added `Mesh` and `MeshSpecification` as the authoritative geometry resource for vertex/index ownership, layout, draw count, primitive topology, and immutable local bounds.

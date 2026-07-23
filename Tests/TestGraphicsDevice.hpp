@@ -199,16 +199,19 @@ namespace Pyramid::Tests
 
         std::shared_ptr<IVertexBuffer> CreateVertexBuffer() override
         {
+            ++vertexBufferCreations;
             return std::make_shared<TestVertexBuffer>();
         }
 
         std::shared_ptr<IIndexBuffer> CreateIndexBuffer() override
         {
+            ++indexBufferCreations;
             return std::make_shared<TestIndexBuffer>();
         }
 
         std::shared_ptr<IVertexArray> CreateVertexArray() override
         {
+            ++vertexArrayCreations;
             return std::make_shared<TestVertexArray>();
         }
 
@@ -271,6 +274,9 @@ namespace Pyramid::Tests
         u32 lastFirstVertex = 0;
         PrimitiveTopology lastTopology = PrimitiveTopology::Triangles;
         IVertexArray* boundVertexArray = nullptr;
+        u32 vertexBufferCreations = 0;
+        u32 indexBufferCreations = 0;
+        u32 vertexArrayCreations = 0;
 
     private:
         void RecordDraw(

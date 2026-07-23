@@ -1,7 +1,7 @@
 #include "BasicRendering.hpp"
 #include <Pyramid/Graphics/GraphicsDevice.hpp>
 #include <Pyramid/Graphics/Buffer/BufferLayout.hpp>
-#include <Pyramid/Graphics/Geometry/Mesh.hpp>
+#include <Pyramid/Graphics/Geometry/MeshCache.hpp>
 #include <Pyramid/Util/Log.hpp>
 #include <cmath>
 
@@ -120,6 +120,8 @@ void BasicRendering::onCreate()
         return;
     }
 
+    m_meshCache = std::make_unique<Pyramid::MeshCache>(*device);
+
     // Initialize all components
     InitializeShaders();
     CreateGeometry();
@@ -229,8 +231,12 @@ void BasicRendering::CreateGeometry()
     specification.indexCount = 36;
     specification.topology = Pyramid::PrimitiveTopology::Triangles;
     specification.name = "BasicRenderingCube";
+    specification.assetId = Pyramid::MeshAssetId::FromString(
+        "examples/basic-rendering/cube");
 
-    m_mesh = Pyramid::Mesh::Create(*device, specification);
+    m_mesh = m_meshCache
+        ? m_meshCache->GetOrCreate(specification)
+        : Pyramid::Mesh::Create(*device, specification);
     if (!m_mesh)
     {
         PYRAMID_LOG_ERROR("Failed to create cube mesh");

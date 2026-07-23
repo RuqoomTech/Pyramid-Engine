@@ -2,6 +2,7 @@
 
 #include <Pyramid/Core/Game.hpp>
 #include <Pyramid/Graphics/Camera.hpp>
+#include <Pyramid/Graphics/Geometry/MeshCache.hpp>
 #include <Pyramid/Graphics/Renderer/RenderSystem.hpp>
 #include <Pyramid/Graphics/Scene.hpp>
 
@@ -11,6 +12,7 @@ namespace Pyramid
 {
     class IShader;
     class Mesh;
+    class MeshCache;
 }
 
 class BasicGame final : public Pyramid::Game
@@ -25,10 +27,11 @@ protected:
     void onRender() override;
 
 private:
-    std::shared_ptr<Pyramid::Mesh> CreateColoredCube(float size) const;
+    std::shared_ptr<Pyramid::Mesh> CreateColoredCube(float size);
     bool SetupScene();
     void UpdateCamera(float deltaTime);
 
+    std::unique_ptr<Pyramid::MeshCache> m_meshCache;
     std::unique_ptr<Pyramid::Renderer::RenderSystem> m_renderSystem;
     std::shared_ptr<Pyramid::Scene> m_scene;
     std::unique_ptr<Pyramid::Camera> m_camera;

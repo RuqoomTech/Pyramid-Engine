@@ -62,6 +62,7 @@ Primary headers:
 - `Pyramid/Graphics/Texture.hpp`
 - `Pyramid/Graphics/Geometry/Vertex.hpp`
 - `Pyramid/Graphics/Geometry/Mesh.hpp`
+- `Pyramid/Graphics/Geometry/MeshCache.hpp`
 
 Typical geometry setup:
 
@@ -80,12 +81,18 @@ meshSpec.indexData = indexData;
 meshSpec.indexCount = indexCount;
 meshSpec.topology = Pyramid::PrimitiveTopology::Triangles;
 meshSpec.name = "PlayerMesh";
+meshSpec.assetId = Pyramid::MeshAssetId::FromString("meshes/player");
 
-auto mesh = Pyramid::Mesh::Create(*device, meshSpec);
+Pyramid::MeshCache meshCache(*device);
+auto mesh = meshCache.GetOrCreate(meshSpec);
 renderObject->mesh = mesh;
 ```
 
-`Mesh` owns the created vertex array, vertex buffer, and optional index buffer. Its validated layout, vertex/index counts, primitive topology, and local bounds are immutable after creation. Indexed and non-indexed meshes are supported for points, lines, line strips, triangles, and triangle strips. Creation rejects mismatched byte counts, missing/invalid position semantics, non-finite positions, incompatible topology counts, and out-of-range indices.
+`Mesh` owns the created vertex array, vertex buffer, and optional index buffer. Its validated layout, vertex/index counts, primitive topology, identifiers, and local bounds are immutable after creation. Indexed and non-indexed meshes are supported for points, lines, line strips, triangles, and triangle strips. Creation rejects mismatched byte counts, missing/invalid position semantics, non-finite positions, incompatible topology counts, and out-of-range indices.
+
+`MeshAssetId::FromString()` creates a deterministic 128-bit identifier from a stable caller-owned name such as an asset path. If `MeshSpecification::assetId` is left invalid, `Mesh::CalculateContentId()` derives the asset identifier from the exact geometry bytes and immutable draw metadata. Debug names are excluded, so renaming a mesh does not create another GPU upload.
+
+`MeshCache` is bound to one graphics device and owns one strong reference per unique content fingerprint. Requests through different stable IDs share the same resident mesh when their geometry is identical. Reusing a resident explicit ID for different geometry fails rather than silently returning the wrong resource. `Find()` resolves either a stable alias or the content ID. `Evict()` removes the mesh and all aliases from the cache while existing external `shared_ptr` owners remain valid; `CollectUnused()` removes resources owned only by the cache, and `Clear()` removes all cache ownership. `GetStats()` reports residency, bytes, hits, misses, conflicts, failures, creations, and evictions. Destroy the cache before its graphics device/context and call it from the graphics thread. Direct `Mesh::Create()` remains available for intentionally uncached one-off geometry.
 
 ### Textures
 

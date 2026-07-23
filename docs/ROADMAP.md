@@ -13,7 +13,7 @@ The current `0.6.0-pre-alpha` baseline includes:
 - strict required window operations with Win32 implementations;
 - relocatable install/export package and external-consumer test;
 - Windows Debug/Release CI for build, CTest, install, and package consumption;
-- 20 registered tests, including engine-owned mesh resources, immutable geometry bounds, real PNG/JPEG decoding, transactional texture loading, OpenGL diagnostics, window events, camera resize/frustum behavior, framebuffer resize, scene-hierarchy transforms, incremental octree synchronization, bounds-accurate spatial queries, bounds-aware nearest-neighbor queries, transactional octree configuration, and automatic octree compaction/health metrics;
+- 21 registered tests, including engine-owned mesh resources, immutable geometry bounds, real PNG/JPEG decoding, transactional texture loading, OpenGL diagnostics, window events, camera resize/frustum behavior, framebuffer resize, scene-hierarchy transforms, incremental octree synchronization, bounds-accurate spatial queries, bounds-aware nearest-neighbor queries, transactional octree configuration, and automatic octree compaction/health metrics;
 - corrected standards-invalid PNG, zlib, and JPEG test fixtures;
 - public texture convenience definitions and explicit depth-target failure;
 - definitions for scene events, box queries, visibility statistics, spatial test scenes, and octree operations;
@@ -65,7 +65,8 @@ The current `0.6.0-pre-alpha` baseline includes:
 - [x] Extract normalized camera frustum planes and use transformed object bounds for scene/octree visibility.
 - Replace placeholder occlusion culling with a supported technique or remove the setting.
 - [x] Introduce an engine-owned mesh resource with validated vertex/index ownership, layout, topology, draw count, and immutable local bounds.
-- Integrate mesh creation with the future asset importer and resource cache; manual `RenderObject` bounds overrides and the unit-cube fallback remain supported.
+- [x] Add stable mesh identifiers and a graphics-device-bound resource cache that shares exact geometry across aliases; manual `RenderObject` bounds overrides and the unit-cube fallback remain supported.
+- Integrate cached mesh specifications with the future asset importer.
 - [x] Add focused octree synchronization tests for moving, inserted, removed, and unchanged objects.
 - [x] Add focused octree tests for point, ray, exact box/sphere intersections, root-overflow objects, and linear/octree parity.
 - [x] Use full object bounds and branch pruning for nearest-object and K-nearest queries.
@@ -77,7 +78,7 @@ The current `0.6.0-pre-alpha` baseline includes:
 
 Target outcome: a trustworthy rendering SDK rather than a larger feature list.
 
-- Stable resource ownership and teardown order; mesh geometry ownership is centralized, while shader/texture caching remains pending.
+- Stable resource ownership and teardown order; mesh geometry ownership and content-deduplicating cache residency are implemented, while shader/texture caching remains pending.
 - Resize-safe camera and render targets.
 - Shader and texture caching.
 - Accurate frame statistics and GPU timings.

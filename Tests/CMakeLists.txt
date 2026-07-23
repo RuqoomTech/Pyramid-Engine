@@ -77,3 +77,8 @@ add_executable(MeshResourceTests MeshResourceTests.cpp)
 target_link_libraries(MeshResourceTests PRIVATE Pyramid::Engine)
 set_target_properties(MeshResourceTests PROPERTIES FOLDER "Tests/Graphics")
 add_test(NAME Graphics.MeshResource COMMAND $<TARGET_FILE:MeshResourceTests>)
+
+add_executable(MeshCacheTests MeshCacheTests.cpp)
+target_link_libraries(MeshCacheTests PRIVATE Pyramid::Engine)
+set_target_properties(MeshCacheTests PROPERTIES FOLDER "Tests/Graphics")
+add_test(NAME Graphics.MeshCache COMMAND $<TARGET_FILE:MeshCacheTests>)
