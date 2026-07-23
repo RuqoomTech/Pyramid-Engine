@@ -533,44 +533,7 @@ namespace Pyramid
 
         void RenderSystem::BindMaterial(CommandBuffer& cmdBuffer, const Material& material)
         {
-            // Bind shader
-            if (material.shader) {
-                cmdBuffer.SetShader(material.shader.get());
-            }
-
-            // Bind textures to their respective slots
-            if (material.albedoTexture) {
-                cmdBuffer.SetTexture(material.albedoTexture.get(), 0); // Albedo at slot 0
-            } else {
-                cmdBuffer.SetTexture(static_cast<ITexture2D*>(nullptr), 0);
-            }
-
-            if (material.normalTexture) {
-                cmdBuffer.SetTexture(material.normalTexture.get(), 1); // Normal at slot 1
-            } else {
-                cmdBuffer.SetTexture(static_cast<ITexture2D*>(nullptr), 1);
-            }
-
-            if (material.metallicRoughnessTexture) {
-                cmdBuffer.SetTexture(material.metallicRoughnessTexture.get(), 2); // MetallicRoughness at slot 2
-            } else {
-                cmdBuffer.SetTexture(static_cast<ITexture2D*>(nullptr), 2);
-            }
-
-            if (material.aoTexture) {
-                cmdBuffer.SetTexture(material.aoTexture.get(), 3); // AO at slot 3
-            } else {
-                cmdBuffer.SetTexture(static_cast<ITexture2D*>(nullptr), 3);
-            }
-
-            if (material.emissiveTexture) {
-                cmdBuffer.SetTexture(material.emissiveTexture.get(), 4); // Emissive at slot 4
-            } else {
-                cmdBuffer.SetTexture(static_cast<ITexture2D*>(nullptr), 4);
-            }
-
-            // Material properties can be set as shader uniforms if needed
-            // This will be handled by the render pass when setting per-material uniforms
+            cmdBuffer.SetMaterial(&material);
         }
 
     } // namespace Renderer

@@ -4,6 +4,14 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 
 ## [Unreleased]
 
+### Engine-owned material resources
+
+- Added deterministic 128-bit `MaterialAssetId` values from caller-owned stable names or immutable shader, texture, uniform, and render-state content.
+- Added immutable `Material` resources that own one graphics `ShaderProgram`, sorted `TextureResource` bindings, typed scalar/vector/matrix uniforms, and backend-independent blend/depth/cull/polygon state.
+- Added command-buffer material and uniform commands so static material values, texture bindings, state, and dynamic per-draw matrices are applied in execution order.
+- Replaced the ad-hoc `Renderer::Material` value struct with `RenderObject::material` ownership and migrated forward/deferred rendering plus both graphical examples.
+- Added `Graphics.MaterialResource` coverage for deterministic identity, order-independent content hashing, validation, state/texture/uniform application, and dynamic command-buffer uniforms.
+
 ### Stable texture identifiers and resource caching
 
 - Added deterministic 128-bit `TextureAssetId` values from caller-owned stable names or exact decoded pixels plus immutable texture, sampler, mip, and color-space state.

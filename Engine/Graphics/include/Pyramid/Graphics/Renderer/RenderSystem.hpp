@@ -3,6 +3,7 @@
 #include <Pyramid/Core/Prerequisites.hpp>
 #include <Pyramid/Math/Math.hpp>
 #include <Pyramid/Graphics/PrimitiveTopology.hpp>
+#include <Pyramid/Graphics/Material/Material.hpp>
 #include <memory>
 #include <vector>
 #include <unordered_map>
@@ -21,6 +22,7 @@ namespace Pyramid
     class Camera;
     class Scene;
     class Mesh;
+    class Material;
 
     namespace Renderer
     {
@@ -55,6 +57,8 @@ namespace Pyramid
             SetUniformBufferPtr,
             SetVertexArray,
             SetVertexArrayPtr,
+            SetMaterialPtr,
+            SetUniform,
             DrawIndexed,
             DrawArrays,
             Dispatch,       // Compute shader dispatch
@@ -78,6 +82,8 @@ namespace Pyramid
                 struct { std::uintptr_t texture; u32 slot; } setTexturePtr;
                 struct { std::uintptr_t buffer; u32 bindingPoint; } setUniformBufferPtr;
                 struct { std::uintptr_t vertexArray; } setVertexArrayPtr;
+                struct { std::uintptr_t material; u32 bindShader; } setMaterialPtr;
+                struct { u32 uniformIndex; } setUniform;
                 struct { u32 count; u32 instanceCount; u32 firstVertex; u32 topology; } draw;
                 struct { u32 x, y, z; } dispatch;
                 struct { f32 r, g, b, a; } clear;
@@ -109,6 +115,15 @@ namespace Pyramid
             void SetTexture(ITexture2D* texture, u32 slot);
             void SetUniformBuffer(IUniformBuffer* buffer, u32 bindingPoint);
             void SetVertexArray(IVertexArray* vertexArray);
+            void SetMaterial(const Material* material, bool bindShader = true);
+            void SetUniform(const std::string& name, const MaterialUniformValue& value);
+            void SetUniformInt(const std::string& name, i32 value);
+            void SetUniformFloat(const std::string& name, f32 value);
+            void SetUniformFloat2(const std::string& name, const Math::Vec2& value);
+            void SetUniformFloat3(const std::string& name, const Math::Vec3& value);
+            void SetUniformFloat4(const std::string& name, const Math::Vec4& value);
+            void SetUniformMat3(const std::string& name, const Math::Mat3& value);
+            void SetUniformMat4(const std::string& name, const Math::Mat4& value);
             void DrawIndexed(
                 u32 indexCount,
                 u32 instanceCount = 1,
@@ -138,6 +153,7 @@ namespace Pyramid
 
         private:
             std::vector<RenderCommand> m_commands;
+            std::vector<MaterialUniform> m_uniformCommands;
             bool m_recording = false;
             std::unordered_map<u32, RenderTarget*> m_renderTargetRegistry;
             std::unordered_map<u32, IShader*> m_shaderRegistry;
@@ -222,26 +238,6 @@ namespace Pyramid
             std::string m_name;
             bool m_enabled = true;
             std::shared_ptr<RenderTarget> m_renderTarget;
-        };
-
-        /**
-         * @brief Material system for PBR rendering
-         */
-        struct Material
-        {
-            Math::Vec4 albedo = Math::Vec4(1.0f, 1.0f, 1.0f, 1.0f);
-            Math::Vec4 emissive = Math::Vec4(0.0f, 0.0f, 0.0f, 0.0f);
-            f32 metallic = 0.0f;
-            f32 roughness = 0.5f;
-            f32 ao = 1.0f;
-            f32 padding = 0.0f;
-
-            std::shared_ptr<IShader> shader;
-            std::shared_ptr<ITexture2D> albedoTexture;
-            std::shared_ptr<ITexture2D> normalTexture;
-            std::shared_ptr<ITexture2D> metallicRoughnessTexture;
-            std::shared_ptr<ITexture2D> aoTexture;
-            std::shared_ptr<ITexture2D> emissiveTexture;
         };
 
         /**

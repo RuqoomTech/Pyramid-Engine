@@ -67,6 +67,7 @@ Primary headers:
 - `Pyramid/Graphics/Geometry/Vertex.hpp`
 - `Pyramid/Graphics/Geometry/Mesh.hpp`
 - `Pyramid/Graphics/Geometry/MeshCache.hpp`
+- `Pyramid/Graphics/Material/Material.hpp`
 
 ### Shader programs
 
@@ -160,6 +161,31 @@ auto albedo = textureCache.GetOrCreate(fileSpec);
 `TextureCache` fingerprints exact decoded pixels plus dimensions, format, mip policy, sampler state, border color, anisotropy request, and explicit linear/sRGB intent. Identical memory or file requests share one GPU upload across aliases. Reusing one stable ID for different resident content fails. `Reload()` is transactional for caller-defined file aliases: a replacement is decoded and uploaded before the alias changes; failure preserves the previous resource. `Evict()`, `CollectUnused()`, `Clear()`, and `GetStats()` provide explicit residency control. Cached `TextureResource` objects are immutable; reacquire the stable alias after a successful reload. Destroy the cache before the graphics device/context.
 
 The direct `ITexture2D` path remains available for intentionally uncached or mutable textures. RGB8/RGBA8 files support JPEG/PNG/TGA/BMP. `IsLoaded()` and `GetLastError()` expose state, RGB rows use safe unpack alignment, sRGB uploads select sRGB internal formats, and mipmapped filters are mapped completely. Cached file specifications can flip decoded rows before upload; direct `TextureSpecification::FlipY` and anisotropic filtering are not yet applied consistently by every path. `CreateDepthTarget` returns `nullptr`; use `OpenGLFramebuffer` for depth attachments.
+
+### Materials
+
+```cpp
+Pyramid::MaterialSpecification materialSpec;
+materialSpec.shader = shader;
+materialSpec.textures = {
+    {"u_AlbedoMap", 0, albedo}
+};
+materialSpec.uniforms = {
+    {"u_AlbedoColor", Pyramid::Math::Vec4(1.0f)},
+    {"u_Metallic", 0.0f},
+    {"u_Roughness", 0.5f}
+};
+materialSpec.renderState.blendMode = Pyramid::MaterialBlendMode::Opaque;
+materialSpec.renderState.depthTest = true;
+materialSpec.renderState.cullMode = Pyramid::MaterialCullMode::Back;
+materialSpec.assetId =
+    Pyramid::MaterialAssetId::FromString("materials/player");
+
+auto material = Pyramid::Material::Create(materialSpec);
+renderObject->material = material;
+```
+
+`Material` is immutable and owns exact references to one graphics `ShaderProgram` and zero or more `TextureResource` objects. Its content identity includes shader and texture content IDs, sampler uniform names and slots, typed uniforms, and blend/depth/cull/polygon state while excluding the debug name. Creation rejects compute shaders, duplicate slots or names, unloaded textures, and non-finite values. `CommandBuffer::SetMaterial()` applies the material in draw order; dynamic object/camera matrices are recorded separately with typed `SetUniform*()` commands so they do not alter material identity.
 
 ## Renderer
 

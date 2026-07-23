@@ -145,6 +145,25 @@ void BasicRendering::onCreate()
     textureSpecification.name = "BasicRendering White";
     m_debugTexture = m_textureCache->GetOrCreate(textureSpecification);
 
+    Pyramid::MaterialSpecification materialSpecification;
+    materialSpecification.shader = m_shader;
+    materialSpecification.textures = {
+        {"u_AlbedoMap", 0, m_debugTexture}};
+    materialSpecification.uniforms = {
+        {"u_BaseColor", Pyramid::Math::Vec4(1.0f)},
+        {"u_EmissiveColor", Pyramid::Math::Vec4(0.0f)},
+        {"u_Metallic", 0.2f},
+        {"u_Roughness", 0.65f}};
+    materialSpecification.assetId =
+        Pyramid::MaterialAssetId::FromString("examples/basic-rendering/material");
+    materialSpecification.name = "BasicRendering Material";
+    m_material = Pyramid::Material::Create(materialSpecification);
+    if (!m_material)
+    {
+        PYRAMID_LOG_ERROR("Failed to create the BasicRendering material");
+        return;
+    }
+
     SetupCamera();
     SetupUniformBuffers();
 
@@ -446,15 +465,15 @@ void BasicRendering::onRender()
 
 void BasicRendering::RenderScene()
 {
-    if (!m_shader || !m_mesh || !m_sceneUBO || !m_materialUBO)
+    if (!m_material || !m_mesh || !m_sceneUBO || !m_materialUBO)
         return;
 
     auto device = GetGraphicsDevice();
     if (!device)
         return;
 
-    // Bind shader and uniform buffers
-    m_shader->Bind();
+    // Apply the engine-owned material and bind uniform buffers.
+    m_material->Apply(*device);
     m_sceneUBO->Bind(0);
     m_materialUBO->Bind(1);
 
@@ -470,8 +489,7 @@ void BasicRendering::RenderScene()
     }
     m_mesh->Unbind();
 
-    // Unbind shader
-    m_shader->Unbind();
+    m_material->GetShader()->Unbind();
 
     // Log debug info periodically
     static float debugTimer = 0.0f;

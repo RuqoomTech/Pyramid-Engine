@@ -57,70 +57,29 @@ namespace Pyramid
                     continue;
                 }
 
-                // Bind shader if available
-                if (object->material.shader)
+                if (!object->material || !object->material->IsValid())
                 {
-                    // Calculate matrices
-                    Math::Mat4 model = object->GetTransformMatrix();
-                    Math::Mat4 viewProj = camera.GetViewProjectionMatrix();
-
-                    // Set per-object uniforms
-                    object->material.shader->SetUniformMat4("u_Model", model.m);
-                    object->material.shader->SetUniformMat4("u_ViewProjection", viewProj.m);
-
-                    // Calculate normal matrix (inverse transpose of upper-left 3x3)
-                    Math::Mat4 normalMatrix = model.Inverse().Transpose();
-                    object->material.shader->SetUniformMat4("u_NormalMatrix", normalMatrix.m);
-
-                    // Set material albedo color
-                    object->material.shader->SetUniformFloat4("u_AlbedoColor",
-                        object->material.albedo.x,
-                        object->material.albedo.y,
-                        object->material.albedo.z,
-                        object->material.albedo.w);
-
-                    cmd.SetShader(object->material.shader.get());
-
-                    // Bind albedo texture if available
-                    if (object->material.albedoTexture)
-                    {
-                        cmd.SetTexture(object->material.albedoTexture.get(), 0);
-                        object->material.shader->SetUniformInt("u_AlbedoMap", 0);
-                        object->material.shader->SetUniformInt("u_HasAlbedoMap", 1);
-                    }
-                    else
-                    {
-                        cmd.SetTexture(static_cast<ITexture2D*>(nullptr), 0);
-                        object->material.shader->SetUniformInt("u_HasAlbedoMap", 0);
-                    }
-
-                    // Bind normal texture if available
-                    if (object->material.normalTexture)
-                    {
-                        cmd.SetTexture(object->material.normalTexture.get(), 1);
-                        object->material.shader->SetUniformInt("u_NormalMap", 1);
-                    }
-                    else
-                    {
-                        cmd.SetTexture(static_cast<ITexture2D*>(nullptr), 1);
-                    }
-
-                    // Bind metallic-roughness texture if available
-                    if (object->material.metallicRoughnessTexture)
-                    {
-                        cmd.SetTexture(object->material.metallicRoughnessTexture.get(), 2);
-                        object->material.shader->SetUniformInt("u_MetallicRoughnessMap", 2);
-                    }
-                    else
-                    {
-                        cmd.SetTexture(static_cast<ITexture2D*>(nullptr), 2);
-                    }
-                }
-                else
-                {
-                    PYRAMID_LOG_WARN("Object '", object->name, "' has no shader, skipping");
+                    PYRAMID_LOG_WARN("Object '", object->name, "' has no valid material, skipping");
                     continue;
                 }
+
+                const Math::Mat4 model = object->GetTransformMatrix();
+                const Math::Mat4 viewProj = camera.GetViewProjectionMatrix();
+                const Math::Mat4 normalMatrix = model.Inverse().Transpose();
+
+                cmd.SetMaterial(object->material.get());
+                cmd.SetUniformInt("u_HasAlbedoMap", 0);
+                cmd.SetUniformInt("u_HasNormalMap", 0);
+                cmd.SetUniformInt("u_HasMetallicRoughnessMap", 0);
+                for (const auto& binding : object->material->GetTextures())
+                {
+                    if (binding.uniformName == "u_AlbedoMap") cmd.SetUniformInt("u_HasAlbedoMap", 1);
+                    else if (binding.uniformName == "u_NormalMap") cmd.SetUniformInt("u_HasNormalMap", 1);
+                    else if (binding.uniformName == "u_MetallicRoughnessMap") cmd.SetUniformInt("u_HasMetallicRoughnessMap", 1);
+                }
+                cmd.SetUniformMat4("u_Model", model);
+                cmd.SetUniformMat4("u_ViewProjection", viewProj);
+                cmd.SetUniformMat4("u_NormalMatrix", normalMatrix);
 
                 cmd.DrawMesh(*object->mesh);
             }

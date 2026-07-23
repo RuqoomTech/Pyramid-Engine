@@ -3,6 +3,7 @@
 #include <Pyramid/Graphics/Shader/ShaderCache.hpp>
 #include <Pyramid/Graphics/Geometry/MeshCache.hpp>
 #include <Pyramid/Graphics/Texture/TextureCache.hpp>
+#include <Pyramid/Graphics/Material/Material.hpp>
 #include <Pyramid/Graphics/Buffer/UniformBuffer.hpp>
 #include <Pyramid/Graphics/Texture.hpp>
 #include <Pyramid/Math/Math.hpp>
@@ -57,6 +58,7 @@ private:
     std::shared_ptr<Pyramid::ShaderProgram> m_shader;
     std::shared_ptr<Pyramid::Mesh> m_mesh;
     std::shared_ptr<Pyramid::TextureResource> m_debugTexture;
+    std::shared_ptr<Pyramid::Material> m_material;
     std::shared_ptr<Pyramid::IUniformBuffer> m_sceneUBO;
     std::shared_ptr<Pyramid::IUniformBuffer> m_materialUBO;
 

@@ -168,103 +168,39 @@ namespace Pyramid
                     continue;
                 }
 
-                // Bind geometry shader
-                if (m_geometryShader)
-                {
-                    // Calculate matrices
-                    Math::Mat4 model = object->GetTransformMatrix();
-                    Math::Mat4 viewProj = camera.GetViewProjectionMatrix();
-
-                    // Set per-object uniforms
-                    m_geometryShader->SetUniformMat4("u_Model", model.m);
-                    m_geometryShader->SetUniformMat4("u_ViewProjection", viewProj.m);
-
-                    // Calculate normal matrix (inverse transpose of upper-left 3x3)
-                    Math::Mat4 normalMatrix = model.Inverse().Transpose();
-                    m_geometryShader->SetUniformMat4("u_NormalMatrix", normalMatrix.m);
-
-                    // Set material properties
-                    m_geometryShader->SetUniformFloat4("u_AlbedoColor",
-                        object->material.albedo.x,
-                        object->material.albedo.y,
-                        object->material.albedo.z,
-                        object->material.albedo.w);
-
-                    m_geometryShader->SetUniformFloat("u_Metallic", object->material.metallic);
-                    m_geometryShader->SetUniformFloat("u_Roughness", object->material.roughness);
-                    m_geometryShader->SetUniformFloat3("u_EmissiveColor",
-                        object->material.emissive.x,
-                        object->material.emissive.y,
-                        object->material.emissive.z);
-                    m_geometryShader->SetUniformFloat("u_EmissiveIntensity", object->material.emissive.w);
-                    cmd.SetShader(m_geometryShader.get());
-
-                    // Bind textures if available
-                    if (object->material.albedoTexture)
-                    {
-                        cmd.SetTexture(object->material.albedoTexture.get(), 0);
-                        m_geometryShader->SetUniformInt("u_AlbedoMap", 0);
-                        m_geometryShader->SetUniformInt("u_HasAlbedoMap", 1);
-                    }
-                    else
-                    {
-                        cmd.SetTexture(static_cast<ITexture2D*>(nullptr), 0);
-                        m_geometryShader->SetUniformInt("u_HasAlbedoMap", 0);
-                    }
-
-                    if (object->material.normalTexture)
-                    {
-                        cmd.SetTexture(object->material.normalTexture.get(), 1);
-                        m_geometryShader->SetUniformInt("u_NormalMap", 1);
-                        m_geometryShader->SetUniformInt("u_HasNormalMap", 1);
-                    }
-                    else
-                    {
-                        cmd.SetTexture(static_cast<ITexture2D*>(nullptr), 1);
-                        m_geometryShader->SetUniformInt("u_HasNormalMap", 0);
-                    }
-
-                    if (object->material.metallicRoughnessTexture)
-                    {
-                        cmd.SetTexture(object->material.metallicRoughnessTexture.get(), 2);
-                        m_geometryShader->SetUniformInt("u_MetallicRoughnessMap", 2);
-                        m_geometryShader->SetUniformInt("u_HasMetallicRoughnessMap", 1);
-                    }
-                    else
-                    {
-                        cmd.SetTexture(static_cast<ITexture2D*>(nullptr), 2);
-                        m_geometryShader->SetUniformInt("u_HasMetallicRoughnessMap", 0);
-                    }
-
-                    if (object->material.aoTexture)
-                    {
-                        cmd.SetTexture(object->material.aoTexture.get(), 3);
-                        m_geometryShader->SetUniformInt("u_AOMap", 3);
-                        m_geometryShader->SetUniformInt("u_HasAOMap", 1);
-                    }
-                    else
-                    {
-                        cmd.SetTexture(static_cast<ITexture2D*>(nullptr), 3);
-                        m_geometryShader->SetUniformInt("u_HasAOMap", 0);
-                    }
-
-                    if (object->material.emissiveTexture)
-                    {
-                        cmd.SetTexture(object->material.emissiveTexture.get(), 4);
-                        m_geometryShader->SetUniformInt("u_EmissiveMap", 4);
-                        m_geometryShader->SetUniformInt("u_HasEmissiveMap", 1);
-                    }
-                    else
-                    {
-                        cmd.SetTexture(static_cast<ITexture2D*>(nullptr), 4);
-                        m_geometryShader->SetUniformInt("u_HasEmissiveMap", 0);
-                    }
-                }
-                else
+                if (!m_geometryShader)
                 {
                     PYRAMID_LOG_WARN("Geometry shader not available");
                     continue;
                 }
+                if (!object->material || !object->material->IsValid())
+                {
+                    PYRAMID_LOG_WARN("Object '", object->name, "' has no valid material, skipping");
+                    continue;
+                }
+
+                const Math::Mat4 model = object->GetTransformMatrix();
+                const Math::Mat4 viewProj = camera.GetViewProjectionMatrix();
+                const Math::Mat4 normalMatrix = model.Inverse().Transpose();
+
+                cmd.SetShader(m_geometryShader.get());
+                cmd.SetUniformInt("u_HasAlbedoMap", 0);
+                cmd.SetUniformInt("u_HasNormalMap", 0);
+                cmd.SetUniformInt("u_HasMetallicRoughnessMap", 0);
+                cmd.SetUniformInt("u_HasAOMap", 0);
+                cmd.SetUniformInt("u_HasEmissiveMap", 0);
+                cmd.SetMaterial(object->material.get(), false);
+                for (const auto& binding : object->material->GetTextures())
+                {
+                    if (binding.uniformName == "u_AlbedoMap") cmd.SetUniformInt("u_HasAlbedoMap", 1);
+                    else if (binding.uniformName == "u_NormalMap") cmd.SetUniformInt("u_HasNormalMap", 1);
+                    else if (binding.uniformName == "u_MetallicRoughnessMap") cmd.SetUniformInt("u_HasMetallicRoughnessMap", 1);
+                    else if (binding.uniformName == "u_AOMap") cmd.SetUniformInt("u_HasAOMap", 1);
+                    else if (binding.uniformName == "u_EmissiveMap") cmd.SetUniformInt("u_HasEmissiveMap", 1);
+                }
+                cmd.SetUniformMat4("u_Model", model);
+                cmd.SetUniformMat4("u_ViewProjection", viewProj);
+                cmd.SetUniformMat4("u_NormalMatrix", normalMatrix);
 
                 cmd.DrawMesh(*object->mesh);
             }

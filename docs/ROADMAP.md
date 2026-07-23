@@ -13,7 +13,7 @@ The current `0.6.0-pre-alpha` baseline includes:
 - strict required window operations with Win32 implementations;
 - relocatable install/export package and external-consumer test;
 - Windows Debug/Release CI for build, CTest, install, and package consumption;
-- 22 registered tests, including engine-owned mesh resources, immutable geometry bounds, real PNG/JPEG decoding, transactional texture loading, OpenGL diagnostics, window events, camera resize/frustum behavior, framebuffer resize, scene-hierarchy transforms, incremental octree synchronization, bounds-accurate spatial queries, bounds-aware nearest-neighbor queries, transactional octree configuration, and automatic octree compaction/health metrics, stable shader identifiers, compile-once shader reuse, and transactional shader replacement;
+- 24 registered tests, including engine-owned mesh resources, immutable geometry bounds, real PNG/JPEG decoding, transactional texture loading, OpenGL diagnostics, window events, camera resize/frustum behavior, framebuffer resize, scene-hierarchy transforms, incremental octree synchronization, bounds-accurate spatial queries, bounds-aware nearest-neighbor queries, transactional octree configuration, and automatic octree compaction/health metrics, stable shader identifiers, compile-once shader reuse, and transactional shader replacement;
 - corrected standards-invalid PNG, zlib, and JPEG test fixtures;
 - public texture convenience definitions and explicit depth-target failure;
 - definitions for scene events, box queries, visibility statistics, spatial test scenes, and octree operations;
@@ -78,7 +78,7 @@ The current `0.6.0-pre-alpha` baseline includes:
 
 Target outcome: a trustworthy rendering SDK rather than a larger feature list.
 
-- Stable resource ownership and teardown order; mesh, shader-program, and immutable sampled-texture caches now provide content deduplication, aliases, transactional replacement, and explicit residency control.
+- Stable resource ownership and teardown order; mesh, shader-program, immutable sampled-texture, and material resources now provide deterministic content identity, explicit ownership, and ordered command application.
 - Resize-safe camera and render targets.
 - [x] Shader-program caching with stable source identifiers and transactional replacement.
 - [x] Texture caching with stable identifiers, explicit color-space identity, transactional file reload, eviction, and residency statistics.
@@ -91,7 +91,8 @@ Target outcome: a trustworthy rendering SDK rather than a larger feature list.
 ## P2 — scene and asset foundation
 
 - Stable resource handles with generation checks.
-- Mesh/material asset import and caching built on the engine-owned `Mesh` resource.
+- [x] Add an engine-owned immutable material resource for shader/texture references, typed uniforms, and fixed render state.
+- Mesh/material asset import and caching built on the engine-owned `Mesh` and `Material` resources.
 - Shader preprocessing, dependency tracking, and reload.
 - Scene serialization with versioning and validation.
 - Asset packaging and path abstraction independent of the source checkout.

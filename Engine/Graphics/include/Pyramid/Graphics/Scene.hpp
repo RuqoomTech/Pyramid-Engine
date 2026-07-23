@@ -3,6 +3,7 @@
 #include <Pyramid/Math/Math.hpp>
 #include <Pyramid/Core/Prerequisites.hpp>
 #include <Pyramid/Graphics/Renderer/RenderSystem.hpp>
+#include <Pyramid/Graphics/Material/Material.hpp>
 #include <vector>
 #include <memory>
 #include <string>
@@ -31,7 +32,7 @@ namespace Pyramid
 
         // Rendering data
         std::shared_ptr<Mesh> mesh;
-        Renderer::Material material;
+        std::shared_ptr<Material> material;
 
         // Fallback/manual local-space bounds. Automatic mode uses immutable mesh bounds.
         Math::Vec3 localBoundsMin = Math::Vec3(-0.5f);

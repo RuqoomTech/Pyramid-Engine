@@ -13,6 +13,7 @@
 #include <Pyramid/Graphics/Shader/ShaderProgram.hpp>
 #include <Pyramid/Graphics/Shader/ShaderCache.hpp>
 #include <Pyramid/Graphics/Renderer/RenderSystem.hpp>
+#include <Pyramid/Graphics/Material/Material.hpp>
 
 #include <memory>
 #include <string>
@@ -195,6 +196,21 @@ namespace
         &Pyramid::ShaderCache::Clear;
     volatile decltype(&Pyramid::ShaderCache::GetStats) g_getShaderCacheStats =
         &Pyramid::ShaderCache::GetStats;
+    using MaterialAssetIdFromString = Pyramid::MaterialAssetId (*)(std::string_view);
+    volatile MaterialAssetIdFromString g_materialAssetIdFromString =
+        static_cast<MaterialAssetIdFromString>(&Pyramid::MaterialAssetId::FromString);
+    volatile decltype(&Pyramid::MaterialAssetId::ToString) g_materialAssetIdToString =
+        &Pyramid::MaterialAssetId::ToString;
+    volatile decltype(&Pyramid::Material::CalculateContentId) g_calculateMaterialContentId =
+        &Pyramid::Material::CalculateContentId;
+    volatile decltype(&Pyramid::Material::Create) g_createMaterial =
+        &Pyramid::Material::Create;
+    volatile decltype(&Pyramid::Material::Apply) g_applyMaterial =
+        &Pyramid::Material::Apply;
+    volatile decltype(&Pyramid::Renderer::CommandBuffer::SetMaterial) g_setMaterial =
+        &Pyramid::Renderer::CommandBuffer::SetMaterial;
+    volatile decltype(&Pyramid::Renderer::CommandBuffer::SetUniformMat4) g_setCommandUniformMat4 =
+        &Pyramid::Renderer::CommandBuffer::SetUniformMat4;
     volatile decltype(&Pyramid::Renderer::CommandBuffer::DrawMesh) g_drawMesh =
         &Pyramid::Renderer::CommandBuffer::DrawMesh;
     volatile decltype(&Pyramid::OpenGLFramebuffer::Resize) g_resizeFramebuffer =
@@ -297,6 +313,13 @@ int main()
                    g_collectUnusedShaders &&
                    g_clearShaderCache &&
                    g_getShaderCacheStats &&
+                   g_materialAssetIdFromString &&
+                   g_materialAssetIdToString &&
+                   g_calculateMaterialContentId &&
+                   g_createMaterial &&
+                   g_applyMaterial &&
+                   g_setMaterial &&
+                   g_setCommandUniformMat4 &&
                    g_drawMesh &&
                    g_resizeFramebuffer &&
                    g_resizeRenderTarget &&

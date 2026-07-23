@@ -8,6 +8,8 @@
 #include <Pyramid/Graphics/Texture.hpp>
 #include <Pyramid/Util/Log.hpp>
 
+#include <type_traits>
+
 namespace Pyramid
 {
     namespace Renderer
@@ -16,6 +18,7 @@ namespace Pyramid
         CommandBuffer::CommandBuffer()
         {
             m_commands.reserve(1024); // Pre-allocate for performance
+            m_uniformCommands.reserve(256);
         }
 
         CommandBuffer::~CommandBuffer() = default;
@@ -24,6 +27,7 @@ namespace Pyramid
         {
             m_recording = true;
             m_commands.clear();
+            m_uniformCommands.clear();
         }
 
         void CommandBuffer::End()
@@ -34,6 +38,7 @@ namespace Pyramid
         void CommandBuffer::Reset()
         {
             m_commands.clear();
+            m_uniformCommands.clear();
             m_recording = false;
         }
 
@@ -139,6 +144,65 @@ namespace Pyramid
             cmd.type = RenderCommandType::SetVertexArrayPtr;
             cmd.data.setVertexArrayPtr.vertexArray = reinterpret_cast<std::uintptr_t>(vertexArray);
             m_commands.push_back(cmd);
+        }
+
+        void CommandBuffer::SetMaterial(const Material* material, bool bindShader)
+        {
+            if (!m_recording || !material || !material->IsValid()) return;
+
+            RenderCommand cmd{};
+            cmd.type = RenderCommandType::SetMaterialPtr;
+            cmd.data.setMaterialPtr.material = reinterpret_cast<std::uintptr_t>(material);
+            cmd.data.setMaterialPtr.bindShader = bindShader ? 1u : 0u;
+            m_commands.push_back(cmd);
+        }
+
+        void CommandBuffer::SetUniform(
+            const std::string& name,
+            const MaterialUniformValue& value)
+        {
+            if (!m_recording || name.empty()) return;
+            const u32 index = static_cast<u32>(m_uniformCommands.size());
+            m_uniformCommands.push_back(MaterialUniform{name, value});
+            RenderCommand cmd{};
+            cmd.type = RenderCommandType::SetUniform;
+            cmd.data.setUniform.uniformIndex = index;
+            m_commands.push_back(cmd);
+        }
+
+        void CommandBuffer::SetUniformInt(const std::string& name, i32 value)
+        {
+            SetUniform(name, value);
+        }
+
+        void CommandBuffer::SetUniformFloat(const std::string& name, f32 value)
+        {
+            SetUniform(name, value);
+        }
+
+        void CommandBuffer::SetUniformFloat2(const std::string& name, const Math::Vec2& value)
+        {
+            SetUniform(name, value);
+        }
+
+        void CommandBuffer::SetUniformFloat3(const std::string& name, const Math::Vec3& value)
+        {
+            SetUniform(name, value);
+        }
+
+        void CommandBuffer::SetUniformFloat4(const std::string& name, const Math::Vec4& value)
+        {
+            SetUniform(name, value);
+        }
+
+        void CommandBuffer::SetUniformMat3(const std::string& name, const Math::Mat3& value)
+        {
+            SetUniform(name, value);
+        }
+
+        void CommandBuffer::SetUniformMat4(const std::string& name, const Math::Mat4& value)
+        {
+            SetUniform(name, value);
         }
 
         void CommandBuffer::DrawIndexed(
@@ -264,6 +328,24 @@ namespace Pyramid
             m_vertexArrayRegistry[id] = vertexArray;
         }
 
+        namespace
+        {
+            void ApplyRecordedUniform(IShader& shader, const MaterialUniform& uniform)
+            {
+                std::visit([&](const auto& value)
+                {
+                    using T = std::decay_t<decltype(value)>;
+                    if constexpr (std::is_same_v<T, i32>) shader.SetUniformInt(uniform.name, value);
+                    else if constexpr (std::is_same_v<T, f32>) shader.SetUniformFloat(uniform.name, value);
+                    else if constexpr (std::is_same_v<T, Math::Vec2>) shader.SetUniformFloat2(uniform.name, value.x, value.y);
+                    else if constexpr (std::is_same_v<T, Math::Vec3>) shader.SetUniformFloat3(uniform.name, value.x, value.y, value.z);
+                    else if constexpr (std::is_same_v<T, Math::Vec4>) shader.SetUniformFloat4(uniform.name, value.x, value.y, value.z, value.w);
+                    else if constexpr (std::is_same_v<T, Math::Mat3>) shader.SetUniformMat3(uniform.name, value.m);
+                    else if constexpr (std::is_same_v<T, Math::Mat4>) shader.SetUniformMat4(uniform.name, value.m);
+                }, uniform.value);
+            }
+        }
+
         void CommandBuffer::Execute(IGraphicsDevice* device)
         {
             if (!device) {
@@ -271,6 +353,7 @@ namespace Pyramid
                 return;
             }
 
+            IShader* activeShader = nullptr;
             for (const auto& cmd : m_commands) {
                 switch (cmd.type) {
                     case RenderCommandType::SetRenderTarget: {
@@ -303,7 +386,8 @@ namespace Pyramid
                         auto shaderIt = m_shaderRegistry.find(cmd.data.setShader.shaderId);
                         if (shaderIt != m_shaderRegistry.end())
                         {
-                            device->BindShader(shaderIt->second);
+                            activeShader = shaderIt->second;
+                            device->BindShader(activeShader);
                         }
                         else
                         {
@@ -313,7 +397,24 @@ namespace Pyramid
                     }
 
                     case RenderCommandType::SetShaderPtr:
-                        device->BindShader(reinterpret_cast<IShader*>(cmd.data.setShaderPtr.shader));
+                        activeShader = reinterpret_cast<IShader*>(cmd.data.setShaderPtr.shader);
+                        device->BindShader(activeShader);
+                        break;
+
+                    case RenderCommandType::SetMaterialPtr: {
+                        const auto* material = reinterpret_cast<const Material*>(cmd.data.setMaterialPtr.material);
+                        if (material)
+                        {
+                            const bool bindShader = cmd.data.setMaterialPtr.bindShader != 0;
+                            material->Apply(*device, bindShader, bindShader ? nullptr : activeShader);
+                            if (bindShader) activeShader = material->GetShader().get();
+                        }
+                        break;
+                    }
+
+                    case RenderCommandType::SetUniform:
+                        if (activeShader && cmd.data.setUniform.uniformIndex < m_uniformCommands.size())
+                            ApplyRecordedUniform(*activeShader, m_uniformCommands[cmd.data.setUniform.uniformIndex]);
                         break;
 
                     case RenderCommandType::SetTexture: {

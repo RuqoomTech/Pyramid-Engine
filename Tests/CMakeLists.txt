@@ -92,3 +92,8 @@ add_executable(TextureCacheTests TextureCacheTests.cpp)
 target_link_libraries(TextureCacheTests PRIVATE Pyramid::Engine)
 set_target_properties(TextureCacheTests PROPERTIES FOLDER "Tests/Graphics")
 add_test(NAME Graphics.TextureCache COMMAND $<TARGET_FILE:TextureCacheTests>)
+
+add_executable(MaterialResourceTests MaterialResourceTests.cpp)
+target_link_libraries(MaterialResourceTests PRIVATE Pyramid::Engine)
+set_target_properties(MaterialResourceTests PROPERTIES FOLDER "Tests/Graphics")
+add_test(NAME Graphics.MaterialResource COMMAND $<TARGET_FILE:MaterialResourceTests>)

@@ -247,26 +247,39 @@ namespace Pyramid::Tests
         std::shared_ptr<IInstanceBuffer> CreateInstanceBuffer() override { return nullptr; }
         std::shared_ptr<IShaderStorageBuffer> CreateShaderStorageBuffer() override { return nullptr; }
 
-        void EnableBlend(bool) override {}
-        void SetBlendFunc(u32, u32) override {}
-        void EnableDepthTest(bool) override {}
-        void SetDepthFunc(u32) override {}
+        void EnableBlend(bool enable) override { blendEnabled = enable; }
+        void SetBlendFunc(u32 source, u32 destination) override
+        {
+            blendSource = source;
+            blendDestination = destination;
+        }
+        void EnableDepthTest(bool enable) override { depthTestEnabled = enable; }
+        void SetDepthFunc(u32 function) override { depthFunction = function; }
         void EnableDepthClamp(bool) override {}
-        void EnableCullFace(bool) override {}
-        void SetCullFace(u32) override {}
+        void EnableCullFace(bool enable) override { cullFaceEnabled = enable; }
+        void SetCullFace(u32 mode) override { cullFaceMode = mode; }
         void SetClearColor(f32, f32, f32, f32) override {}
         u32 GetStateChangeCount() const override { return 0; }
         void ResetStateChangeCount() override {}
         std::string GetDeviceInfo() const override { return "TestGraphicsDevice"; }
         bool IsValid() const override { return true; }
         std::string GetLastError() const override { return {}; }
-        void SetWireframeMode(bool) override {}
-        void SetPolygonMode(u32) override {}
+        void SetWireframeMode(bool enable) override { wireframeEnabled = enable; }
+        void SetPolygonMode(u32 mode) override { polygonMode = mode; }
         void BindFramebuffer(IFramebuffer*) override {}
         void BindFramebufferHandle(u32) override {}
-        void BindShader(IShader*) override {}
+        void BindShader(IShader* shader) override
+        {
+            boundShader = shader;
+            if (shader) shader->Bind();
+        }
         void BindVertexArray(IVertexArray* vertexArray) override { boundVertexArray = vertexArray; }
-        void BindTexture(ITexture2D*, u32) override {}
+        void BindTexture(ITexture2D* texture, u32 slot) override
+        {
+            if (slot >= boundTextures.size()) boundTextures.resize(slot + 1, nullptr);
+            boundTextures[slot] = texture;
+            if (texture) texture->Bind(slot);
+        }
         void BindNativeTexture(u32, u32, u32) override {}
         void SetTextureBorderColor(u32, u32, f32, f32, f32, f32) override {}
         void BindUniformBuffer(IUniformBuffer*, u32) override {}
@@ -290,6 +303,17 @@ namespace Pyramid::Tests
         u32 lastFirstVertex = 0;
         PrimitiveTopology lastTopology = PrimitiveTopology::Triangles;
         IVertexArray* boundVertexArray = nullptr;
+        bool blendEnabled = false;
+        u32 blendSource = 0;
+        u32 blendDestination = 0;
+        bool depthTestEnabled = false;
+        u32 depthFunction = 0;
+        bool cullFaceEnabled = false;
+        u32 cullFaceMode = 0;
+        bool wireframeEnabled = false;
+        u32 polygonMode = 0;
+        IShader* boundShader = nullptr;
+        std::vector<ITexture2D*> boundTextures;
         u32 vertexBufferCreations = 0;
         u32 indexBufferCreations = 0;
         u32 vertexArrayCreations = 0;

@@ -5,6 +5,7 @@
 #include <Pyramid/Graphics/Geometry/MeshCache.hpp>
 #include <Pyramid/Graphics/Shader/ShaderCache.hpp>
 #include <Pyramid/Graphics/Texture/TextureCache.hpp>
+#include <Pyramid/Graphics/Material/Material.hpp>
 #include <Pyramid/Graphics/Renderer/RenderSystem.hpp>
 #include <Pyramid/Graphics/Scene.hpp>
 
@@ -18,6 +19,7 @@ namespace Pyramid
     class ShaderProgram;
     class TextureCache;
     class TextureResource;
+    class Material;
 }
 
 class BasicGame final : public Pyramid::Game
@@ -45,6 +47,8 @@ private:
     std::shared_ptr<Pyramid::RenderObject> m_cube;
     std::shared_ptr<Pyramid::ShaderProgram> m_shader;
     std::shared_ptr<Pyramid::TextureResource> m_debugTexture;
+    std::shared_ptr<Pyramid::Material> m_cubeMaterial;
+    std::shared_ptr<Pyramid::Material> m_floorMaterial;
 
     float m_elapsedTime = 0.0f;
 };

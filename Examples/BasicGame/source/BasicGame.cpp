@@ -5,6 +5,7 @@
 #include <Pyramid/Graphics/Geometry/MeshCache.hpp>
 #include <Pyramid/Graphics/GraphicsDevice.hpp>
 #include <Pyramid/Graphics/Shader/Shader.hpp>
+#include <Pyramid/Graphics/Material/Material.hpp>
 #include <Pyramid/Math/Math.hpp>
 #include <Pyramid/Util/Log.hpp>
 
@@ -254,21 +255,41 @@ bool BasicGame::SetupScene()
         return false;
     }
 
+    Pyramid::MaterialSpecification cubeMaterialSpecification;
+    cubeMaterialSpecification.shader = m_shader;
+    cubeMaterialSpecification.uniforms = {
+        {"u_AlbedoColor", Pyramid::Math::Vec4(1.0f, 1.0f, 1.0f, 1.0f)}};
+    cubeMaterialSpecification.assetId =
+        Pyramid::MaterialAssetId::FromString("examples/basic-game/cube-material");
+    cubeMaterialSpecification.name = "BasicGame Cube Material";
+    m_cubeMaterial = Pyramid::Material::Create(cubeMaterialSpecification);
+
+    Pyramid::MaterialSpecification floorMaterialSpecification = cubeMaterialSpecification;
+    floorMaterialSpecification.uniforms = {
+        {"u_AlbedoColor", Pyramid::Math::Vec4(0.35f, 0.42f, 0.55f, 1.0f)}};
+    floorMaterialSpecification.assetId =
+        Pyramid::MaterialAssetId::FromString("examples/basic-game/floor-material");
+    floorMaterialSpecification.name = "BasicGame Floor Material";
+    m_floorMaterial = Pyramid::Material::Create(floorMaterialSpecification);
+
+    if (!m_cubeMaterial || !m_floorMaterial)
+    {
+        return false;
+    }
+
     m_cube = std::make_shared<Pyramid::RenderObject>();
     m_cube->name = "DemoCube";
     m_cube->mesh = cubeGeometry;
     m_cube->position = Pyramid::Math::Vec3::Zero;
     m_cube->scale = Pyramid::Math::Vec3::One;
-    m_cube->material.shader = m_shader;
-    m_cube->material.albedo = Pyramid::Math::Vec4(1.0f, 1.0f, 1.0f, 1.0f);
+    m_cube->material = m_cubeMaterial;
 
     auto floorObject = std::make_shared<Pyramid::RenderObject>();
     floorObject->name = "Floor";
     floorObject->mesh = floorGeometry;
     floorObject->position = Pyramid::Math::Vec3(0.0f, -1.2f, 0.0f);
     floorObject->scale = Pyramid::Math::Vec3(6.0f, 0.15f, 6.0f);
-    floorObject->material.shader = m_shader;
-    floorObject->material.albedo = Pyramid::Math::Vec4(0.35f, 0.42f, 0.55f, 1.0f);
+    floorObject->material = m_floorMaterial;
 
     m_scene->AddRenderObject(m_cube);
     m_scene->AddRenderObject(floorObject);
