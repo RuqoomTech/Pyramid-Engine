@@ -1,8 +1,7 @@
 #include "BasicRendering.hpp"
 #include <Pyramid/Graphics/GraphicsDevice.hpp>
-#include <Pyramid/Graphics/Buffer/VertexBuffer.hpp>
-#include <Pyramid/Graphics/Buffer/IndexBuffer.hpp>
 #include <Pyramid/Graphics/Buffer/BufferLayout.hpp>
+#include <Pyramid/Graphics/Geometry/Mesh.hpp>
 #include <Pyramid/Util/Log.hpp>
 #include <cmath>
 
@@ -80,25 +79,25 @@ const std::string fragmentShaderSrc = R"(
         vec3 normal = normalize(v_Normal);
         vec3 lightDir = normalize(-u_LightDirection.xyz);
         vec3 viewDir = normalize(v_ViewPos - v_WorldPos);
-        
+
         // Basic lighting calculations
         float NdotL = max(dot(normal, lightDir), 0.0);
-        
+
         // Diffuse lighting
         vec3 diffuse = u_LightColor.rgb * NdotL;
-        
+
         // Ambient lighting
         vec3 ambient = u_LightColor.rgb * 0.2;
-        
+
         // Specular lighting (simplified)
         vec3 reflectDir = reflect(-lightDir, normal);
         float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32.0);
         vec3 specular = u_LightColor.rgb * spec * u_Metallic;
-        
+
         // Combine lighting with vertex colors and material properties
         vec3 baseColor = v_Color * u_BaseColor.rgb;
         vec3 finalColor = baseColor * (ambient + diffuse) + specular + u_EmissiveColor.rgb;
-        
+
         FragColor = vec4(finalColor, 1.0);
     }
 )";
@@ -217,27 +216,26 @@ void BasicRendering::CreateGeometry()
         // Bottom face
         20, 21, 22, 22, 23, 20};
 
-    // Create vertex buffer
-    auto vbo = device->CreateVertexBuffer();
-    vbo->SetData(vertices, sizeof(vertices));
-
-    // Create index buffer
-    auto ibo = device->CreateIndexBuffer();
-    ibo->SetData(indices, 36);
-
-    // Create vertex array
-    m_vertexArray = device->CreateVertexArray();
-
-    // Define buffer layout
-    Pyramid::BufferLayout layout = {
+    Pyramid::MeshSpecification specification;
+    specification.vertexData = vertices;
+    specification.vertexDataSize = sizeof(vertices);
+    specification.vertexCount = 24;
+    specification.layout = {
         {Pyramid::ShaderDataType::Float3, "a_Position"},
         {Pyramid::ShaderDataType::Float3, "a_Normal"},
         {Pyramid::ShaderDataType::Float2, "a_TexCoord"},
         {Pyramid::ShaderDataType::Float3, "a_Color"}};
+    specification.indexData = indices;
+    specification.indexCount = 36;
+    specification.topology = Pyramid::PrimitiveTopology::Triangles;
+    specification.name = "BasicRenderingCube";
 
-    // Add buffers to vertex array
-    m_vertexArray->AddVertexBuffer(vbo, layout);
-    m_vertexArray->SetIndexBuffer(ibo);
+    m_mesh = Pyramid::Mesh::Create(*device, specification);
+    if (!m_mesh)
+    {
+        PYRAMID_LOG_ERROR("Failed to create cube mesh");
+        return;
+    }
 
     PYRAMID_LOG_INFO("Geometry created successfully");
 }
@@ -321,6 +319,7 @@ void BasicRendering::onUpdate(float deltaTime)
 
 void BasicRendering::UpdateCamera(float deltaTime)
 {
+    (void)deltaTime;
     if (!m_camera)
         return;
 
@@ -339,6 +338,7 @@ void BasicRendering::UpdateCamera(float deltaTime)
 
 void BasicRendering::UpdateUniformBuffers(float deltaTime)
 {
+    (void)deltaTime;
     if (!m_sceneUBO || !m_materialUBO || !m_camera)
         return;
 
@@ -415,7 +415,7 @@ void BasicRendering::onRender()
 
 void BasicRendering::RenderScene()
 {
-    if (!m_shader || !m_vertexArray || !m_sceneUBO || !m_materialUBO)
+    if (!m_shader || !m_mesh || !m_sceneUBO || !m_materialUBO)
         return;
 
     auto device = GetGraphicsDevice();
@@ -427,10 +427,17 @@ void BasicRendering::RenderScene()
     m_sceneUBO->Bind(0);
     m_materialUBO->Bind(1);
 
-    // Bind vertex array and draw
-    m_vertexArray->Bind();
-    device->DrawIndexed(m_vertexArray->GetIndexBuffer()->GetCount());
-    m_vertexArray->Unbind();
+    // Bind the engine-owned mesh and draw with its immutable metadata.
+    m_mesh->Bind();
+    if (m_mesh->IsIndexed())
+    {
+        device->DrawIndexed(m_mesh->GetIndexCount(), m_mesh->GetTopology());
+    }
+    else
+    {
+        device->DrawArrays(m_mesh->GetVertexCount(), 0, m_mesh->GetTopology());
+    }
+    m_mesh->Unbind();
 
     // Unbind shader
     m_shader->Unbind();

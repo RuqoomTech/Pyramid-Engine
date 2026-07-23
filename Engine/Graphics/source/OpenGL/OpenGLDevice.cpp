@@ -19,6 +19,25 @@ namespace Pyramid
     namespace
     {
         constexpr u32 kMaxTextureSlots = 32;
+
+        GLenum ToOpenGLTopology(PrimitiveTopology topology)
+        {
+            switch (topology)
+            {
+            case PrimitiveTopology::Points:
+                return GL_POINTS;
+            case PrimitiveTopology::Lines:
+                return GL_LINES;
+            case PrimitiveTopology::LineStrip:
+                return GL_LINE_STRIP;
+            case PrimitiveTopology::Triangles:
+                return GL_TRIANGLES;
+            case PrimitiveTopology::TriangleStrip:
+                return GL_TRIANGLE_STRIP;
+            }
+
+            return GL_TRIANGLES;
+        }
     } // namespace
 
 
@@ -115,21 +134,46 @@ namespace Pyramid
         m_window->Present(vsync);
     }
 
-    void OpenGLDevice::DrawIndexed(u32 count)
+    void OpenGLDevice::DrawIndexed(u32 count, PrimitiveTopology topology)
     {
-        glDrawElements(GL_TRIANGLES, count, GL_UNSIGNED_INT, nullptr);
+        glDrawElements(ToOpenGLTopology(topology), count, GL_UNSIGNED_INT, nullptr);
         OpenGLDiagnostics::CheckError("OpenGLDevice::DrawIndexed", &m_lastError, false);
     }
 
-    void OpenGLDevice::DrawIndexedInstanced(u32 indexCount, u32 instanceCount)
+    void OpenGLDevice::DrawIndexedInstanced(
+        u32 indexCount,
+        u32 instanceCount,
+        PrimitiveTopology topology)
     {
-        glDrawElementsInstanced(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, nullptr, instanceCount);
+        glDrawElementsInstanced(
+            ToOpenGLTopology(topology),
+            indexCount,
+            GL_UNSIGNED_INT,
+            nullptr,
+            instanceCount);
         OpenGLDiagnostics::CheckError("OpenGLDevice::DrawIndexedInstanced", &m_lastError, false);
     }
 
-    void OpenGLDevice::DrawArraysInstanced(u32 vertexCount, u32 instanceCount, u32 firstVertex)
+    void OpenGLDevice::DrawArrays(
+        u32 vertexCount,
+        u32 firstVertex,
+        PrimitiveTopology topology)
     {
-        glDrawArraysInstanced(GL_TRIANGLES, firstVertex, vertexCount, instanceCount);
+        glDrawArrays(ToOpenGLTopology(topology), firstVertex, vertexCount);
+        OpenGLDiagnostics::CheckError("OpenGLDevice::DrawArrays", &m_lastError, false);
+    }
+
+    void OpenGLDevice::DrawArraysInstanced(
+        u32 vertexCount,
+        u32 instanceCount,
+        u32 firstVertex,
+        PrimitiveTopology topology)
+    {
+        glDrawArraysInstanced(
+            ToOpenGLTopology(topology),
+            firstVertex,
+            vertexCount,
+            instanceCount);
         OpenGLDiagnostics::CheckError("OpenGLDevice::DrawArraysInstanced", &m_lastError, false);
     }
 

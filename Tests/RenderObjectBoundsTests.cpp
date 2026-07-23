@@ -1,6 +1,6 @@
-#include <Pyramid/Graphics/OpenGL/Buffer/OpenGLVertexArray.hpp>
-#include <Pyramid/Graphics/OpenGL/Buffer/OpenGLVertexBuffer.hpp>
+#include <Pyramid/Graphics/Geometry/Mesh.hpp>
 #include <Pyramid/Graphics/Geometry/MeshBounds.hpp>
+#include "TestGraphicsDevice.hpp"
 #include <Pyramid/Graphics/Scene.hpp>
 
 #include <cmath>
@@ -35,50 +35,6 @@ namespace
         return EXIT_FAILURE;
     }
 
-    Pyramid::u32 g_nextBuffer = 1;
-    Pyramid::u32 g_nextVertexArray = 100;
-
-    void APIENTRY FakeGenBuffers(GLsizei count, GLuint* buffers)
-    {
-        for (GLsizei index = 0; index < count; ++index)
-        {
-            buffers[index] = g_nextBuffer++;
-        }
-    }
-
-    void APIENTRY FakeDeleteBuffers(GLsizei, const GLuint*) {}
-    void APIENTRY FakeBindBuffer(GLenum, GLuint) {}
-    void APIENTRY FakeBufferData(GLenum, GLsizeiptr, const void*, GLenum) {}
-
-    void APIENTRY FakeGenVertexArrays(GLsizei count, GLuint* arrays)
-    {
-        for (GLsizei index = 0; index < count; ++index)
-        {
-            arrays[index] = g_nextVertexArray++;
-        }
-    }
-
-    void APIENTRY FakeDeleteVertexArrays(GLsizei, const GLuint*) {}
-    void APIENTRY FakeBindVertexArray(GLuint) {}
-    void APIENTRY FakeEnableVertexAttribArray(GLuint) {}
-    void APIENTRY FakeVertexAttribPointer(
-        GLuint, GLint, GLenum, GLboolean, GLsizei, const void*) {}
-    void APIENTRY FakeVertexAttribIPointer(
-        GLuint, GLint, GLenum, GLsizei, const void*) {}
-
-    void InstallFakeOpenGL()
-    {
-        glad_glGenBuffers = FakeGenBuffers;
-        glad_glDeleteBuffers = FakeDeleteBuffers;
-        glad_glBindBuffer = FakeBindBuffer;
-        glad_glBufferData = FakeBufferData;
-        glad_glGenVertexArrays = FakeGenVertexArrays;
-        glad_glDeleteVertexArrays = FakeDeleteVertexArrays;
-        glad_glBindVertexArray = FakeBindVertexArray;
-        glad_glEnableVertexAttribArray = FakeEnableVertexAttribArray;
-        glad_glVertexAttribPointer = FakeVertexAttribPointer;
-        glad_glVertexAttribIPointer = FakeVertexAttribIPointer;
-    }
 
 }
 
@@ -189,16 +145,24 @@ int main()
         return Fail("partial vertex data was accepted");
     }
 
-    InstallFakeOpenGL();
-    auto vertexBuffer = std::make_shared<Pyramid::OpenGLVertexBuffer>();
-    auto vertexArray = std::make_shared<Pyramid::OpenGLVertexArray>();
-    vertexBuffer->SetData(
-        vertices3.data(),
-        static_cast<u32>(vertices3.size() * sizeof(Vertex3)));
-    vertexArray->AddVertexBuffer(vertexBuffer, layout3);
+    Pyramid::Tests::TestGraphicsDevice device;
+    Pyramid::MeshSpecification meshSpecification;
+    meshSpecification.vertexData = vertices3.data();
+    meshSpecification.vertexDataSize =
+        static_cast<u32>(vertices3.size() * sizeof(Vertex3));
+    meshSpecification.vertexCount = static_cast<u32>(vertices3.size());
+    meshSpecification.layout = layout3;
+    meshSpecification.topology = Pyramid::PrimitiveTopology::Triangles;
+    meshSpecification.name = "RenderObjectBoundsMesh";
+
+    auto mesh = Pyramid::Mesh::Create(device, meshSpecification);
+    if (!mesh)
+    {
+        return Fail("mesh creation failed");
+    }
 
     Pyramid::RenderObject object;
-    object.vertexArray = vertexArray;
+    object.mesh = mesh;
 
     if (!object.GetLocalBounds(minPoint, maxPoint) ||
         !NearlyEqual(minPoint, Vec3(-2.0f, -1.0f, -5.0f)) ||
@@ -224,27 +188,13 @@ int main()
         return Fail("automatic bounds could not be restored");
     }
 
-    const std::vector<Vertex3> replacementVertices = {
-        {{1, 1, 1, 1}, {-8.0f, -7.0f, -6.0f}},
-        {{1, 1, 1, 1}, {9.0f, 10.0f, 11.0f}},
-    };
-    vertexBuffer->SetData(
-        replacementVertices.data(),
-        static_cast<u32>(replacementVertices.size() * sizeof(Vertex3)));
-    if (!object.GetLocalBounds(minPoint, maxPoint) ||
-        !NearlyEqual(minPoint, Vec3(-8.0f, -7.0f, -6.0f)) ||
-        !NearlyEqual(maxPoint, Vec3(9.0f, 10.0f, 11.0f)))
-    {
-        return Fail("automatic bounds did not reflect updated vertex data");
-    }
-
     object.position = Vec3(5.0f, 0.0f, 0.0f);
     object.scale = Vec3(2.0f, 1.0f, 0.5f);
     object.GetWorldBounds(minPoint, maxPoint);
-    if (!NearlyEqual(minPoint, Vec3(-11.0f, -7.0f, -3.0f)) ||
-        !NearlyEqual(maxPoint, Vec3(23.0f, 10.0f, 5.5f)))
+    if (!NearlyEqual(minPoint, Vec3(1.0f, -1.0f, -2.5f)) ||
+        !NearlyEqual(maxPoint, Vec3(11.0f, 4.0f, 3.5f)))
     {
-        return Fail("world bounds did not use geometry-derived local bounds");
+        return Fail("world bounds did not use immutable mesh bounds");
     }
 
     Pyramid::RenderObject fallback;

@@ -10,7 +10,7 @@
 namespace Pyramid
 {
     // Forward declarations
-    class IVertexArray;
+    class Mesh;
     class ITexture2D;
 
     enum class RenderBoundsMode
@@ -30,10 +30,10 @@ namespace Pyramid
         Math::Vec3 scale = Math::Vec3::One;
 
         // Rendering data
-        std::shared_ptr<IVertexArray> vertexArray;
+        std::shared_ptr<Mesh> mesh;
         Renderer::Material material;
 
-        // Fallback/manual local-space bounds. Automatic mode derives bounds from vertex data.
+        // Fallback/manual local-space bounds. Automatic mode uses immutable mesh bounds.
         Math::Vec3 localBoundsMin = Math::Vec3(-0.5f);
         Math::Vec3 localBoundsMax = Math::Vec3(0.5f);
         RenderBoundsMode boundsMode = RenderBoundsMode::Automatic;

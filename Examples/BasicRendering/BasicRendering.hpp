@@ -1,7 +1,7 @@
 #pragma once
 #include <Pyramid/Core/Game.hpp>
 #include <Pyramid/Graphics/Shader/Shader.hpp>
-#include <Pyramid/Graphics/Buffer/VertexArray.hpp>
+#include <Pyramid/Graphics/Geometry/Mesh.hpp>
 #include <Pyramid/Graphics/Buffer/UniformBuffer.hpp>
 #include <Pyramid/Graphics/Texture.hpp>
 #include <Pyramid/Math/Math.hpp>
@@ -38,37 +38,34 @@ private:
     void CreateGeometry();
     void SetupCamera();
     void SetupUniformBuffers();
-    
+
     // Update methods
     void UpdateCamera(float deltaTime);
     void UpdateUniformBuffers(float deltaTime);
-    
+
     // Rendering methods
     void RenderScene();
-    
+
     // Input handling
     void HandleInput(float deltaTime);
 
     // Core rendering components
     std::shared_ptr<Pyramid::IShader> m_shader;
-    std::shared_ptr<Pyramid::IVertexArray> m_vertexArray;
+    std::shared_ptr<Pyramid::Mesh> m_mesh;
     std::shared_ptr<Pyramid::IUniformBuffer> m_sceneUBO;
     std::shared_ptr<Pyramid::IUniformBuffer> m_materialUBO;
-    
+
     // Camera system
     std::unique_ptr<Pyramid::Camera> m_camera;
-    
+
     // Timing and animation
     float m_time = 0.0f;
-    
+
     // Camera controls
     float m_cameraOrbitRadius = 5.0f;
     float m_cameraOrbitSpeed = 0.5f;
     float m_cameraHeight = 2.0f;
-    
-    // Input state
-    bool m_keys[256] = {false};
-    
+
     // Uniform data structures
     struct SceneUniforms
     {
@@ -81,7 +78,7 @@ private:
         float time;
         float padding[3]; // Ensure 16-byte alignment
     };
-    
+
     struct MaterialUniforms
     {
         Pyramid::Math::Vec4 baseColor;

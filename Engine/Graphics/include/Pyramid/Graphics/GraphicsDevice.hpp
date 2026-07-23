@@ -1,5 +1,6 @@
 #pragma once
 #include <Pyramid/Core/Prerequisites.hpp>
+#include <Pyramid/Graphics/PrimitiveTopology.hpp>
 #include <memory>
 #include <string> // Added for std::string
 
@@ -52,14 +53,19 @@ namespace Pyramid
          * @brief Draw indexed primitives
          * @param count The number of indices to draw
          */
-        virtual void DrawIndexed(u32 count) = 0;
+        virtual void DrawIndexed(
+            u32 count,
+            PrimitiveTopology topology = PrimitiveTopology::Triangles) = 0;
 
         /**
          * @brief Draw indexed primitives with instancing
          * @param indexCount The number of indices to draw per instance
          * @param instanceCount The number of instances to draw
          */
-        virtual void DrawIndexedInstanced(u32 indexCount, u32 instanceCount) = 0;
+        virtual void DrawIndexedInstanced(
+            u32 indexCount,
+            u32 instanceCount,
+            PrimitiveTopology topology = PrimitiveTopology::Triangles) = 0;
 
         /**
          * @brief Draw arrays with instancing
@@ -67,7 +73,16 @@ namespace Pyramid
          * @param instanceCount The number of instances to draw
          * @param firstVertex The first vertex to start drawing from
          */
-        virtual void DrawArraysInstanced(u32 vertexCount, u32 instanceCount, u32 firstVertex = 0) = 0;
+        virtual void DrawArrays(
+            u32 vertexCount,
+            u32 firstVertex = 0,
+            PrimitiveTopology topology = PrimitiveTopology::Triangles) = 0;
+
+        virtual void DrawArraysInstanced(
+            u32 vertexCount,
+            u32 instanceCount,
+            u32 firstVertex = 0,
+            PrimitiveTopology topology = PrimitiveTopology::Triangles) = 0;
 
         /**
          * @brief Set the viewport dimensions

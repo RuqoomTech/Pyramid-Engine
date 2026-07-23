@@ -2,7 +2,7 @@
 
 Priorities are based on technical risk. They are not delivery dates.
 
-## Stabilization completed on July 21, 2026
+## Stabilization completed through July 23, 2026
 
 The current `0.6.0-pre-alpha` baseline includes:
 
@@ -13,7 +13,7 @@ The current `0.6.0-pre-alpha` baseline includes:
 - strict required window operations with Win32 implementations;
 - relocatable install/export package and external-consumer test;
 - Windows Debug/Release CI for build, CTest, install, and package consumption;
-- 19 registered tests, including geometry-derived render bounds, real PNG/JPEG decoding, transactional texture loading, OpenGL diagnostics, window events, camera resize/frustum behavior, framebuffer resize, scene-hierarchy transforms, incremental octree synchronization, bounds-accurate spatial queries, bounds-aware nearest-neighbor queries, transactional octree configuration, and automatic octree compaction/health metrics;
+- 20 registered tests, including engine-owned mesh resources, immutable geometry bounds, real PNG/JPEG decoding, transactional texture loading, OpenGL diagnostics, window events, camera resize/frustum behavior, framebuffer resize, scene-hierarchy transforms, incremental octree synchronization, bounds-accurate spatial queries, bounds-aware nearest-neighbor queries, transactional octree configuration, and automatic octree compaction/health metrics;
 - corrected standards-invalid PNG, zlib, and JPEG test fixtures;
 - public texture convenience definitions and explicit depth-target failure;
 - definitions for scene events, box queries, visibility statistics, spatial test scenes, and octree operations;
@@ -64,7 +64,8 @@ The current `0.6.0-pre-alpha` baseline includes:
 - [x] Implement hierarchy-wide transform dirty propagation and cycle-safe reparenting.
 - [x] Extract normalized camera frustum planes and use transformed object bounds for scene/octree visibility.
 - Replace placeholder occlusion culling with a supported technique or remove the setting.
-- Integrate automatic local bounds with the future asset importer; runtime vertex arrays now derive bounds from CPU-visible position data, with manual overrides and a unit-cube fallback.
+- [x] Introduce an engine-owned mesh resource with validated vertex/index ownership, layout, topology, draw count, and immutable local bounds.
+- Integrate mesh creation with the future asset importer and resource cache; manual `RenderObject` bounds overrides and the unit-cube fallback remain supported.
 - [x] Add focused octree synchronization tests for moving, inserted, removed, and unchanged objects.
 - [x] Add focused octree tests for point, ray, exact box/sphere intersections, root-overflow objects, and linear/octree parity.
 - [x] Use full object bounds and branch pruning for nearest-object and K-nearest queries.
@@ -76,7 +77,7 @@ The current `0.6.0-pre-alpha` baseline includes:
 
 Target outcome: a trustworthy rendering SDK rather than a larger feature list.
 
-- Stable resource ownership and teardown order.
+- Stable resource ownership and teardown order; mesh geometry ownership is centralized, while shader/texture caching remains pending.
 - Resize-safe camera and render targets.
 - Shader and texture caching.
 - Accurate frame statistics and GPU timings.
@@ -88,7 +89,7 @@ Target outcome: a trustworthy rendering SDK rather than a larger feature list.
 ## P2 — scene and asset foundation
 
 - Stable resource handles with generation checks.
-- Mesh/material asset import and caching.
+- Mesh/material asset import and caching built on the engine-owned `Mesh` resource.
 - Shader preprocessing, dependency tracking, and reload.
 - Scene serialization with versioning and validation.
 - Asset packaging and path abstraction independent of the source checkout.

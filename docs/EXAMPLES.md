@@ -11,7 +11,7 @@ Demonstrates:
 - deriving from `Pyramid::Game`;
 - base lifecycle initialization;
 - shader compilation;
-- vertex/index buffer and vertex-array setup;
+- engine-owned indexed mesh creation with validated layout, topology, draw count, and local bounds;
 - texture loading;
 - frame update and rendering;
 - automatic default-viewport updates and active-camera projection resizing;
@@ -39,10 +39,10 @@ Location: `Examples/BasicRendering`
 This is the lower-level reference rendering path. It demonstrates:
 
 - inline GLSL 3.30 shaders;
-- cube geometry with position, normal, texture-coordinate, and color attributes;
+- an engine-owned cube mesh with position, normal, texture-coordinate, and color attributes;
 - scene and material uniform buffers;
 - perspective camera setup registered through `Game::SetActiveCamera()`;
-- indexed rendering and basic lighting.
+- topology-aware indexed rendering and basic lighting.
 
 Run:
 

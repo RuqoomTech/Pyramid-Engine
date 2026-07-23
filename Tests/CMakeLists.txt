@@ -72,3 +72,8 @@ add_executable(RenderObjectBoundsTests RenderObjectBoundsTests.cpp)
 target_link_libraries(RenderObjectBoundsTests PRIVATE Pyramid::Engine)
 set_target_properties(RenderObjectBoundsTests PROPERTIES FOLDER "Tests/Graphics")
 add_test(NAME Graphics.RenderObjectBounds COMMAND $<TARGET_FILE:RenderObjectBoundsTests>)
+
+add_executable(MeshResourceTests MeshResourceTests.cpp)
+target_link_libraries(MeshResourceTests PRIVATE Pyramid::Engine)
+set_target_properties(MeshResourceTests PROPERTIES FOLDER "Tests/Graphics")
+add_test(NAME Graphics.MeshResource COMMAND $<TARGET_FILE:MeshResourceTests>)

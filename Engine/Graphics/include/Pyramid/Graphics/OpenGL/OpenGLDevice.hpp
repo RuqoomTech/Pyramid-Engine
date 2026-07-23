@@ -22,9 +22,22 @@ namespace Pyramid
         void Shutdown() override;
         void Clear(const Color &color) override;
         void Present(bool vsync) override;
-        void DrawIndexed(u32 count) override;
-        void DrawIndexedInstanced(u32 indexCount, u32 instanceCount) override;
-        void DrawArraysInstanced(u32 vertexCount, u32 instanceCount, u32 firstVertex = 0) override;
+        void DrawIndexed(
+            u32 count,
+            PrimitiveTopology topology = PrimitiveTopology::Triangles) override;
+        void DrawIndexedInstanced(
+            u32 indexCount,
+            u32 instanceCount,
+            PrimitiveTopology topology = PrimitiveTopology::Triangles) override;
+        void DrawArrays(
+            u32 vertexCount,
+            u32 firstVertex = 0,
+            PrimitiveTopology topology = PrimitiveTopology::Triangles) override;
+        void DrawArraysInstanced(
+            u32 vertexCount,
+            u32 instanceCount,
+            u32 firstVertex = 0,
+            PrimitiveTopology topology = PrimitiveTopology::Triangles) override;
         void SetViewport(u32 x, u32 y, u32 width, u32 height) override;
 
         // Add factory method implementations

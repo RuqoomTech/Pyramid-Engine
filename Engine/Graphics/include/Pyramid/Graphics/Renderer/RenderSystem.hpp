@@ -2,6 +2,7 @@
 
 #include <Pyramid/Core/Prerequisites.hpp>
 #include <Pyramid/Math/Math.hpp>
+#include <Pyramid/Graphics/PrimitiveTopology.hpp>
 #include <memory>
 #include <vector>
 #include <unordered_map>
@@ -19,6 +20,7 @@ namespace Pyramid
     class OpenGLFramebuffer;
     class Camera;
     class Scene;
+    class Mesh;
 
     namespace Renderer
     {
@@ -54,7 +56,7 @@ namespace Pyramid
             SetVertexArray,
             SetVertexArrayPtr,
             DrawIndexed,
-            DrawInstanced,
+            DrawArrays,
             Dispatch,       // Compute shader dispatch
             ClearTarget
         };
@@ -76,7 +78,7 @@ namespace Pyramid
                 struct { std::uintptr_t texture; u32 slot; } setTexturePtr;
                 struct { std::uintptr_t buffer; u32 bindingPoint; } setUniformBufferPtr;
                 struct { std::uintptr_t vertexArray; } setVertexArrayPtr;
-                struct { u32 indexCount; u32 instanceCount; } draw;
+                struct { u32 count; u32 instanceCount; u32 firstVertex; u32 topology; } draw;
                 struct { u32 x, y, z; } dispatch;
                 struct { f32 r, g, b, a; } clear;
             } data;
@@ -107,7 +109,16 @@ namespace Pyramid
             void SetTexture(ITexture2D* texture, u32 slot);
             void SetUniformBuffer(IUniformBuffer* buffer, u32 bindingPoint);
             void SetVertexArray(IVertexArray* vertexArray);
-            void DrawIndexed(u32 indexCount, u32 instanceCount = 1);
+            void DrawIndexed(
+                u32 indexCount,
+                u32 instanceCount = 1,
+                PrimitiveTopology topology = PrimitiveTopology::Triangles);
+            void DrawArrays(
+                u32 vertexCount,
+                u32 firstVertex = 0,
+                u32 instanceCount = 1,
+                PrimitiveTopology topology = PrimitiveTopology::Triangles);
+            void DrawMesh(const Mesh& mesh, u32 instanceCount = 1);
             void Dispatch(u32 x, u32 y, u32 z);
             void ClearTarget(f32 r, f32 g, f32 b, f32 a);
 
@@ -292,7 +303,7 @@ namespace Pyramid
 
         public:
             void SetupDeferredPipeline();
-            
+
         private:
             void SetupDefaultRenderPasses();
             void UpdateGlobalUniforms(const Camera& camera);
@@ -301,15 +312,15 @@ namespace Pyramid
             IGraphicsDevice* m_device = nullptr;
             std::vector<std::shared_ptr<RenderPass>> m_renderPasses;
             std::unordered_map<u32, std::shared_ptr<RenderTarget>> m_renderTargets;
-            
+
             // Command buffers
             std::unique_ptr<CommandBuffer> m_mainCommandBuffer;
             std::unique_ptr<CommandBuffer> m_shadowCommandBuffer;
-            
+
             // Global uniform buffers
             std::shared_ptr<IUniformBuffer> m_cameraUBO;
             std::shared_ptr<IUniformBuffer> m_lightingUBO;
-            
+
             // Configuration
             bool m_vsyncEnabled = true;
             bool m_hdrEnabled = false;
@@ -317,7 +328,7 @@ namespace Pyramid
             u32 m_msaaSamples = 4;
             u32 m_width = 1280;
             u32 m_height = 720;
-            
+
             // Statistics
             RenderStats m_stats;
             u32 m_nextRenderTargetId = 1;

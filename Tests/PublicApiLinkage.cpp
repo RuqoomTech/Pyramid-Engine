@@ -6,6 +6,7 @@
 #include <Pyramid/Graphics/Camera.hpp>
 #include <Pyramid/Graphics/OpenGL/OpenGLFramebuffer.hpp>
 #include <Pyramid/Graphics/Geometry/MeshBounds.hpp>
+#include <Pyramid/Graphics/Geometry/Mesh.hpp>
 #include <Pyramid/Graphics/Renderer/RenderSystem.hpp>
 
 #include <memory>
@@ -97,6 +98,12 @@ namespace
         &Pyramid::RenderObject::GetWorldBounds;
     volatile decltype(&Pyramid::Geometry::CalculateLocalBounds) g_calculateGeometryBounds =
         &Pyramid::Geometry::CalculateLocalBounds;
+    volatile decltype(&Pyramid::Mesh::Create) g_createMesh = &Pyramid::Mesh::Create;
+    volatile decltype(&Pyramid::Mesh::IsValid) g_isMeshValid = &Pyramid::Mesh::IsValid;
+    volatile decltype(&Pyramid::Mesh::GetLocalBounds) g_getMeshLocalBounds =
+        &Pyramid::Mesh::GetLocalBounds;
+    volatile decltype(&Pyramid::Renderer::CommandBuffer::DrawMesh) g_drawMesh =
+        &Pyramid::Renderer::CommandBuffer::DrawMesh;
     volatile decltype(&Pyramid::OpenGLFramebuffer::Resize) g_resizeFramebuffer =
         &Pyramid::OpenGLFramebuffer::Resize;
     volatile decltype(&Pyramid::Renderer::RenderTarget::Resize) g_resizeRenderTarget =
@@ -158,6 +165,10 @@ int main()
                    g_useAutomaticBounds &&
                    g_getRenderObjectWorldBounds &&
                    g_calculateGeometryBounds &&
+                   g_createMesh &&
+                   g_isMeshValid &&
+                   g_getMeshLocalBounds &&
+                   g_drawMesh &&
                    g_resizeFramebuffer &&
                    g_resizeRenderTarget &&
                    g_resizeRenderSystem &&

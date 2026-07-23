@@ -61,26 +61,31 @@ Primary headers:
 - `Pyramid/Graphics/Shader/Shader.hpp`
 - `Pyramid/Graphics/Texture.hpp`
 - `Pyramid/Graphics/Geometry/Vertex.hpp`
+- `Pyramid/Graphics/Geometry/Mesh.hpp`
 
 Typical geometry setup:
 
 ```cpp
 auto* device = GetGraphicsDevice();
-auto vertices = device->CreateVertexBuffer();
-auto indices = device->CreateIndexBuffer();
-auto array = device->CreateVertexArray();
 
-vertices->SetData(vertexData, vertexBytes);
-indices->SetData(indexData, indexCount);
-
-Pyramid::BufferLayout layout = {
+Pyramid::MeshSpecification meshSpec;
+meshSpec.vertexData = vertexData;
+meshSpec.vertexDataSize = vertexBytes;
+meshSpec.vertexCount = vertexCount;
+meshSpec.layout = {
     {Pyramid::ShaderDataType::Float3, "a_Position"},
     {Pyramid::ShaderDataType::Float4, "a_Color"}
 };
+meshSpec.indexData = indexData;
+meshSpec.indexCount = indexCount;
+meshSpec.topology = Pyramid::PrimitiveTopology::Triangles;
+meshSpec.name = "PlayerMesh";
 
-array->AddVertexBuffer(vertices, layout);
-array->SetIndexBuffer(indices);
+auto mesh = Pyramid::Mesh::Create(*device, meshSpec);
+renderObject->mesh = mesh;
 ```
+
+`Mesh` owns the created vertex array, vertex buffer, and optional index buffer. Its validated layout, vertex/index counts, primitive topology, and local bounds are immutable after creation. Indexed and non-indexed meshes are supported for points, lines, line strips, triangles, and triangle strips. Creation rejects mismatched byte counts, missing/invalid position semantics, non-finite positions, incompatible topology counts, and out-of-range indices.
 
 ### Textures
 
@@ -184,7 +189,7 @@ auto nearest = manager->GetNearestObject(position);
 auto nearestFive = manager->GetKNearestObjects(position, 5);
 ```
 
-`RenderObject` uses `RenderBoundsMode::Automatic` by default. When its vertex array exposes CPU-visible data and a Float2, Float3, or Float4 semantic ending in `position` (such as `a_Position`), `GetLocalBounds()` derives the local AABB from that geometry. `SetLocalBounds()` switches to manual mode; `UseAutomaticBounds()` restores geometry-derived behavior. Missing or invalid geometry falls back to the unit cube. `GetWorldBounds()` transforms all eight corners through translation, normalized rotation, and scale. `Scene`, `SceneManager`, and octree queries use these AABBs; objects spanning octree child boundaries remain at the parent node to avoid false rejection.
+`RenderObject` holds a shared `Mesh` resource and uses its immutable local AABB in `RenderBoundsMode::Automatic`. `SetLocalBounds()` switches to manual mode; `UseAutomaticBounds()` restores mesh-derived behavior. Missing geometry falls back to the unit cube. `GetWorldBounds()` transforms all eight corners through translation, normalized rotation, and scale. `Scene`, `SceneManager`, and octree queries use these AABBs; objects spanning octree child boundaries remain at the parent node to avoid false rejection.
 
 `Octree::Synchronize()` accepts the active scene's current render-object snapshot and incrementally inserts additions, removes stale entries, and relocates only objects whose world AABBs changed. `UpdateIfMoved()` performs the same bounds comparison for one object. `SceneManager::Update()` includes this synchronization when `UpdateFlags::SpatialPartition` is set; the default `UpdateFlags::All` therefore keeps moving objects current each frame without a full rebuild. `SceneStats` reports the most recent inserted, removed, moved, and unchanged counts.
 

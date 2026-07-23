@@ -10,7 +10,7 @@
 namespace Pyramid
 {
     class IShader;
-    class IVertexArray;
+    class Mesh;
 }
 
 class BasicGame final : public Pyramid::Game
@@ -25,7 +25,7 @@ protected:
     void onRender() override;
 
 private:
-    std::shared_ptr<Pyramid::IVertexArray> CreateColoredCube(float size) const;
+    std::shared_ptr<Pyramid::Mesh> CreateColoredCube(float size) const;
     bool SetupScene();
     void UpdateCamera(float deltaTime);
 

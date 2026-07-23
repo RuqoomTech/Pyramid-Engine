@@ -1,7 +1,7 @@
 #include <Pyramid/Graphics/Scene.hpp>
 #include <Pyramid/Graphics/Camera.hpp>
 #include <Pyramid/Graphics/Geometry/Vertex.hpp>
-#include <Pyramid/Graphics/Buffer/VertexArray.hpp>
+#include <Pyramid/Graphics/Geometry/Mesh.hpp>
 #include <algorithm>
 #include <vector>
 #include <cmath>
@@ -38,7 +38,13 @@ namespace Pyramid
 
     bool RenderObject::TryGetGeometryBounds(Math::Vec3 &minPoint, Math::Vec3 &maxPoint) const
     {
-        return vertexArray && vertexArray->TryGetLocalBounds(minPoint, maxPoint);
+        if (!mesh || !mesh->IsValid())
+        {
+            return false;
+        }
+
+        mesh->GetLocalBounds(minPoint, maxPoint);
+        return true;
     }
 
     bool RenderObject::GetLocalBounds(Math::Vec3 &minPoint, Math::Vec3 &maxPoint) const
@@ -514,7 +520,7 @@ namespace Pyramid
             // Create cube geometry
             f32 halfSize = size * 0.5f;
             object->SetLocalBounds(Math::Vec3(-halfSize), Math::Vec3(halfSize));
-            
+
             // Cube vertices (position + color)
             std::vector<Vertex> vertices = {
                 // Front face (red tint)
@@ -522,38 +528,38 @@ namespace Pyramid
                 { halfSize, -halfSize,  halfSize, 1.0f, 0.8f, 0.8f, 1.0f},
                 { halfSize,  halfSize,  halfSize, 1.0f, 0.8f, 0.8f, 1.0f},
                 {-halfSize,  halfSize,  halfSize, 1.0f, 0.8f, 0.8f, 1.0f},
-                
+
                 // Back face (green tint)
                 {-halfSize, -halfSize, -halfSize, 0.8f, 1.0f, 0.8f, 1.0f},
                 { halfSize, -halfSize, -halfSize, 0.8f, 1.0f, 0.8f, 1.0f},
                 { halfSize,  halfSize, -halfSize, 0.8f, 1.0f, 0.8f, 1.0f},
                 {-halfSize,  halfSize, -halfSize, 0.8f, 1.0f, 0.8f, 1.0f},
-                
+
                 // Left face (blue tint)
                 {-halfSize, -halfSize, -halfSize, 0.8f, 0.8f, 1.0f, 1.0f},
                 {-halfSize, -halfSize,  halfSize, 0.8f, 0.8f, 1.0f, 1.0f},
                 {-halfSize,  halfSize,  halfSize, 0.8f, 0.8f, 1.0f, 1.0f},
                 {-halfSize,  halfSize, -halfSize, 0.8f, 0.8f, 1.0f, 1.0f},
-                
+
                 // Right face (yellow tint)
                 { halfSize, -halfSize, -halfSize, 1.0f, 1.0f, 0.8f, 1.0f},
                 { halfSize, -halfSize,  halfSize, 1.0f, 1.0f, 0.8f, 1.0f},
                 { halfSize,  halfSize,  halfSize, 1.0f, 1.0f, 0.8f, 1.0f},
                 { halfSize,  halfSize, -halfSize, 1.0f, 1.0f, 0.8f, 1.0f},
-                
+
                 // Top face (magenta tint)
                 {-halfSize,  halfSize, -halfSize, 1.0f, 0.8f, 1.0f, 1.0f},
                 { halfSize,  halfSize, -halfSize, 1.0f, 0.8f, 1.0f, 1.0f},
                 { halfSize,  halfSize,  halfSize, 1.0f, 0.8f, 1.0f, 1.0f},
                 {-halfSize,  halfSize,  halfSize, 1.0f, 0.8f, 1.0f, 1.0f},
-                
+
                 // Bottom face (cyan tint)
                 {-halfSize, -halfSize, -halfSize, 0.8f, 1.0f, 1.0f, 1.0f},
                 { halfSize, -halfSize, -halfSize, 0.8f, 1.0f, 1.0f, 1.0f},
                 { halfSize, -halfSize,  halfSize, 0.8f, 1.0f, 1.0f, 1.0f},
                 {-halfSize, -halfSize,  halfSize, 0.8f, 1.0f, 1.0f, 1.0f}
             };
-            
+
             // Cube indices
             std::vector<u32> indices = {
                 // Front face
@@ -586,32 +592,32 @@ namespace Pyramid
             // Create sphere geometry using UV sphere algorithm
             segments = (std::max)(segments, 8u); // Minimum 8 segments
             u32 rings = segments / 2;
-            
+
             std::vector<Vertex> vertices;
             std::vector<u32> indices;
-            
+
             // Generate vertices
             for (u32 ring = 0; ring <= rings; ++ring)
             {
                 f32 phi = Math::PI * static_cast<f32>(ring) / static_cast<f32>(rings);
                 f32 y = radius * std::cos(phi);
                 f32 ringRadius = radius * std::sin(phi);
-                
+
                 for (u32 segment = 0; segment <= segments; ++segment)
                 {
                     f32 theta = 2.0f * Math::PI * static_cast<f32>(segment) / static_cast<f32>(segments);
                     f32 x = ringRadius * std::cos(theta);
                     f32 z = ringRadius * std::sin(theta);
-                    
+
                     // Color based on position (creates a nice gradient effect)
                     f32 r = 0.5f + 0.5f * std::sin(theta);
                     f32 g = 0.5f + 0.5f * std::cos(phi);
                     f32 b = 0.5f + 0.5f * std::sin(phi + theta);
-                    
+
                     vertices.emplace_back(x, y, z, r, g, b, 1.0f);
                 }
             }
-            
+
             // Generate indices
             for (u32 ring = 0; ring < rings; ++ring)
             {
@@ -619,19 +625,19 @@ namespace Pyramid
                 {
                     u32 current = ring * (segments + 1) + segment;
                     u32 next = current + segments + 1;
-                    
+
                     // First triangle
                     indices.push_back(current);
                     indices.push_back(next);
                     indices.push_back(current + 1);
-                    
+
                     // Second triangle
                     indices.push_back(current + 1);
                     indices.push_back(next);
                     indices.push_back(next + 1);
                 }
             }
-            
+
             // Store geometry data for later buffer creation
             // TODO: This requires access to graphics device to create actual buffers
 
@@ -649,7 +655,7 @@ namespace Pyramid
             object->SetLocalBounds(
                 Math::Vec3(-halfWidth, 0.0f, -halfHeight),
                 Math::Vec3(halfWidth, 0.0f, halfHeight));
-            
+
             std::vector<Vertex> vertices = {
                 // Plane vertices (white color)
                 {-halfWidth, 0.0f, -halfHeight, 1.0f, 1.0f, 1.0f, 1.0f}, // Bottom-left
@@ -657,13 +663,13 @@ namespace Pyramid
                 { halfWidth, 0.0f,  halfHeight, 1.0f, 1.0f, 1.0f, 1.0f}, // Top-right
                 {-halfWidth, 0.0f,  halfHeight, 1.0f, 1.0f, 1.0f, 1.0f}  // Top-left
             };
-            
+
             std::vector<u32> indices = {
                 // Two triangles to form a quad
                 0, 1, 2,  // First triangle
                 2, 3, 0   // Second triangle
             };
-            
+
             // Store geometry data for later buffer creation
             // TODO: This requires access to graphics device to create actual buffers
 

@@ -1,12 +1,11 @@
 #include <Pyramid/Graphics/Renderer/RenderPasses.hpp>
 #include <Pyramid/Graphics/GraphicsDevice.hpp>
 #include <Pyramid/Graphics/Scene.hpp>
+#include <Pyramid/Graphics/Geometry/Mesh.hpp>
 #include <Pyramid/Graphics/Camera.hpp>
 #include <Pyramid/Graphics/Shader/Shader.hpp>
 #include <Pyramid/Graphics/Texture.hpp>
 #include <Pyramid/Graphics/OpenGL/OpenGLFramebuffer.hpp>
-#include <Pyramid/Graphics/Buffer/VertexArray.hpp>
-#include <Pyramid/Graphics/Buffer/IndexBuffer.hpp>
 #include <Pyramid/Graphics/Renderer/ShaderPathResolver.hpp>
 #include <Pyramid/Util/Log.hpp>
 #include <glad/glad.h>
@@ -23,10 +22,10 @@ namespace Pyramid
             , m_height(height)
         {
             PYRAMID_LOG_INFO("DeferredGeometryPass created at ", width, "x", height);
-            
+
             // Create geometry shader
             m_geometryShader = m_device->CreateShader();
-            
+
             const std::string vertSrc = ShaderPathResolver::LoadTextFile("Engine/Graphics/shaders/deferred_geometry.vert");
             const std::string fragSrc = ShaderPathResolver::LoadTextFile("Engine/Graphics/shaders/deferred_geometry.frag");
 
@@ -45,7 +44,7 @@ namespace Pyramid
                     PYRAMID_LOG_INFO("Deferred geometry shaders compiled successfully");
                 }
             }
-            
+
             // Create G-Buffer
             CreateGBuffer();
         }
@@ -57,7 +56,7 @@ namespace Pyramid
             spec.height = m_height;
             spec.samples = 1; // No MSAA in deferred rendering (can add MSAA resolve later)
             spec.swapChainTarget = false;
-            
+
             // RT0: Albedo (RGB) + Metallic (A) - GL_RGBA8
             FramebufferAttachmentSpec albedoSpec;
             albedoSpec.type = FramebufferAttachmentType::Color;
@@ -68,7 +67,7 @@ namespace Pyramid
             albedoSpec.magFilter = GL_NEAREST;
             albedoSpec.colorAttachmentIndex = 0;
             spec.attachments.push_back(albedoSpec);
-            
+
             // RT1: Normal (RGB) + Roughness (A) - GL_RGBA16F
             FramebufferAttachmentSpec normalSpec;
             normalSpec.type = FramebufferAttachmentType::Color;
@@ -79,7 +78,7 @@ namespace Pyramid
             normalSpec.magFilter = GL_NEAREST;
             normalSpec.colorAttachmentIndex = 1;
             spec.attachments.push_back(normalSpec);
-            
+
             // RT2: WorldPos (RGB) + AO (A) - GL_RGBA16F
             FramebufferAttachmentSpec positionSpec;
             positionSpec.type = FramebufferAttachmentType::Color;
@@ -90,7 +89,7 @@ namespace Pyramid
             positionSpec.magFilter = GL_NEAREST;
             positionSpec.colorAttachmentIndex = 2;
             spec.attachments.push_back(positionSpec);
-            
+
             // RT3: Emissive (RGB) + Flags (A) - GL_RGBA16F
             FramebufferAttachmentSpec emissiveSpec;
             emissiveSpec.type = FramebufferAttachmentType::Color;
@@ -101,7 +100,7 @@ namespace Pyramid
             emissiveSpec.magFilter = GL_NEAREST;
             emissiveSpec.colorAttachmentIndex = 3;
             spec.attachments.push_back(emissiveSpec);
-            
+
             // Depth attachment - Depth24Stencil8
             FramebufferAttachmentSpec depthSpec;
             depthSpec.type = FramebufferAttachmentType::DepthStencil;
@@ -109,7 +108,7 @@ namespace Pyramid
             depthSpec.format = GL_DEPTH_STENCIL;
             depthSpec.dataType = GL_UNSIGNED_INT_24_8;
             spec.attachments.push_back(depthSpec);
-            
+
             auto replacement = std::make_shared<OpenGLFramebuffer>(spec);
             if (!replacement->Initialize())
             {
@@ -124,6 +123,7 @@ namespace Pyramid
 
         void DeferredGeometryPass::Begin(CommandBuffer& cmd)
         {
+            (void)cmd;
             // Bind G-Buffer
             if (m_gBuffer && m_device)
             {
@@ -132,21 +132,21 @@ namespace Pyramid
                 m_device->SetClearColor(0.0f, 0.0f, 0.0f, 0.0f);
                 m_device->ClearBuffers(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
             }
-            
+
             // Enable depth testing
             if (m_device)
             {
                 m_device->EnableDepthTest(true);
                 m_device->SetDepthFunc(GL_LESS);
             }
-            
+
             // Enable back-face culling
             if (m_device)
             {
                 m_device->EnableCullFace(true);
                 m_device->SetCullFace(GL_BACK);
             }
-            
+
             PYRAMID_LOG_DEBUG("DeferredGeometryPass::Begin - G-Buffer bound");
         }
 
@@ -154,51 +154,51 @@ namespace Pyramid
         {
             // Get visible objects from the scene
             auto visibleObjects = scene.GetVisibleObjects(camera);
-            
+
             PYRAMID_LOG_DEBUG("DeferredGeometryPass::Execute - Rendering ", visibleObjects.size(), " objects to G-Buffer");
-            
+
             // Render each visible object to G-Buffer
             for (const auto& object : visibleObjects)
             {
                 if (!object || !object->visible) continue;
-                
+
                 // Skip objects without geometry
-                if (!object->vertexArray) {
-                    PYRAMID_LOG_WARN("Object '", object->name, "' has no vertex array, skipping");
+                if (!object->mesh || !object->mesh->IsValid()) {
+                    PYRAMID_LOG_WARN("Object '", object->name, "' has no valid mesh, skipping");
                     continue;
                 }
-                
+
                 // Bind geometry shader
                 if (m_geometryShader)
                 {
                     // Calculate matrices
                     Math::Mat4 model = object->GetTransformMatrix();
                     Math::Mat4 viewProj = camera.GetViewProjectionMatrix();
-                    
+
                     // Set per-object uniforms
                     m_geometryShader->SetUniformMat4("u_Model", model.m);
                     m_geometryShader->SetUniformMat4("u_ViewProjection", viewProj.m);
-                    
+
                     // Calculate normal matrix (inverse transpose of upper-left 3x3)
                     Math::Mat4 normalMatrix = model.Inverse().Transpose();
                     m_geometryShader->SetUniformMat4("u_NormalMatrix", normalMatrix.m);
-                    
+
                     // Set material properties
-                    m_geometryShader->SetUniformFloat4("u_AlbedoColor", 
-                        object->material.albedo.x, 
-                        object->material.albedo.y, 
-                        object->material.albedo.z, 
+                    m_geometryShader->SetUniformFloat4("u_AlbedoColor",
+                        object->material.albedo.x,
+                        object->material.albedo.y,
+                        object->material.albedo.z,
                         object->material.albedo.w);
-                    
+
                     m_geometryShader->SetUniformFloat("u_Metallic", object->material.metallic);
                     m_geometryShader->SetUniformFloat("u_Roughness", object->material.roughness);
-                    m_geometryShader->SetUniformFloat3("u_EmissiveColor", 
-                        object->material.emissive.x, 
-                        object->material.emissive.y, 
+                    m_geometryShader->SetUniformFloat3("u_EmissiveColor",
+                        object->material.emissive.x,
+                        object->material.emissive.y,
                         object->material.emissive.z);
                     m_geometryShader->SetUniformFloat("u_EmissiveIntensity", object->material.emissive.w);
                     cmd.SetShader(m_geometryShader.get());
-                    
+
                     // Bind textures if available
                     if (object->material.albedoTexture)
                     {
@@ -211,7 +211,7 @@ namespace Pyramid
                         cmd.SetTexture(static_cast<ITexture2D*>(nullptr), 0);
                         m_geometryShader->SetUniformInt("u_HasAlbedoMap", 0);
                     }
-                    
+
                     if (object->material.normalTexture)
                     {
                         cmd.SetTexture(object->material.normalTexture.get(), 1);
@@ -223,7 +223,7 @@ namespace Pyramid
                         cmd.SetTexture(static_cast<ITexture2D*>(nullptr), 1);
                         m_geometryShader->SetUniformInt("u_HasNormalMap", 0);
                     }
-                    
+
                     if (object->material.metallicRoughnessTexture)
                     {
                         cmd.SetTexture(object->material.metallicRoughnessTexture.get(), 2);
@@ -235,7 +235,7 @@ namespace Pyramid
                         cmd.SetTexture(static_cast<ITexture2D*>(nullptr), 2);
                         m_geometryShader->SetUniformInt("u_HasMetallicRoughnessMap", 0);
                     }
-                    
+
                     if (object->material.aoTexture)
                     {
                         cmd.SetTexture(object->material.aoTexture.get(), 3);
@@ -247,7 +247,7 @@ namespace Pyramid
                         cmd.SetTexture(static_cast<ITexture2D*>(nullptr), 3);
                         m_geometryShader->SetUniformInt("u_HasAOMap", 0);
                     }
-                    
+
                     if (object->material.emissiveTexture)
                     {
                         cmd.SetTexture(object->material.emissiveTexture.get(), 4);
@@ -265,21 +265,20 @@ namespace Pyramid
                     PYRAMID_LOG_WARN("Geometry shader not available");
                     continue;
                 }
-                
-                cmd.SetVertexArray(object->vertexArray.get());
-                u32 indexCount = object->vertexArray->GetIndexBuffer()->GetCount();
-                cmd.DrawIndexed(indexCount);
+
+                cmd.DrawMesh(*object->mesh);
             }
         }
 
         void DeferredGeometryPass::End(CommandBuffer& cmd)
         {
+            (void)cmd;
             // Unbind G-Buffer
             if (m_gBuffer && m_device)
             {
                 m_device->BindFramebufferHandle(0);
             }
-            
+
             PYRAMID_LOG_DEBUG("DeferredGeometryPass::End");
         }
 

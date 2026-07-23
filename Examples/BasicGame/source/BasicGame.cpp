@@ -1,10 +1,8 @@
 #include "BasicGame.hpp"
 
 #include <Pyramid/Graphics/Buffer/BufferLayout.hpp>
-#include <Pyramid/Graphics/Buffer/IndexBuffer.hpp>
-#include <Pyramid/Graphics/Buffer/VertexArray.hpp>
-#include <Pyramid/Graphics/Buffer/VertexBuffer.hpp>
 #include <Pyramid/Graphics/Geometry/Vertex.hpp>
+#include <Pyramid/Graphics/Geometry/Mesh.hpp>
 #include <Pyramid/Graphics/GraphicsDevice.hpp>
 #include <Pyramid/Graphics/Shader/Shader.hpp>
 #include <Pyramid/Math/Math.hpp>
@@ -158,7 +156,7 @@ void BasicGame::onRender()
     m_renderSystem->EndFrame();
 }
 
-std::shared_ptr<Pyramid::IVertexArray> BasicGame::CreateColoredCube(float size) const
+std::shared_ptr<Pyramid::Mesh> BasicGame::CreateColoredCube(float size) const
 {
     auto* device = GetGraphicsDevice();
     if (!device)
@@ -187,27 +185,21 @@ std::shared_ptr<Pyramid::IVertexArray> BasicGame::CreateColoredCube(float size) 
         0, 1, 5, 0, 5, 4,
     };
 
-    auto vertexBuffer = device->CreateVertexBuffer();
-    auto indexBuffer = device->CreateIndexBuffer();
-    auto vertexArray = device->CreateVertexArray();
-
-    if (!vertexBuffer || !indexBuffer || !vertexArray)
-    {
-        return nullptr;
-    }
-
-    vertexBuffer->SetData(vertices.data(), static_cast<Pyramid::u32>(vertices.size() * sizeof(Pyramid::Vertex)));
-    indexBuffer->SetData(indices.data(), static_cast<Pyramid::u32>(indices.size()));
-
-    const Pyramid::BufferLayout layout = {
+    Pyramid::MeshSpecification specification;
+    specification.vertexData = vertices.data();
+    specification.vertexDataSize =
+        static_cast<Pyramid::u32>(vertices.size() * sizeof(Pyramid::Vertex));
+    specification.vertexCount = static_cast<Pyramid::u32>(vertices.size());
+    specification.layout = {
         {Pyramid::ShaderDataType::Float3, "a_Position"},
         {Pyramid::ShaderDataType::Float4, "a_Color"},
     };
+    specification.indexData = indices.data();
+    specification.indexCount = static_cast<Pyramid::u32>(indices.size());
+    specification.topology = Pyramid::PrimitiveTopology::Triangles;
+    specification.name = "ColoredCube";
 
-    vertexArray->AddVertexBuffer(vertexBuffer, layout);
-    vertexArray->SetIndexBuffer(indexBuffer);
-
-    return vertexArray;
+    return Pyramid::Mesh::Create(*device, specification);
 }
 
 bool BasicGame::SetupScene()
@@ -225,7 +217,7 @@ bool BasicGame::SetupScene()
 
     m_cube = std::make_shared<Pyramid::RenderObject>();
     m_cube->name = "DemoCube";
-    m_cube->vertexArray = cubeGeometry;
+    m_cube->mesh = cubeGeometry;
     m_cube->position = Pyramid::Math::Vec3::Zero;
     m_cube->scale = Pyramid::Math::Vec3::One;
     m_cube->material.shader = m_shader;
@@ -233,7 +225,7 @@ bool BasicGame::SetupScene()
 
     auto floorObject = std::make_shared<Pyramid::RenderObject>();
     floorObject->name = "Floor";
-    floorObject->vertexArray = cubeGeometry;
+    floorObject->mesh = cubeGeometry;
     floorObject->position = Pyramid::Math::Vec3(0.0f, -1.2f, 0.0f);
     floorObject->scale = Pyramid::Math::Vec3(6.0f, 0.15f, 6.0f);
     floorObject->material.shader = m_shader;

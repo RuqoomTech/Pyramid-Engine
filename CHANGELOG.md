@@ -4,6 +4,14 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 
 ## [Unreleased]
 
+### Engine-owned mesh resources
+
+- Added `Mesh` and `MeshSpecification` as the authoritative geometry resource for vertex/index ownership, layout, draw count, primitive topology, and immutable local bounds.
+- Replaced `RenderObject::vertexArray` with `RenderObject::mesh`; forward, deferred, shadow, and example rendering now submit mesh metadata rather than inspecting raw vertex-array state.
+- Added indexed and non-indexed point/line/triangle topology support to graphics-device and command-buffer draw paths.
+- Added strict mesh validation for vertex byte counts, position semantics, finite bounds, topology counts, and index ranges.
+- Split command-buffer implementation from render-system ownership and added `Graphics.MeshResource` coverage.
+
 ### Geometry-derived render bounds
 
 - Added automatic `RenderObject` local bounds derived from CPU-visible vertex data and position semantics.
