@@ -67,3 +67,8 @@ add_executable(OctreeCompactionTests OctreeCompactionTests.cpp)
 target_link_libraries(OctreeCompactionTests PRIVATE Pyramid::Engine)
 set_target_properties(OctreeCompactionTests PROPERTIES FOLDER "Tests/Graphics")
 add_test(NAME Graphics.OctreeCompaction COMMAND $<TARGET_FILE:OctreeCompactionTests>)
+
+add_executable(RenderObjectBoundsTests RenderObjectBoundsTests.cpp)
+target_link_libraries(RenderObjectBoundsTests PRIVATE Pyramid::Engine)
+set_target_properties(RenderObjectBoundsTests PROPERTIES FOLDER "Tests/Graphics")
+add_test(NAME Graphics.RenderObjectBounds COMMAND $<TARGET_FILE:RenderObjectBoundsTests>)

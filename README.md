@@ -18,7 +18,7 @@ The project is intended for engine development and experimentation. It is not ye
 | Scene | Scene graph, render objects, lights, scene manager, and octree queries |
 | Math | Vectors, matrices, quaternions, geometry helpers, and SIMD-oriented utilities |
 | Images | TGA/BMP subsets, custom non-interlaced PNG, and libjpeg-turbo JPEG decoding |
-| Tests | 18 CTest targets: 5 image/utility tests plus API linkage and focused graphics/platform coverage |
+| Tests | 19 CTest targets: 5 image/utility tests plus API linkage and focused graphics/platform coverage |
 | CI | GCC and Clang, Debug and Release, package install, and external-consumer validation |
 
 ## Implemented

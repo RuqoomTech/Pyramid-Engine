@@ -20,6 +20,7 @@ namespace Pyramid
         void AddVertexBuffer(const std::shared_ptr<IVertexBuffer> &vertexBuffer, const BufferLayout &layout) override; // Changed
         void SetIndexBuffer(const std::shared_ptr<IIndexBuffer> &indexBuffer) override;
         const std::shared_ptr<IIndexBuffer> &GetIndexBuffer() const override { return m_indexBuffer; }
+        bool TryGetLocalBounds(Math::Vec3 &minPoint, Math::Vec3 &maxPoint) const override;
 
         // Instance buffer support
         void AddInstanceBuffer(const std::shared_ptr<IInstanceBuffer> &instanceBuffer, const BufferLayout &layout, u32 startingAttributeIndex) override;

@@ -5,6 +5,7 @@
 #include <Pyramid/Graphics/Scene.hpp>
 #include <Pyramid/Graphics/Camera.hpp>
 #include <Pyramid/Graphics/OpenGL/OpenGLFramebuffer.hpp>
+#include <Pyramid/Graphics/Geometry/MeshBounds.hpp>
 #include <Pyramid/Graphics/Renderer/RenderSystem.hpp>
 
 #include <memory>
@@ -86,8 +87,16 @@ namespace
         &Pyramid::Camera::GetFrustumPlanes;
     volatile decltype(&Pyramid::Camera::IsAABBVisible) g_isCameraAABBVisible =
         &Pyramid::Camera::IsAABBVisible;
+    volatile decltype(&Pyramid::RenderObject::TryGetGeometryBounds) g_tryGetGeometryBounds =
+        &Pyramid::RenderObject::TryGetGeometryBounds;
+    volatile decltype(&Pyramid::RenderObject::GetLocalBounds) g_getRenderObjectLocalBounds =
+        &Pyramid::RenderObject::GetLocalBounds;
+    volatile decltype(&Pyramid::RenderObject::UseAutomaticBounds) g_useAutomaticBounds =
+        &Pyramid::RenderObject::UseAutomaticBounds;
     volatile decltype(&Pyramid::RenderObject::GetWorldBounds) g_getRenderObjectWorldBounds =
         &Pyramid::RenderObject::GetWorldBounds;
+    volatile decltype(&Pyramid::Geometry::CalculateLocalBounds) g_calculateGeometryBounds =
+        &Pyramid::Geometry::CalculateLocalBounds;
     volatile decltype(&Pyramid::OpenGLFramebuffer::Resize) g_resizeFramebuffer =
         &Pyramid::OpenGLFramebuffer::Resize;
     volatile decltype(&Pyramid::Renderer::RenderTarget::Resize) g_resizeRenderTarget =
@@ -144,7 +153,11 @@ int main()
                    g_setCameraViewport &&
                    g_getCameraFrustumPlanes &&
                    g_isCameraAABBVisible &&
+                   g_tryGetGeometryBounds &&
+                   g_getRenderObjectLocalBounds &&
+                   g_useAutomaticBounds &&
                    g_getRenderObjectWorldBounds &&
+                   g_calculateGeometryBounds &&
                    g_resizeFramebuffer &&
                    g_resizeRenderTarget &&
                    g_resizeRenderSystem &&

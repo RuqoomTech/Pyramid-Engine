@@ -13,6 +13,12 @@ namespace Pyramid
     class IVertexArray;
     class ITexture2D;
 
+    enum class RenderBoundsMode
+    {
+        Automatic,
+        Manual
+    };
+
     /**
      * @brief Renderable object in the scene
      */
@@ -27,9 +33,10 @@ namespace Pyramid
         std::shared_ptr<IVertexArray> vertexArray;
         Renderer::Material material;
 
-        // Local-space bounds. The default represents a unit cube centered at the origin.
+        // Fallback/manual local-space bounds. Automatic mode derives bounds from vertex data.
         Math::Vec3 localBoundsMin = Math::Vec3(-0.5f);
         Math::Vec3 localBoundsMax = Math::Vec3(0.5f);
+        RenderBoundsMode boundsMode = RenderBoundsMode::Automatic;
 
         // Metadata
         std::string name;
@@ -42,6 +49,10 @@ namespace Pyramid
         Math::Vec3 GetWorldPosition() const { return position; }
         void SetWorldPosition(const Math::Vec3 &pos) { position = pos; }
         void SetLocalBounds(const Math::Vec3 &minPoint, const Math::Vec3 &maxPoint);
+        void UseAutomaticBounds() { boundsMode = RenderBoundsMode::Automatic; }
+        RenderBoundsMode GetBoundsMode() const { return boundsMode; }
+        bool TryGetGeometryBounds(Math::Vec3 &minPoint, Math::Vec3 &maxPoint) const;
+        bool GetLocalBounds(Math::Vec3 &minPoint, Math::Vec3 &maxPoint) const;
         void GetWorldBounds(Math::Vec3 &minPoint, Math::Vec3 &maxPoint) const;
     };
 

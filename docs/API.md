@@ -184,7 +184,7 @@ auto nearest = manager->GetNearestObject(position);
 auto nearestFive = manager->GetKNearestObjects(position, 5);
 ```
 
-`RenderObject` exposes local bounds with a unit-cube default. `GetWorldBounds()` transforms all eight corners through the object's translation, normalized rotation, and scale. `Scene`, `SceneManager`, and octree frustum queries use these AABBs; objects that span octree child boundaries remain at the parent node to avoid false rejection. Imported meshes do not yet populate local bounds automatically.
+`RenderObject` uses `RenderBoundsMode::Automatic` by default. When its vertex array exposes CPU-visible data and a Float2, Float3, or Float4 semantic ending in `position` (such as `a_Position`), `GetLocalBounds()` derives the local AABB from that geometry. `SetLocalBounds()` switches to manual mode; `UseAutomaticBounds()` restores geometry-derived behavior. Missing or invalid geometry falls back to the unit cube. `GetWorldBounds()` transforms all eight corners through translation, normalized rotation, and scale. `Scene`, `SceneManager`, and octree queries use these AABBs; objects spanning octree child boundaries remain at the parent node to avoid false rejection.
 
 `Octree::Synchronize()` accepts the active scene's current render-object snapshot and incrementally inserts additions, removes stale entries, and relocates only objects whose world AABBs changed. `UpdateIfMoved()` performs the same bounds comparison for one object. `SceneManager::Update()` includes this synchronization when `UpdateFlags::SpatialPartition` is set; the default `UpdateFlags::All` therefore keeps moving objects current each frame without a full rebuild. `SceneStats` reports the most recent inserted, removed, moved, and unchanged counts.
 

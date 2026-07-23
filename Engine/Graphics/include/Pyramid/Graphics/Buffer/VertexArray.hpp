@@ -6,6 +6,7 @@
 #include <memory>
 #include <vector>                                  // For GetVertexBuffers (if added later)
 #include "Pyramid/Graphics/Buffer/IndexBuffer.hpp" // Added full include
+#include "Pyramid/Math/Math.hpp"
 
 namespace Pyramid
 {
@@ -26,6 +27,16 @@ namespace Pyramid
 
         virtual void SetIndexBuffer(const std::shared_ptr<IIndexBuffer> &indexBuffer) = 0;
         virtual const std::shared_ptr<IIndexBuffer> &GetIndexBuffer() const = 0;
+
+        /**
+         * @brief Derive local-space bounds from attached vertex buffers when CPU data is available.
+         */
+        virtual bool TryGetLocalBounds(Math::Vec3 &minPoint, Math::Vec3 &maxPoint) const
+        {
+            (void)minPoint;
+            (void)maxPoint;
+            return false;
+        }
 
         // Instance buffer support for instanced rendering
         virtual void AddInstanceBuffer(const std::shared_ptr<IInstanceBuffer> &instanceBuffer, const BufferLayout &layout, u32 startingAttributeIndex) = 0;

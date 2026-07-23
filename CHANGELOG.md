@@ -4,6 +4,13 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 
 ## [Unreleased]
 
+### Geometry-derived render bounds
+
+- Added automatic `RenderObject` local bounds derived from CPU-visible vertex data and position semantics.
+- Added manual/automatic bounds modes, a reusable mesh-bounds utility, and focused geometry-bounds coverage.
+- OpenGL vertex buffers cache derived bounds and retain vertex bytes only until their layout is attached, avoiding a permanent duplicate of mesh data.
+- Scene culling and spatial queries now consume geometry-derived bounds by default while preserving explicit manual overrides and the unit-cube fallback.
+
 ### Octree compaction and health metrics
 
 - Added automatic bottom-up octree compaction after removals and object relocation. Empty descendant branches collapse, and subtrees that fit within one node's capacity are promoted safely before child nodes are released.

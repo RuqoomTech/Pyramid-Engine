@@ -16,7 +16,7 @@ enum class ShaderDataType
     Bool
 };
 
-static u32 ShaderDataTypeSize(ShaderDataType type)
+inline u32 ShaderDataTypeSize(ShaderDataType type)
 {
     switch (type)
     {
@@ -37,7 +37,7 @@ static u32 ShaderDataTypeSize(ShaderDataType type)
     return 0;
 }
 
-static u32 ShaderDataTypeComponentCount(ShaderDataType type)
+inline u32 ShaderDataTypeComponentCount(ShaderDataType type)
 {
     switch (type)
     {

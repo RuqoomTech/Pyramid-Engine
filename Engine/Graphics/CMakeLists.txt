@@ -12,6 +12,7 @@ target_sources(PyramidEngine
         source/OpenGL/Buffer/OpenGLShaderStorageBuffer.cpp
         source/OpenGL/OpenGLStateManager.cpp
         source/Buffer/UniformBuffer.cpp
+        source/Geometry/MeshBounds.cpp
         source/OpenGL/Shader/OpenGLShader.cpp
         source/Texture.cpp
         source/OpenGL/OpenGLTexture.cpp
@@ -38,6 +39,7 @@ target_sources(PyramidEngine
         include/Pyramid/Graphics/Shader/Shader.hpp
         include/Pyramid/Graphics/Texture.hpp
         include/Pyramid/Graphics/Geometry/Vertex.hpp
+        include/Pyramid/Graphics/Geometry/MeshBounds.hpp
         include/Pyramid/Graphics/Renderer/RenderSystem.hpp
         include/Pyramid/Graphics/Renderer/ShaderPathResolver.hpp
         include/Pyramid/Graphics/Renderer/RenderPasses.hpp

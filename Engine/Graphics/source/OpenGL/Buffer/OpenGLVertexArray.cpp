@@ -5,6 +5,7 @@
 #include "Pyramid/Graphics/Buffer/BufferLayout.hpp" // Added
 #include <Pyramid/Util/Log.hpp>                     // Added for logging
 #include <glad/glad.h>
+#include <limits>
 
 namespace Pyramid
 {
@@ -150,7 +151,48 @@ namespace Pyramid
             attributeIndex++;
         }
         m_nextAttributeIndex = attributeIndex; // Update next available index
+        vertexBuffer->SetLayout(layout);
         m_vertexBuffers.push_back(vertexBuffer);
+    }
+
+    bool OpenGLVertexArray::TryGetLocalBounds(Math::Vec3 &minPoint, Math::Vec3 &maxPoint) const
+    {
+        const f32 maximum = std::numeric_limits<f32>::max();
+        Math::Vec3 combinedMin(maximum);
+        Math::Vec3 combinedMax(-maximum);
+        bool hasBounds = false;
+
+        for (const auto &vertexBuffer : m_vertexBuffers)
+        {
+            if (!vertexBuffer)
+            {
+                continue;
+            }
+
+            Math::Vec3 bufferMin;
+            Math::Vec3 bufferMax;
+            if (!vertexBuffer->TryGetLocalBounds(bufferMin, bufferMax))
+            {
+                continue;
+            }
+
+            combinedMin.x = Math::Min(combinedMin.x, bufferMin.x);
+            combinedMin.y = Math::Min(combinedMin.y, bufferMin.y);
+            combinedMin.z = Math::Min(combinedMin.z, bufferMin.z);
+            combinedMax.x = Math::Max(combinedMax.x, bufferMax.x);
+            combinedMax.y = Math::Max(combinedMax.y, bufferMax.y);
+            combinedMax.z = Math::Max(combinedMax.z, bufferMax.z);
+            hasBounds = true;
+        }
+
+        if (!hasBounds)
+        {
+            return false;
+        }
+
+        minPoint = combinedMin;
+        maxPoint = combinedMax;
+        return true;
     }
 
     void OpenGLVertexArray::SetIndexBuffer(const std::shared_ptr<IIndexBuffer> &indexBuffer)

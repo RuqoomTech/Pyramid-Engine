@@ -1,6 +1,7 @@
 #include <Pyramid/Graphics/Scene.hpp>
 #include <Pyramid/Graphics/Camera.hpp>
 #include <Pyramid/Graphics/Geometry/Vertex.hpp>
+#include <Pyramid/Graphics/Buffer/VertexArray.hpp>
 #include <algorithm>
 #include <vector>
 #include <cmath>
@@ -32,18 +33,42 @@ namespace Pyramid
             Math::Max(minPoint.x, maxPoint.x),
             Math::Max(minPoint.y, maxPoint.y),
             Math::Max(minPoint.z, maxPoint.z));
+        boundsMode = RenderBoundsMode::Manual;
+    }
+
+    bool RenderObject::TryGetGeometryBounds(Math::Vec3 &minPoint, Math::Vec3 &maxPoint) const
+    {
+        return vertexArray && vertexArray->TryGetLocalBounds(minPoint, maxPoint);
+    }
+
+    bool RenderObject::GetLocalBounds(Math::Vec3 &minPoint, Math::Vec3 &maxPoint) const
+    {
+        const bool usedGeometry =
+            boundsMode == RenderBoundsMode::Automatic && TryGetGeometryBounds(minPoint, maxPoint);
+        if (!usedGeometry)
+        {
+            minPoint = localBoundsMin;
+            maxPoint = localBoundsMax;
+        }
+
+        const Math::Vec3 canonicalMin(
+            Math::Min(minPoint.x, maxPoint.x),
+            Math::Min(minPoint.y, maxPoint.y),
+            Math::Min(minPoint.z, maxPoint.z));
+        const Math::Vec3 canonicalMax(
+            Math::Max(minPoint.x, maxPoint.x),
+            Math::Max(minPoint.y, maxPoint.y),
+            Math::Max(minPoint.z, maxPoint.z));
+        minPoint = canonicalMin;
+        maxPoint = canonicalMax;
+        return usedGeometry;
     }
 
     void RenderObject::GetWorldBounds(Math::Vec3 &minPoint, Math::Vec3 &maxPoint) const
     {
-        const Math::Vec3 localMin(
-            Math::Min(localBoundsMin.x, localBoundsMax.x),
-            Math::Min(localBoundsMin.y, localBoundsMax.y),
-            Math::Min(localBoundsMin.z, localBoundsMax.z));
-        const Math::Vec3 localMax(
-            Math::Max(localBoundsMin.x, localBoundsMax.x),
-            Math::Max(localBoundsMin.y, localBoundsMax.y),
-            Math::Max(localBoundsMin.z, localBoundsMax.z));
+        Math::Vec3 localMin;
+        Math::Vec3 localMax;
+        GetLocalBounds(localMin, localMax);
 
         const Math::Mat4 transform = GetTransformMatrix();
         const f32 maximum = std::numeric_limits<f32>::max();
