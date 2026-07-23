@@ -8,6 +8,8 @@
 #include <Pyramid/Graphics/Geometry/MeshBounds.hpp>
 #include <Pyramid/Graphics/Geometry/Mesh.hpp>
 #include <Pyramid/Graphics/Geometry/MeshCache.hpp>
+#include <Pyramid/Graphics/Shader/ShaderProgram.hpp>
+#include <Pyramid/Graphics/Shader/ShaderCache.hpp>
 #include <Pyramid/Graphics/Renderer/RenderSystem.hpp>
 
 #include <memory>
@@ -123,6 +125,31 @@ namespace
         &Pyramid::MeshCache::Clear;
     volatile decltype(&Pyramid::MeshCache::GetStats) g_getMeshCacheStats =
         &Pyramid::MeshCache::GetStats;
+    using ShaderAssetIdFromString = Pyramid::ShaderAssetId (*)(std::string_view);
+    volatile ShaderAssetIdFromString g_shaderAssetIdFromString =
+        static_cast<ShaderAssetIdFromString>(&Pyramid::ShaderAssetId::FromString);
+    volatile decltype(&Pyramid::ShaderAssetId::ToString) g_shaderAssetIdToString =
+        &Pyramid::ShaderAssetId::ToString;
+    volatile decltype(&Pyramid::ShaderProgram::CalculateContentId) g_calculateShaderContentId =
+        &Pyramid::ShaderProgram::CalculateContentId;
+    volatile decltype(&Pyramid::ShaderProgram::Create) g_createShaderProgram =
+        &Pyramid::ShaderProgram::Create;
+    volatile decltype(&Pyramid::ShaderProgram::IsValid) g_isShaderProgramValid =
+        &Pyramid::ShaderProgram::IsValid;
+    volatile decltype(&Pyramid::ShaderCache::GetOrCreate) g_getOrCreateCachedShader =
+        &Pyramid::ShaderCache::GetOrCreate;
+    volatile decltype(&Pyramid::ShaderCache::Recompile) g_recompileCachedShader =
+        &Pyramid::ShaderCache::Recompile;
+    volatile decltype(&Pyramid::ShaderCache::Find) g_findCachedShader =
+        &Pyramid::ShaderCache::Find;
+    volatile decltype(&Pyramid::ShaderCache::Evict) g_evictCachedShader =
+        &Pyramid::ShaderCache::Evict;
+    volatile decltype(&Pyramid::ShaderCache::CollectUnused) g_collectUnusedShaders =
+        &Pyramid::ShaderCache::CollectUnused;
+    volatile decltype(&Pyramid::ShaderCache::Clear) g_clearShaderCache =
+        &Pyramid::ShaderCache::Clear;
+    volatile decltype(&Pyramid::ShaderCache::GetStats) g_getShaderCacheStats =
+        &Pyramid::ShaderCache::GetStats;
     volatile decltype(&Pyramid::Renderer::CommandBuffer::DrawMesh) g_drawMesh =
         &Pyramid::Renderer::CommandBuffer::DrawMesh;
     volatile decltype(&Pyramid::OpenGLFramebuffer::Resize) g_resizeFramebuffer =
@@ -198,6 +225,18 @@ int main()
                    g_collectUnusedMeshes &&
                    g_clearMeshCache &&
                    g_getMeshCacheStats &&
+                   g_shaderAssetIdFromString &&
+                   g_shaderAssetIdToString &&
+                   g_calculateShaderContentId &&
+                   g_createShaderProgram &&
+                   g_isShaderProgramValid &&
+                   g_getOrCreateCachedShader &&
+                   g_recompileCachedShader &&
+                   g_findCachedShader &&
+                   g_evictCachedShader &&
+                   g_collectUnusedShaders &&
+                   g_clearShaderCache &&
+                   g_getShaderCacheStats &&
                    g_drawMesh &&
                    g_resizeFramebuffer &&
                    g_resizeRenderTarget &&

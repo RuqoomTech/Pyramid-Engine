@@ -82,3 +82,8 @@ add_executable(MeshCacheTests MeshCacheTests.cpp)
 target_link_libraries(MeshCacheTests PRIVATE Pyramid::Engine)
 set_target_properties(MeshCacheTests PROPERTIES FOLDER "Tests/Graphics")
 add_test(NAME Graphics.MeshCache COMMAND $<TARGET_FILE:MeshCacheTests>)
+
+add_executable(ShaderCacheTests ShaderCacheTests.cpp)
+target_link_libraries(ShaderCacheTests PRIVATE Pyramid::Engine)
+set_target_properties(ShaderCacheTests PROPERTIES FOLDER "Tests/Graphics")
+add_test(NAME Graphics.ShaderCache COMMAND $<TARGET_FILE:ShaderCacheTests>)

@@ -59,10 +59,43 @@ Primary headers:
 - `Pyramid/Graphics/GraphicsDevice.hpp`
 - `Pyramid/Graphics/Buffer/*.hpp`
 - `Pyramid/Graphics/Shader/Shader.hpp`
+- `Pyramid/Graphics/Shader/ShaderProgram.hpp`
+- `Pyramid/Graphics/Shader/ShaderCache.hpp`
 - `Pyramid/Graphics/Texture.hpp`
 - `Pyramid/Graphics/Geometry/Vertex.hpp`
 - `Pyramid/Graphics/Geometry/Mesh.hpp`
 - `Pyramid/Graphics/Geometry/MeshCache.hpp`
+
+### Shader programs
+
+```cpp
+Pyramid::ShaderProgramSpecification shaderSpec;
+shaderSpec.vertexSource = vertexSource;
+shaderSpec.fragmentSource = fragmentSource;
+shaderSpec.name = "Player Forward";
+shaderSpec.assetId =
+    Pyramid::ShaderAssetId::FromString("shaders/player-forward");
+
+Pyramid::ShaderCache shaderCache(*device);
+auto shader = shaderCache.GetOrCreate(shaderSpec);
+```
+
+`ShaderProgram` is an immutable compiled resource that implements `IShader`, so it can be assigned directly to materials and command buffers. Exact stage-source sets receive a deterministic content identifier and compile only once even when requested through several caller-defined stable aliases. Graphics specifications require vertex and fragment stages; tessellation control/evaluation stages must be paired; compute programs cannot mix with graphics stages. Debug names are excluded from content identity.
+
+Changing a stable asset uses transactional replacement:
+
+```cpp
+Pyramid::ShaderProgramSpecification replacement = shaderSpec;
+replacement.fragmentSource = updatedFragmentSource;
+replacement.assetId = {};
+
+if (shaderCache.Recompile(shaderSpec.assetId, replacement))
+    shader = shaderCache.Find(shaderSpec.assetId);
+```
+
+`Recompile()` compiles or resolves the replacement before changing the stable alias. Failure leaves the previous cached program active. Existing external owners of the old program remain valid and must reacquire the stable alias when they want the replacement. Content-derived identifiers are immutable and cannot be recompiled. `Evict()`, `CollectUnused()`, `Clear()`, and `GetStats()` provide explicit lifetime and diagnostics controls. Destroy the cache before its graphics device/context and use it from the graphics thread.
+
+### Geometry
 
 Typical geometry setup:
 

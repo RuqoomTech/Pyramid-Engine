@@ -121,6 +121,7 @@ void BasicRendering::onCreate()
     }
 
     m_meshCache = std::make_unique<Pyramid::MeshCache>(*device);
+    m_shaderCache = std::make_unique<Pyramid::ShaderCache>(*device);
 
     // Initialize all components
     InitializeShaders();
@@ -137,12 +138,17 @@ void BasicRendering::InitializeShaders()
     if (!device)
         return;
 
-    // Create and compile shader
-    m_shader = device->CreateShader();
-    if (!m_shader || !m_shader->Compile(vertexShaderSrc, fragmentShaderSrc))
+    Pyramid::ShaderProgramSpecification specification;
+    specification.vertexSource = vertexShaderSrc;
+    specification.fragmentSource = fragmentShaderSrc;
+    specification.name = "BasicRendering Scene";
+    specification.assetId =
+        Pyramid::ShaderAssetId::FromString("examples/basic-rendering/scene");
+
+    m_shader = m_shaderCache->GetOrCreate(specification);
+    if (!m_shader)
     {
         PYRAMID_LOG_ERROR("Failed to create or compile shader!");
-        m_shader.reset();
         return;
     }
 

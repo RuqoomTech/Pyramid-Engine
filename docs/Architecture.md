@@ -10,7 +10,7 @@ Pyramid Engine is a monolithic C++17 library with a Win32/WGL platform implement
 |---|---|---|
 | Core | `Pyramid` | Application lifecycle, common types, and graphics API selection |
 | Platform | `Pyramid` | Window, message pump, and OpenGL context |
-| Graphics resources | `Pyramid` | Device, buffers, arrays, immutable meshes, mesh cache, shaders, textures, framebuffers, and camera |
+| Graphics resources | `Pyramid` | Device, buffers, arrays, immutable meshes, mesh/shader caches, textures, framebuffers, and camera |
 | Renderer | `Pyramid::Renderer` | Command recording, materials, render targets, and render passes |
 | Scene | `Pyramid` | Scene graph, render objects, lights, and environment |
 | Spatial management | `Pyramid::SceneManagement` | Scene manager, octree, AABB, and query helpers |
@@ -53,6 +53,9 @@ OpenGL resources use RAII wrappers, but raw pointers passed into binding and com
 - `DeferredLightingPass`.
 
 The default pipeline uses shadow and forward rendering. The deferred setup uses shadow, geometry, and lighting passes.
+
+
+`ShaderProgram` wraps one immutable compiled `IShader` with stable caller/content identifiers and stage metadata. `ShaderCache` is bound to one graphics device, compiles exact source sets once, shares them across aliases, rejects stable-ID/source conflicts, and keeps strong residency until collection or eviction. Transactional recompilation creates or resolves a replacement program before remapping one stable alias; failed compilation preserves both the old cache mapping and all existing external owners. External users reacquire the stable alias to adopt a successful replacement.
 
 Known constraints:
 

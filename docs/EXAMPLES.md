@@ -10,7 +10,7 @@ Demonstrates:
 
 - deriving from `Pyramid::Game`;
 - base lifecycle initialization;
-- shader compilation;
+- stable shader-program compilation and reuse through `ShaderCache`;
 - engine-owned indexed mesh creation with validated layout, topology, draw count, and local bounds;
 - content-derived mesh-cache reuse: the cube and floor request identical geometry but perform one GPU upload;
 - texture loading;
@@ -39,9 +39,9 @@ Location: `Examples/BasicRendering`
 
 This is the lower-level reference rendering path. It demonstrates:
 
-- inline GLSL 3.30 shaders;
+- inline GLSL 3.30 shaders compiled through a stable `ShaderCache` asset ID;
 - an engine-owned cube mesh with position, normal, texture-coordinate, and color attributes;
-- a caller-defined stable mesh asset identifier resolved through `MeshCache`;
+- caller-defined stable mesh and shader asset identifiers resolved through their graphics-device-bound caches;
 - scene and material uniform buffers;
 - perspective camera setup registered through `Game::SetActiveCamera()`;
 - topology-aware indexed rendering and basic lighting.

@@ -13,7 +13,7 @@ The current `0.6.0-pre-alpha` baseline includes:
 - strict required window operations with Win32 implementations;
 - relocatable install/export package and external-consumer test;
 - Windows Debug/Release CI for build, CTest, install, and package consumption;
-- 21 registered tests, including engine-owned mesh resources, immutable geometry bounds, real PNG/JPEG decoding, transactional texture loading, OpenGL diagnostics, window events, camera resize/frustum behavior, framebuffer resize, scene-hierarchy transforms, incremental octree synchronization, bounds-accurate spatial queries, bounds-aware nearest-neighbor queries, transactional octree configuration, and automatic octree compaction/health metrics;
+- 22 registered tests, including engine-owned mesh resources, immutable geometry bounds, real PNG/JPEG decoding, transactional texture loading, OpenGL diagnostics, window events, camera resize/frustum behavior, framebuffer resize, scene-hierarchy transforms, incremental octree synchronization, bounds-accurate spatial queries, bounds-aware nearest-neighbor queries, transactional octree configuration, and automatic octree compaction/health metrics, stable shader identifiers, compile-once shader reuse, and transactional shader replacement;
 - corrected standards-invalid PNG, zlib, and JPEG test fixtures;
 - public texture convenience definitions and explicit depth-target failure;
 - definitions for scene events, box queries, visibility statistics, spatial test scenes, and octree operations;
@@ -78,9 +78,10 @@ The current `0.6.0-pre-alpha` baseline includes:
 
 Target outcome: a trustworthy rendering SDK rather than a larger feature list.
 
-- Stable resource ownership and teardown order; mesh geometry ownership and content-deduplicating cache residency are implemented, while shader/texture caching remains pending.
+- Stable resource ownership and teardown order; mesh and shader-program ownership plus content-deduplicating cache residency are implemented, while texture caching remains pending.
 - Resize-safe camera and render targets.
-- Shader and texture caching.
+- [x] Shader-program caching with stable source identifiers and transactional replacement.
+- Texture caching.
 - Accurate frame statistics and GPU timings.
 - Automated render-image regression tests.
 - Warning cleanup followed by warnings-as-errors in CI.

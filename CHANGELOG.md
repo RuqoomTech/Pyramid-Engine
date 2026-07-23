@@ -4,6 +4,14 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 
 ## [Unreleased]
 
+### Stable shader identifiers and program caching
+
+- Added deterministic 128-bit `ShaderAssetId` values from caller-owned stable names or exact graphics/compute stage source sets; debug names are excluded from content identity.
+- Added immutable `ShaderProgram` resources that implement `IShader`, validate legal stage combinations, retain stage/source metadata, and reject direct mutation that would invalidate their identity.
+- Added graphics-device-bound `ShaderCache` compile-once reuse across aliases, stable-ID/source conflict detection, strong residency, explicit eviction/collection, and cache statistics.
+- Added transactional `ShaderCache::Recompile()`: replacements compile or resolve completely before a stable alias changes, failed compilation preserves the previous program, and already resident replacement source is reused without another compilation.
+- Migrated both graphical examples to stable shader-cache identifiers and added `Graphics.ShaderCache` coverage for deterministic IDs, stage routing, forwarding, deduplication, conflicts, recompilation, failure preservation, reuse, and lifetime behavior.
+
 ### Stable mesh identifiers and resource caching
 
 - Added deterministic 128-bit `MeshAssetId` values from caller-owned stable names or exact mesh content. Content fingerprints include vertex/index bytes, layout semantics, counts, normalization flags, and primitive topology while excluding debug names.

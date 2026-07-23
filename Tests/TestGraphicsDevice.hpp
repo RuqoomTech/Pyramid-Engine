@@ -5,8 +5,10 @@
 #include <Pyramid/Graphics/Buffer/VertexBuffer.hpp>
 #include <Pyramid/Graphics/Geometry/MeshBounds.hpp>
 #include <Pyramid/Graphics/GraphicsDevice.hpp>
+#include <Pyramid/Graphics/Shader/Shader.hpp>
 
 #include <cstring>
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -215,7 +217,11 @@ namespace Pyramid::Tests
             return std::make_shared<TestVertexArray>();
         }
 
-        std::shared_ptr<IShader> CreateShader() override { return nullptr; }
+        std::shared_ptr<IShader> CreateShader() override
+        {
+            ++shaderCreations;
+            return shaderFactory ? shaderFactory() : nullptr;
+        }
         std::shared_ptr<ITexture2D> CreateTexture2D(const TextureSpecification&, const void*) override
         {
             return nullptr;
@@ -277,6 +283,8 @@ namespace Pyramid::Tests
         u32 vertexBufferCreations = 0;
         u32 indexBufferCreations = 0;
         u32 vertexArrayCreations = 0;
+        u32 shaderCreations = 0;
+        std::function<std::shared_ptr<IShader>()> shaderFactory;
 
     private:
         void RecordDraw(

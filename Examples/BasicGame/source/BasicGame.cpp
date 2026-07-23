@@ -83,6 +83,7 @@ void BasicGame::onCreate()
     }
 
     m_meshCache = std::make_unique<Pyramid::MeshCache>(*device);
+    m_shaderCache = std::make_unique<Pyramid::ShaderCache>(*device);
 
     m_renderSystem = std::make_unique<Pyramid::Renderer::RenderSystem>();
     if (!m_renderSystem->Initialize(device))
@@ -103,8 +104,15 @@ void BasicGame::onCreate()
     m_camera->LookAt(Pyramid::Math::Vec3::Zero);
     SetActiveCamera(m_camera.get());
 
-    m_shader = device->CreateShader();
-    if (!m_shader || !m_shader->Compile(kForwardVertexShader, kForwardFragmentShader))
+    Pyramid::ShaderProgramSpecification shaderSpecification;
+    shaderSpecification.vertexSource = kForwardVertexShader;
+    shaderSpecification.fragmentSource = kForwardFragmentShader;
+    shaderSpecification.name = "BasicGame Forward";
+    shaderSpecification.assetId =
+        Pyramid::ShaderAssetId::FromString("examples/basic-game/forward");
+
+    m_shader = m_shaderCache->GetOrCreate(shaderSpecification);
+    if (!m_shader)
     {
         PYRAMID_LOG_CRITICAL("BasicGame aborted: failed to compile scene shader.");
         quit();
