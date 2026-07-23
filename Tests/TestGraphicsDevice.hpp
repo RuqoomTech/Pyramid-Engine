@@ -5,6 +5,7 @@
 #include <Pyramid/Graphics/Buffer/VertexBuffer.hpp>
 #include <Pyramid/Graphics/Geometry/MeshBounds.hpp>
 #include <Pyramid/Graphics/GraphicsDevice.hpp>
+#include <Pyramid/Graphics/Texture.hpp>
 #include <Pyramid/Graphics/Shader/Shader.hpp>
 
 #include <cstring>
@@ -222,13 +223,22 @@ namespace Pyramid::Tests
             ++shaderCreations;
             return shaderFactory ? shaderFactory() : nullptr;
         }
-        std::shared_ptr<ITexture2D> CreateTexture2D(const TextureSpecification&, const void*) override
+        std::shared_ptr<ITexture2D> CreateTexture2D(
+            const TextureSpecification& specification,
+            const void* data) override
         {
-            return nullptr;
+            ++textureCreations;
+            return textureFactory ? textureFactory(specification, data) : nullptr;
         }
-        std::shared_ptr<ITexture2D> CreateTexture2D(const std::string&, bool, bool) override
+        std::shared_ptr<ITexture2D> CreateTexture2D(
+            const std::string& filepath,
+            bool srgb,
+            bool generateMips) override
         {
-            return nullptr;
+            ++textureFileCreations;
+            return textureFileFactory
+                ? textureFileFactory(filepath, srgb, generateMips)
+                : nullptr;
         }
         std::shared_ptr<IUniformBuffer> CreateUniformBuffer(size_t, BufferUsage) override
         {
@@ -284,7 +294,13 @@ namespace Pyramid::Tests
         u32 indexBufferCreations = 0;
         u32 vertexArrayCreations = 0;
         u32 shaderCreations = 0;
+        u32 textureCreations = 0;
+        u32 textureFileCreations = 0;
         std::function<std::shared_ptr<IShader>()> shaderFactory;
+        std::function<std::shared_ptr<ITexture2D>(const TextureSpecification&, const void*)>
+            textureFactory;
+        std::function<std::shared_ptr<ITexture2D>(const std::string&, bool, bool)>
+            textureFileFactory;
 
     private:
         void RecordDraw(

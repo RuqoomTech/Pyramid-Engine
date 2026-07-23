@@ -4,6 +4,14 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 
 ## [Unreleased]
 
+### Stable texture identifiers and resource caching
+
+- Added deterministic 128-bit `TextureAssetId` values from caller-owned stable names or exact decoded pixels plus immutable texture, sampler, mip, and color-space state.
+- Added immutable `TextureResource` objects for memory and file sources, with explicit linear/sRGB identity, estimated residency metadata, and mutation rejection that preserves cache identity.
+- Added graphics-device-bound `TextureCache` deduplication across stable aliases, conflict detection, strong residency, explicit eviction/collection, and cache statistics.
+- Added transactional file reload: decode and GPU creation complete before a stable alias changes, failed reload preserves the previous valid texture, and already resident replacement content is reused without another upload.
+- Migrated both graphical examples to stable texture-cache identifiers and added `Graphics.TextureCache` coverage for identifiers, memory/file deduplication, color-space identity, conflicts, reload, failure preservation, residency, and collection.
+
 ### Stable shader identifiers and program caching
 
 - Added deterministic 128-bit `ShaderAssetId` values from caller-owned stable names or exact graphics/compute stage source sets; debug names are excluded from content identity.

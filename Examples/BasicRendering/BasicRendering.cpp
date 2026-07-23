@@ -1,4 +1,6 @@
 #include "BasicRendering.hpp"
+
+#include <array>
 #include <Pyramid/Graphics/GraphicsDevice.hpp>
 #include <Pyramid/Graphics/Buffer/BufferLayout.hpp>
 #include <Pyramid/Graphics/Geometry/MeshCache.hpp>
@@ -122,10 +124,27 @@ void BasicRendering::onCreate()
 
     m_meshCache = std::make_unique<Pyramid::MeshCache>(*device);
     m_shaderCache = std::make_unique<Pyramid::ShaderCache>(*device);
+    m_textureCache = std::make_unique<Pyramid::TextureCache>(*device);
 
     // Initialize all components
     InitializeShaders();
     CreateGeometry();
+
+    const std::array<Pyramid::u8, 4> whitePixel = {255, 255, 255, 255};
+    Pyramid::TextureResourceSpecification textureSpecification;
+    textureSpecification.texture.Width = 1;
+    textureSpecification.texture.Height = 1;
+    textureSpecification.texture.Format = Pyramid::TextureFormat::RGBA8;
+    textureSpecification.texture.GenerateMips = false;
+    textureSpecification.texture.MinFilter = Pyramid::TextureFilter::Linear;
+    textureSpecification.pixelData = whitePixel.data();
+    textureSpecification.pixelDataSize = whitePixel.size();
+    textureSpecification.colorSpace = Pyramid::TextureColorSpace::SRGB;
+    textureSpecification.assetId =
+        Pyramid::TextureAssetId::FromString("examples/basic-rendering/white");
+    textureSpecification.name = "BasicRendering White";
+    m_debugTexture = m_textureCache->GetOrCreate(textureSpecification);
+
     SetupCamera();
     SetupUniformBuffers();
 

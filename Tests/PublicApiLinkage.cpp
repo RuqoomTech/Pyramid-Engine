@@ -1,5 +1,7 @@
 #include <Pyramid/Core/Game.hpp>
 #include <Pyramid/Graphics/Texture.hpp>
+#include <Pyramid/Graphics/Texture/TextureResource.hpp>
+#include <Pyramid/Graphics/Texture/TextureCache.hpp>
 #include <Pyramid/Graphics/Scene/SceneManager.hpp>
 #include <Pyramid/Graphics/Scene/Octree.hpp>
 #include <Pyramid/Graphics/Scene.hpp>
@@ -43,6 +45,49 @@ namespace
     volatile decltype(&ITexture2D::CreateRenderTarget) g_createRenderTarget = &ITexture2D::CreateRenderTarget;
     volatile decltype(&ITexture2D::CreateDepthTarget) g_createDepthTarget = &ITexture2D::CreateDepthTarget;
     volatile decltype(&ITexture2D::CreateFromColor) g_createFromColor = &ITexture2D::CreateFromColor;
+
+    using TextureAssetIdFromString = Pyramid::TextureAssetId (*)(std::string_view);
+    volatile TextureAssetIdFromString g_textureAssetIdFromString =
+        static_cast<TextureAssetIdFromString>(&Pyramid::TextureAssetId::FromString);
+    volatile decltype(&Pyramid::TextureAssetId::ToString) g_textureAssetIdToString =
+        &Pyramid::TextureAssetId::ToString;
+    using CalculateMemoryTextureId = Pyramid::TextureAssetId (*)(
+        const Pyramid::TextureResourceSpecification&);
+    using CalculateFileTextureId = Pyramid::TextureAssetId (*)(
+        const Pyramid::TextureFileSpecification&);
+    volatile CalculateMemoryTextureId g_calculateMemoryTextureId =
+        static_cast<CalculateMemoryTextureId>(&Pyramid::TextureResource::CalculateContentId);
+    volatile CalculateFileTextureId g_calculateFileTextureId =
+        static_cast<CalculateFileTextureId>(&Pyramid::TextureResource::CalculateContentId);
+    volatile decltype(&Pyramid::TextureResource::Create) g_createTextureResource =
+        &Pyramid::TextureResource::Create;
+    volatile decltype(&Pyramid::TextureResource::CreateFromFile) g_createFileTextureResource =
+        &Pyramid::TextureResource::CreateFromFile;
+    using GetOrCreateMemoryTexture = std::shared_ptr<Pyramid::TextureResource>
+        (Pyramid::TextureCache::*)(const Pyramid::TextureResourceSpecification&);
+    using GetOrCreateFileTexture = std::shared_ptr<Pyramid::TextureResource>
+        (Pyramid::TextureCache::*)(const Pyramid::TextureFileSpecification&);
+    volatile GetOrCreateMemoryTexture g_getOrCreateMemoryTexture =
+        static_cast<GetOrCreateMemoryTexture>(&Pyramid::TextureCache::GetOrCreate);
+    volatile GetOrCreateFileTexture g_getOrCreateFileTexture =
+        static_cast<GetOrCreateFileTexture>(&Pyramid::TextureCache::GetOrCreate);
+    using ReloadTexture = bool (Pyramid::TextureCache::*)(Pyramid::TextureAssetId);
+    using ReloadTextureReplacement = bool (Pyramid::TextureCache::*)(
+        Pyramid::TextureAssetId, const Pyramid::TextureFileSpecification&);
+    volatile ReloadTexture g_reloadTexture =
+        static_cast<ReloadTexture>(&Pyramid::TextureCache::Reload);
+    volatile ReloadTextureReplacement g_reloadTextureReplacement =
+        static_cast<ReloadTextureReplacement>(&Pyramid::TextureCache::Reload);
+    volatile decltype(&Pyramid::TextureCache::Find) g_findCachedTexture =
+        &Pyramid::TextureCache::Find;
+    volatile decltype(&Pyramid::TextureCache::Evict) g_evictCachedTexture =
+        &Pyramid::TextureCache::Evict;
+    volatile decltype(&Pyramid::TextureCache::CollectUnused) g_collectUnusedTextures =
+        &Pyramid::TextureCache::CollectUnused;
+    volatile decltype(&Pyramid::TextureCache::Clear) g_clearTextureCache =
+        &Pyramid::TextureCache::Clear;
+    volatile decltype(&Pyramid::TextureCache::GetStats) g_getTextureCacheStats =
+        &Pyramid::TextureCache::GetStats;
 
     volatile decltype(&SceneManager::LoadScene) g_loadScene = &SceneManager::LoadScene;
     volatile decltype(&SceneManager::SaveScene) g_saveScene = &SceneManager::SaveScene;
@@ -180,6 +225,21 @@ int main()
                    g_createRenderTarget &&
                    g_createDepthTarget &&
                    g_createFromColor &&
+                   g_textureAssetIdFromString &&
+                   g_textureAssetIdToString &&
+                   g_calculateMemoryTextureId &&
+                   g_calculateFileTextureId &&
+                   g_createTextureResource &&
+                   g_createFileTextureResource &&
+                   g_getOrCreateMemoryTexture &&
+                   g_getOrCreateFileTexture &&
+                   g_reloadTexture &&
+                   g_reloadTextureReplacement &&
+                   g_findCachedTexture &&
+                   g_evictCachedTexture &&
+                   g_collectUnusedTextures &&
+                   g_clearTextureCache &&
+                   g_getTextureCacheStats &&
                    g_loadScene &&
                    g_saveScene &&
                    g_getObjectsInBox &&

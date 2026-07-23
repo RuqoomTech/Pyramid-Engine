@@ -78,9 +78,9 @@ The octree supports insertion, removal, incremental synchronization, bottom-up c
 
 ## Textures and framebuffers
 
-The basic specification and file constructors create `OpenGLTexture2D` instances. Size-based, render-target, and solid-color convenience factories are defined for the basic color-texture path.
+The direct specification and file constructors create mutable `OpenGLTexture2D` instances. Shared sampled assets should use immutable `TextureResource` objects through a graphics-device-bound `TextureCache`. Content identity includes decoded pixels, dimensions, base format, mip policy, sampler state, and explicit linear/sRGB intent. Stable aliases map to strong resident resources; exact content is uploaded once across aliases, conflicts are rejected, and file reload publishes a replacement only after decode and GPU creation succeed. Existing external owners remain valid after reload or eviction.
 
-Depth formats are not mapped by `OpenGLTexture2D`; `CreateDepthTarget` therefore logs an error and returns `nullptr`. Depth attachments should be created through `OpenGLFramebuffer` until the texture-format mapping is completed.
+Size-based, render-target, and solid-color convenience factories remain available for intentionally uncached textures. Depth formats are not mapped by `OpenGLTexture2D`; `CreateDepthTarget` logs an error and returns `nullptr`. Depth attachments should be created through `OpenGLFramebuffer` until texture-format mapping is completed.
 
 `OpenGLFramebuffer` owns one framebuffer and its attachments through a single cleanup path. Resizing creates and validates a replacement first, then swaps it into service; failed replacement creation leaves the previous framebuffer intact. `Renderer::RenderTarget` delegates to this same implementation rather than maintaining a second raw OpenGL lifecycle. `RenderSystem::Resize()` propagates window dimensions to managed targets and passes, while fixed-resolution shadow maps remain unchanged.
 

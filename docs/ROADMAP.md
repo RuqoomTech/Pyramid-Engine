@@ -55,7 +55,7 @@ The current `0.6.0-pre-alpha` baseline includes:
 - Implement depth texture creation through the texture interface.
 - [x] Apply sRGB intent, border color, mip filters, and safe RGB unpack alignment.
 - [x] Replace JPEG test-pattern generation with real baseline/progressive decoding through libjpeg-turbo.
-- Apply anisotropy and `FlipY` consistently.
+- Apply anisotropy consistently across direct and cached texture paths; cached file resources now apply `flipY` before upload.
 - Expand malformed/truncated/large/progressive/interlaced image corpus tests.
 - Add parser fuzzing and sanitizer coverage.
 
@@ -78,10 +78,10 @@ The current `0.6.0-pre-alpha` baseline includes:
 
 Target outcome: a trustworthy rendering SDK rather than a larger feature list.
 
-- Stable resource ownership and teardown order; mesh and shader-program ownership plus content-deduplicating cache residency are implemented, while texture caching remains pending.
+- Stable resource ownership and teardown order; mesh, shader-program, and immutable sampled-texture caches now provide content deduplication, aliases, transactional replacement, and explicit residency control.
 - Resize-safe camera and render targets.
 - [x] Shader-program caching with stable source identifiers and transactional replacement.
-- Texture caching.
+- [x] Texture caching with stable identifiers, explicit color-space identity, transactional file reload, eviction, and residency statistics.
 - Accurate frame statistics and GPU timings.
 - Automated render-image regression tests.
 - Warning cleanup followed by warnings-as-errors in CI.

@@ -62,6 +62,8 @@ Primary headers:
 - `Pyramid/Graphics/Shader/ShaderProgram.hpp`
 - `Pyramid/Graphics/Shader/ShaderCache.hpp`
 - `Pyramid/Graphics/Texture.hpp`
+- `Pyramid/Graphics/Texture/TextureResource.hpp`
+- `Pyramid/Graphics/Texture/TextureCache.hpp`
 - `Pyramid/Graphics/Geometry/Vertex.hpp`
 - `Pyramid/Graphics/Geometry/Mesh.hpp`
 - `Pyramid/Graphics/Geometry/MeshCache.hpp`
@@ -142,7 +144,22 @@ auto target = Pyramid::ITexture2D::CreateRenderTarget(1280, 720);
 auto white = Pyramid::ITexture2D::CreateFromColor(1, 1, Pyramid::Color::White);
 ```
 
-The reliable texture path is RGB8/RGBA8, including file-backed JPEG/PNG/TGA/BMP images. File reload is transactional: decode or OpenGL upload failure preserves the previous valid texture. `IsLoaded()` and `GetLastError()` expose state, RGB rows use safe unpack alignment, sRGB uploads select sRGB internal formats, and mipmapped filters are mapped completely. Advanced declared formats, anisotropy, and `FlipY` are not yet implemented. `CreateDepthTarget` returns `nullptr` with an error; use `OpenGLFramebuffer` for depth attachments.
+For shared sampled textures, prefer the immutable cache path:
+
+```cpp
+Pyramid::TextureCache textureCache(*device);
+
+Pyramid::TextureFileSpecification fileSpec;
+fileSpec.filepath = "Assets/albedo.png";
+fileSpec.colorSpace = Pyramid::TextureColorSpace::SRGB;
+fileSpec.assetId = Pyramid::TextureAssetId::FromString("textures/player/albedo");
+
+auto albedo = textureCache.GetOrCreate(fileSpec);
+```
+
+`TextureCache` fingerprints exact decoded pixels plus dimensions, format, mip policy, sampler state, border color, anisotropy request, and explicit linear/sRGB intent. Identical memory or file requests share one GPU upload across aliases. Reusing one stable ID for different resident content fails. `Reload()` is transactional for caller-defined file aliases: a replacement is decoded and uploaded before the alias changes; failure preserves the previous resource. `Evict()`, `CollectUnused()`, `Clear()`, and `GetStats()` provide explicit residency control. Cached `TextureResource` objects are immutable; reacquire the stable alias after a successful reload. Destroy the cache before the graphics device/context.
+
+The direct `ITexture2D` path remains available for intentionally uncached or mutable textures. RGB8/RGBA8 files support JPEG/PNG/TGA/BMP. `IsLoaded()` and `GetLastError()` expose state, RGB rows use safe unpack alignment, sRGB uploads select sRGB internal formats, and mipmapped filters are mapped completely. Cached file specifications can flip decoded rows before upload; direct `TextureSpecification::FlipY` and anisotropic filtering are not yet applied consistently by every path. `CreateDepthTarget` returns `nullptr`; use `OpenGLFramebuffer` for depth attachments.
 
 ## Renderer
 

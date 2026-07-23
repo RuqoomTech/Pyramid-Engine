@@ -8,6 +8,7 @@
 #include <Pyramid/Math/Math.hpp>
 #include <Pyramid/Util/Log.hpp>
 
+#include <array>
 #include <cmath>
 #include <vector>
 
@@ -84,6 +85,7 @@ void BasicGame::onCreate()
 
     m_meshCache = std::make_unique<Pyramid::MeshCache>(*device);
     m_shaderCache = std::make_unique<Pyramid::ShaderCache>(*device);
+    m_textureCache = std::make_unique<Pyramid::TextureCache>(*device);
 
     m_renderSystem = std::make_unique<Pyramid::Renderer::RenderSystem>();
     if (!m_renderSystem->Initialize(device))
@@ -115,6 +117,30 @@ void BasicGame::onCreate()
     if (!m_shader)
     {
         PYRAMID_LOG_CRITICAL("BasicGame aborted: failed to compile scene shader.");
+        quit();
+        return;
+    }
+
+    const std::array<Pyramid::u8, 16> checkerPixels = {
+        255, 255, 255, 255, 40, 40, 40, 255,
+        40, 40, 40, 255, 255, 255, 255, 255};
+    Pyramid::TextureResourceSpecification textureSpecification;
+    textureSpecification.texture.Width = 2;
+    textureSpecification.texture.Height = 2;
+    textureSpecification.texture.Format = Pyramid::TextureFormat::RGBA8;
+    textureSpecification.texture.GenerateMips = false;
+    textureSpecification.texture.MinFilter = Pyramid::TextureFilter::Nearest;
+    textureSpecification.texture.MagFilter = Pyramid::TextureFilter::Nearest;
+    textureSpecification.pixelData = checkerPixels.data();
+    textureSpecification.pixelDataSize = checkerPixels.size();
+    textureSpecification.colorSpace = Pyramid::TextureColorSpace::SRGB;
+    textureSpecification.assetId =
+        Pyramid::TextureAssetId::FromString("examples/basic-game/checker");
+    textureSpecification.name = "BasicGame Checker";
+    m_debugTexture = m_textureCache->GetOrCreate(textureSpecification);
+    if (!m_debugTexture)
+    {
+        PYRAMID_LOG_CRITICAL("BasicGame aborted: failed to create cached checker texture.");
         quit();
         return;
     }
