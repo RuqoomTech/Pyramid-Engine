@@ -6,6 +6,7 @@
 #include <Pyramid/Graphics/GraphicsDevice.hpp>
 #include <Pyramid/Graphics/Shader/Shader.hpp>
 #include <Pyramid/Graphics/Material/Material.hpp>
+#include <Pyramid/Graphics/Material/MaterialCache.hpp>
 #include <Pyramid/Math/Math.hpp>
 #include <Pyramid/Util/Log.hpp>
 
@@ -87,6 +88,7 @@ void BasicGame::onCreate()
     m_meshCache = std::make_unique<Pyramid::MeshCache>(*device);
     m_shaderCache = std::make_unique<Pyramid::ShaderCache>(*device);
     m_textureCache = std::make_unique<Pyramid::TextureCache>(*device);
+    m_materialCache = std::make_unique<Pyramid::MaterialCache>();
 
     m_renderSystem = std::make_unique<Pyramid::Renderer::RenderSystem>();
     if (!m_renderSystem->Initialize(device))
@@ -262,7 +264,9 @@ bool BasicGame::SetupScene()
     cubeMaterialSpecification.assetId =
         Pyramid::MaterialAssetId::FromString("examples/basic-game/cube-material");
     cubeMaterialSpecification.name = "BasicGame Cube Material";
-    m_cubeMaterial = Pyramid::Material::Create(cubeMaterialSpecification);
+    m_cubeMaterial = m_materialCache
+        ? m_materialCache->GetOrCreate(cubeMaterialSpecification)
+        : Pyramid::Material::Create(cubeMaterialSpecification);
 
     Pyramid::MaterialSpecification floorMaterialSpecification = cubeMaterialSpecification;
     floorMaterialSpecification.uniforms = {
@@ -270,7 +274,9 @@ bool BasicGame::SetupScene()
     floorMaterialSpecification.assetId =
         Pyramid::MaterialAssetId::FromString("examples/basic-game/floor-material");
     floorMaterialSpecification.name = "BasicGame Floor Material";
-    m_floorMaterial = Pyramid::Material::Create(floorMaterialSpecification);
+    m_floorMaterial = m_materialCache
+        ? m_materialCache->GetOrCreate(floorMaterialSpecification)
+        : Pyramid::Material::Create(floorMaterialSpecification);
 
     if (!m_cubeMaterial || !m_floorMaterial)
     {

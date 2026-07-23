@@ -68,6 +68,7 @@ Primary headers:
 - `Pyramid/Graphics/Geometry/Mesh.hpp`
 - `Pyramid/Graphics/Geometry/MeshCache.hpp`
 - `Pyramid/Graphics/Material/Material.hpp`
+- `Pyramid/Graphics/Material/MaterialCache.hpp`
 
 ### Shader programs
 
@@ -181,11 +182,31 @@ materialSpec.renderState.cullMode = Pyramid::MaterialCullMode::Back;
 materialSpec.assetId =
     Pyramid::MaterialAssetId::FromString("materials/player");
 
-auto material = Pyramid::Material::Create(materialSpec);
+Pyramid::MaterialCache materialCache;
+auto material = materialCache.GetOrCreate(materialSpec);
 renderObject->material = material;
 ```
 
 `Material` is immutable and owns exact references to one graphics `ShaderProgram` and zero or more `TextureResource` objects. Its content identity includes shader and texture content IDs, sampler uniform names and slots, typed uniforms, and blend/depth/cull/polygon state while excluding the debug name. Creation rejects compute shaders, duplicate slots or names, unloaded textures, and non-finite values. `CommandBuffer::SetMaterial()` applies the material in draw order; dynamic object/camera matrices are recorded separately with typed `SetUniform*()` commands so they do not alter material identity.
+
+`MaterialCache` keeps one strong resident reference per exact material content fingerprint. Different stable IDs share one `Material` when shader, textures, uniforms, and fixed state are identical. Reusing one stable ID for different resident content is rejected. `Find()`, `Evict()`, `CollectUnused()`, `Clear()`, and `GetStats()` provide explicit lookup, lifetime, and diagnostics control. Destroy the material cache before the shader and texture caches that own its referenced resources.
+
+Stable aliases can be replaced transactionally:
+
+```cpp
+Pyramid::MaterialSpecification replacement = materialSpec;
+replacement.uniforms = {
+    {"u_AlbedoColor", Pyramid::Math::Vec4(0.8f, 0.9f, 1.0f, 1.0f)},
+    {"u_Metallic", 0.2f},
+    {"u_Roughness", 0.35f}
+};
+replacement.assetId = {};
+
+if (materialCache.Replace(materialSpec.assetId, replacement))
+    material = materialCache.Find(materialSpec.assetId);
+```
+
+`Replace()` validates or resolves the complete replacement before changing the stable alias. Failure preserves the previously active material, while existing external owners of older material versions remain valid. Content-derived identifiers are immutable and cannot be replaced.
 
 ## Renderer
 

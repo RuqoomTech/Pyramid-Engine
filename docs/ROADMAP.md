@@ -13,7 +13,7 @@ The current `0.6.0-pre-alpha` baseline includes:
 - strict required window operations with Win32 implementations;
 - relocatable install/export package and external-consumer test;
 - Windows Debug/Release CI for build, CTest, install, and package consumption;
-- 24 registered tests, including engine-owned mesh resources, immutable geometry bounds, real PNG/JPEG decoding, transactional texture loading, OpenGL diagnostics, window events, camera resize/frustum behavior, framebuffer resize, scene-hierarchy transforms, incremental octree synchronization, bounds-accurate spatial queries, bounds-aware nearest-neighbor queries, transactional octree configuration, and automatic octree compaction/health metrics, stable shader identifiers, compile-once shader reuse, and transactional shader replacement;
+- 25 registered tests, including engine-owned mesh resources, immutable geometry bounds, real PNG/JPEG decoding, transactional texture loading, OpenGL diagnostics, window events, camera resize/frustum behavior, framebuffer resize, scene-hierarchy transforms, incremental octree synchronization, bounds-accurate spatial queries, bounds-aware nearest-neighbor queries, transactional octree configuration, and automatic octree compaction/health metrics, stable shader identifiers, compile-once shader reuse, and transactional shader replacement;
 - corrected standards-invalid PNG, zlib, and JPEG test fixtures;
 - public texture convenience definitions and explicit depth-target failure;
 - definitions for scene events, box queries, visibility statistics, spatial test scenes, and octree operations;
@@ -92,7 +92,8 @@ Target outcome: a trustworthy rendering SDK rather than a larger feature list.
 
 - Stable resource handles with generation checks.
 - [x] Add an engine-owned immutable material resource for shader/texture references, typed uniforms, and fixed render state.
-- Mesh/material asset import and caching built on the engine-owned `Mesh` and `Material` resources.
+- [x] Add exact-content material caching with stable aliases, transactional replacement, eviction, and residency statistics.
+- Mesh/material asset import built on the engine-owned `Mesh` and `Material` resources and their caches.
 - Shader preprocessing, dependency tracking, and reload.
 - Scene serialization with versioning and validation.
 - Asset packaging and path abstraction independent of the source checkout.

@@ -4,6 +4,7 @@
 #include <Pyramid/Graphics/Shader/ShaderCache.hpp>
 #include <Pyramid/Graphics/Texture/TextureCache.hpp>
 #include <Pyramid/Graphics/Material/Material.hpp>
+#include <Pyramid/Graphics/Material/MaterialCache.hpp>
 
 #include <iostream>
 
@@ -14,12 +15,14 @@ int main()
     const auto shaderId = Pyramid::ShaderAssetId::FromString("consumer/shader");
     const auto textureId = Pyramid::TextureAssetId::FromString("consumer/texture");
     const auto materialId = Pyramid::MaterialAssetId::FromString("consumer/material");
+    Pyramid::MaterialCache materialCache;
     std::cout << "Pyramid Engine " << PYRAMID_VERSION_STRING
               << " | vector length: " << value.Length()
               << " | mesh id: " << meshId.ToString()
               << " | shader id: " << shaderId.ToString()
               << " | texture id: " << textureId.ToString()
-              << " | material id: " << materialId.ToString() << '\n';
+              << " | material id: " << materialId.ToString()
+              << " | cached materials: " << materialCache.GetResidentCount() << '\n';
     return value.LengthSquared() > 0.0f && meshId.IsValid() && shaderId.IsValid() &&
         textureId.IsValid() && materialId.IsValid()
         ? 0

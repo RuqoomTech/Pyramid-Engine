@@ -6,6 +6,7 @@
 #include <Pyramid/Graphics/Shader/ShaderCache.hpp>
 #include <Pyramid/Graphics/Texture/TextureCache.hpp>
 #include <Pyramid/Graphics/Material/Material.hpp>
+#include <Pyramid/Graphics/Material/MaterialCache.hpp>
 #include <Pyramid/Graphics/Renderer/RenderSystem.hpp>
 #include <Pyramid/Graphics/Scene.hpp>
 
@@ -20,6 +21,7 @@ namespace Pyramid
     class TextureCache;
     class TextureResource;
     class Material;
+    class MaterialCache;
 }
 
 class BasicGame final : public Pyramid::Game
@@ -41,6 +43,7 @@ private:
     std::unique_ptr<Pyramid::MeshCache> m_meshCache;
     std::unique_ptr<Pyramid::ShaderCache> m_shaderCache;
     std::unique_ptr<Pyramid::TextureCache> m_textureCache;
+    std::unique_ptr<Pyramid::MaterialCache> m_materialCache;
     std::unique_ptr<Pyramid::Renderer::RenderSystem> m_renderSystem;
     std::shared_ptr<Pyramid::Scene> m_scene;
     std::unique_ptr<Pyramid::Camera> m_camera;

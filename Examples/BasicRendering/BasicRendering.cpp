@@ -125,6 +125,7 @@ void BasicRendering::onCreate()
     m_meshCache = std::make_unique<Pyramid::MeshCache>(*device);
     m_shaderCache = std::make_unique<Pyramid::ShaderCache>(*device);
     m_textureCache = std::make_unique<Pyramid::TextureCache>(*device);
+    m_materialCache = std::make_unique<Pyramid::MaterialCache>();
 
     // Initialize all components
     InitializeShaders();
@@ -157,7 +158,9 @@ void BasicRendering::onCreate()
     materialSpecification.assetId =
         Pyramid::MaterialAssetId::FromString("examples/basic-rendering/material");
     materialSpecification.name = "BasicRendering Material";
-    m_material = Pyramid::Material::Create(materialSpecification);
+    m_material = m_materialCache
+        ? m_materialCache->GetOrCreate(materialSpecification)
+        : Pyramid::Material::Create(materialSpecification);
     if (!m_material)
     {
         PYRAMID_LOG_ERROR("Failed to create the BasicRendering material");

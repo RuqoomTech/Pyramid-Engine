@@ -4,6 +4,13 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 
 ## [Unreleased]
 
+### Stable material identifiers and resource caching
+
+- Added `MaterialCache`, which owns one resident immutable material per exact shader/texture/uniform/render-state content fingerprint and resolves multiple stable aliases to it.
+- Added stable-ID/content conflict detection, strong residency, explicit `Evict()`, `CollectUnused()`, and `Clear()` lifetime controls, plus material-cache activity and residency statistics.
+- Added transactional `MaterialCache::Replace()`: replacement content is validated or resolved completely before a caller-defined stable alias changes, failure preserves the previous material, and already resident replacement content is reused.
+- Migrated both graphical examples to material-cache acquisition and added `Graphics.MaterialCache` coverage for exact-content sharing, alias conflicts, replacement, failure preservation, external-owner lifetime, statistics, collection, and eviction.
+
 ### Engine-owned material resources
 
 - Added deterministic 128-bit `MaterialAssetId` values from caller-owned stable names or immutable shader, texture, uniform, and render-state content.

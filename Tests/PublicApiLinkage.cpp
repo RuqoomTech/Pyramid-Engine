@@ -14,6 +14,7 @@
 #include <Pyramid/Graphics/Shader/ShaderCache.hpp>
 #include <Pyramid/Graphics/Renderer/RenderSystem.hpp>
 #include <Pyramid/Graphics/Material/Material.hpp>
+#include <Pyramid/Graphics/Material/MaterialCache.hpp>
 
 #include <memory>
 #include <string>
@@ -207,6 +208,20 @@ namespace
         &Pyramid::Material::Create;
     volatile decltype(&Pyramid::Material::Apply) g_applyMaterial =
         &Pyramid::Material::Apply;
+    volatile decltype(&Pyramid::MaterialCache::GetOrCreate) g_getOrCreateCachedMaterial =
+        &Pyramid::MaterialCache::GetOrCreate;
+    volatile decltype(&Pyramid::MaterialCache::Replace) g_replaceCachedMaterial =
+        &Pyramid::MaterialCache::Replace;
+    volatile decltype(&Pyramid::MaterialCache::Find) g_findCachedMaterial =
+        &Pyramid::MaterialCache::Find;
+    volatile decltype(&Pyramid::MaterialCache::Evict) g_evictCachedMaterial =
+        &Pyramid::MaterialCache::Evict;
+    volatile decltype(&Pyramid::MaterialCache::CollectUnused) g_collectUnusedMaterials =
+        &Pyramid::MaterialCache::CollectUnused;
+    volatile decltype(&Pyramid::MaterialCache::Clear) g_clearMaterialCache =
+        &Pyramid::MaterialCache::Clear;
+    volatile decltype(&Pyramid::MaterialCache::GetStats) g_getMaterialCacheStats =
+        &Pyramid::MaterialCache::GetStats;
     volatile decltype(&Pyramid::Renderer::CommandBuffer::SetMaterial) g_setMaterial =
         &Pyramid::Renderer::CommandBuffer::SetMaterial;
     volatile decltype(&Pyramid::Renderer::CommandBuffer::SetUniformMat4) g_setCommandUniformMat4 =
@@ -318,6 +333,13 @@ int main()
                    g_calculateMaterialContentId &&
                    g_createMaterial &&
                    g_applyMaterial &&
+                   g_getOrCreateCachedMaterial &&
+                   g_replaceCachedMaterial &&
+                   g_findCachedMaterial &&
+                   g_evictCachedMaterial &&
+                   g_collectUnusedMaterials &&
+                   g_clearMaterialCache &&
+                   g_getMaterialCacheStats &&
                    g_setMaterial &&
                    g_setCommandUniformMat4 &&
                    g_drawMesh &&

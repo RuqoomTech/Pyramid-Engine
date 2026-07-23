@@ -18,14 +18,14 @@ The project is intended for engine development and experimentation. It is not ye
 | Scene | Scene graph, render objects, lights, scene manager, and octree queries |
 | Math | Vectors, matrices, quaternions, geometry helpers, and SIMD-oriented utilities |
 | Images | TGA/BMP subsets, custom non-interlaced PNG, and libjpeg-turbo JPEG decoding |
-| Tests | 24 CTest targets: 5 image/utility tests plus API linkage and focused graphics/platform coverage |
+| Tests | 25 CTest targets: 5 image/utility tests plus API linkage and focused graphics/platform coverage |
 | CI | GCC and Clang, Debug and Release, package install, and external-consumer validation |
 
 ## Implemented
 
 - Application lifecycle and frame loop through `Pyramid::Game`.
 - Win32 window creation, resize-event delivery, resize-safe viewport updates, visibility, positioning, and WGL context management.
-- OpenGL device, engine-owned mesh and material resources, stable resource identifiers, content-deduplicating mesh, shader-program, and texture caches, buffers, vertex arrays, shaders, textures, resize-safe framebuffers, and state caching.
+- OpenGL device, engine-owned mesh and material resources, stable resource identifiers, content-deduplicating mesh, shader-program, texture, and material caches, buffers, vertex arrays, shaders, textures, resize-safe framebuffers, and state caching.
 - Forward, cascaded-shadow, deferred-geometry, and deferred-lighting passes.
 - Perspective and orthographic cameras with normalized world-space frusta and point/sphere/AABB visibility tests.
 - Bounds-aware point, sphere, box, ray, nearest-object, and K-nearest scene queries with octree/linear parity.
