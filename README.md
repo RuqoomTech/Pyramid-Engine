@@ -18,7 +18,7 @@ The project is intended for engine development and experimentation. It is not ye
 | Scene | Scene graph, render objects, lights, scene manager, and octree queries |
 | Math | Vectors, matrices, quaternions, geometry helpers, and SIMD-oriented utilities |
 | Images | TGA/BMP subsets, custom non-interlaced PNG, and libjpeg-turbo JPEG decoding |
-| Tests | 17 CTest targets: 5 image/utility tests plus API linkage and focused graphics/platform coverage |
+| Tests | 18 CTest targets: 5 image/utility tests plus API linkage and focused graphics/platform coverage |
 | CI | GCC and Clang, Debug and Release, package install, and external-consumer validation |
 
 ## Implemented
@@ -29,7 +29,7 @@ The project is intended for engine development and experimentation. It is not ye
 - Forward, cascaded-shadow, deferred-geometry, and deferred-lighting passes.
 - Perspective and orthographic cameras with normalized world-space frusta and point/sphere/AABB visibility tests.
 - Bounds-aware point, sphere, box, ray, nearest-object, and K-nearest scene queries with octree/linear parity.
-- Scene objects, lights, cycle-safe hierarchy nodes, transformed object bounds, scene management, incrementally synchronized and transactionally reconfigurable octree storage, bounds-accurate point/sphere/box/ray queries, and frustum-aware visibility queries.
+- Scene objects, lights, cycle-safe hierarchy nodes, transformed object bounds, scene management, incrementally synchronized, automatically compacted, transactionally reconfigurable octree storage with health metrics, bounds-accurate point/sphere/box/ray queries, and frustum-aware visibility queries.
 - OpenGL driver debug callbacks and centralized error diagnostics in Debug builds.
 - Logging, assertions, image loading, compression utilities, and math primitives.
 - Installable CMake package exported as `Pyramid::Engine`.

@@ -74,6 +74,12 @@ namespace
         &Pyramid::SceneManagement::Octree::Configure;
     volatile decltype(&Pyramid::SceneManagement::Octree::GetConfiguration) g_getOctreeConfiguration =
         &Pyramid::SceneManagement::Octree::GetConfiguration;
+    volatile decltype(&Pyramid::SceneManagement::Octree::Compact) g_compactOctree =
+        &Pyramid::SceneManagement::Octree::Compact;
+    volatile decltype(&Pyramid::SceneManagement::Octree::GetStats) g_getOctreeStats =
+        &Pyramid::SceneManagement::Octree::GetStats;
+    volatile decltype(&Pyramid::SceneManagement::Octree::GetLastCompactionStats) g_getLastOctreeCompaction =
+        &Pyramid::SceneManagement::Octree::GetLastCompactionStats;
     volatile decltype(&Pyramid::Camera::SetViewportSize) g_setCameraViewport =
         &Pyramid::Camera::SetViewportSize;
     volatile decltype(&Pyramid::Camera::GetFrustumPlanes) g_getCameraFrustumPlanes =
@@ -132,6 +138,9 @@ int main()
                    g_synchronizeOctree &&
                    g_configureOctree &&
                    g_getOctreeConfiguration &&
+                   g_compactOctree &&
+                   g_getOctreeStats &&
+                   g_getLastOctreeCompaction &&
                    g_setCameraViewport &&
                    g_getCameraFrustumPlanes &&
                    g_isCameraAABBVisible &&

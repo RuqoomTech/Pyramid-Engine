@@ -62,3 +62,8 @@ add_executable(OctreeConfigurationTests OctreeConfigurationTests.cpp)
 target_link_libraries(OctreeConfigurationTests PRIVATE Pyramid::Engine)
 set_target_properties(OctreeConfigurationTests PROPERTIES FOLDER "Tests/Graphics")
 add_test(NAME Graphics.OctreeConfiguration COMMAND $<TARGET_FILE:OctreeConfigurationTests>)
+
+add_executable(OctreeCompactionTests OctreeCompactionTests.cpp)
+target_link_libraries(OctreeCompactionTests PRIVATE Pyramid::Engine)
+set_target_properties(OctreeCompactionTests PROPERTIES FOLDER "Tests/Graphics")
+add_test(NAME Graphics.OctreeCompaction COMMAND $<TARGET_FILE:OctreeCompactionTests>)

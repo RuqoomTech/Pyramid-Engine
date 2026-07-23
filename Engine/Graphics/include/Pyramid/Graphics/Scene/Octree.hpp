@@ -85,6 +85,20 @@ namespace Pyramid
         };
 
         /**
+         * @brief Structural changes produced by octree compaction
+         */
+        struct OctreeCompactionStats
+        {
+            u32 collapsedNodes = 0;
+            u32 promotedObjects = 0;
+
+            bool HasChanges() const
+            {
+                return collapsedNodes > 0;
+            }
+        };
+
+        /**
          * @brief Octree node for spatial partitioning
          */
         class OctreeNode
@@ -114,6 +128,7 @@ namespace Pyramid
             // Maintenance
             void Update();
             void Rebuild();
+            OctreeCompactionStats Compact();
 
             // Accessors
             const AABB &GetBounds() const { return m_bounds; }
@@ -131,6 +146,7 @@ namespace Pyramid
             u32 GetChildIndex(const Math::Vec3 &position) const;
             AABB GetChildBounds(u32 index) const;
             AABB CalculateObjectBounds(const std::shared_ptr<RenderObject> &object) const;
+            void CollectObjects(std::vector<std::shared_ptr<RenderObject>> &objects) const;
 
             // Node data
             AABB m_bounds;
@@ -157,10 +173,12 @@ namespace Pyramid
             u32 removedObjects = 0;
             u32 movedObjects = 0;
             u32 unchangedObjects = 0;
+            OctreeCompactionStats compaction;
 
             bool HasChanges() const
             {
-                return insertedObjects > 0 || removedObjects > 0 || movedObjects > 0;
+                return insertedObjects > 0 || removedObjects > 0 || movedObjects > 0 ||
+                       compaction.HasChanges();
             }
         };
 
@@ -192,6 +210,7 @@ namespace Pyramid
             OctreeSyncStats Synchronize(const std::vector<std::shared_ptr<RenderObject>> &objects);
             void Clear();
             void Rebuild();
+            OctreeCompactionStats Compact();
 
             // Spatial queries test complete world-space object AABBs. QueryRay
             // returns unique hits ordered from nearest to farthest.
@@ -224,15 +243,25 @@ namespace Pyramid
             struct OctreeStats
             {
                 u32 totalNodes = 0;
+                u32 internalNodes = 0;
                 u32 leafNodes = 0;
+                u32 occupiedLeafNodes = 0;
+                u32 emptyLeafNodes = 0;
                 u32 totalObjects = 0;
+                u32 trackedObjects = 0;
+                u32 objectsInInternalNodes = 0;
+                u32 maxObjectsInNode = 0;
                 u32 maxDepth = 0;
-                u32 averageObjectsPerLeaf = 0;
+                u32 configuredMaxDepth = 0;
+                f32 averageObjectsPerLeaf = 0.0f;
                 f32 averageDepth = 0.0f;
-                f32 memoryUsage = 0.0f; // In MB
+                f32 leafUtilization = 0.0f;
+                f32 emptyLeafRatio = 0.0f;
+                f32 memoryUsage = 0.0f; // Approximate MB
             };
 
             OctreeStats GetStats() const;
+            OctreeCompactionStats GetLastCompactionStats() const { return m_lastCompactionStats; }
             void DrawDebugVisualization() const;
 
             // Accessors
@@ -256,6 +285,7 @@ namespace Pyramid
 
             // Object tracking for updates
             std::unordered_map<std::shared_ptr<RenderObject>, AABB> m_objectBounds;
+            OctreeCompactionStats m_lastCompactionStats;
 
         };
 

@@ -4,6 +4,14 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 
 ## [Unreleased]
 
+### Octree compaction and health metrics
+
+- Added automatic bottom-up octree compaction after removals and object relocation. Empty descendant branches collapse, and subtrees that fit within one node's capacity are promoted safely before child nodes are released.
+- Added `Octree::Compact()`, `OctreeCompactionStats`, last-compaction inspection, and compaction results on `OctreeSyncStats`.
+- Expanded `OctreeStats` with internal/leaf/empty/occupied node counts, tracked versus stored object counts, occupied depth, configured depth, node occupancy, leaf utilization, empty-leaf ratio, and approximate memory usage.
+- Batched synchronization now performs one compaction pass after all movement and removal changes instead of repeatedly compacting per object.
+- Added `Graphics.OctreeCompaction` coverage for removal-heavy collapse, movement-driven cleanup, synchronization statistics, no-op compaction, object preservation, and health-metric consistency.
+
 ### Transactional octree configuration
 
 - Added `OctreeConfiguration`, `Octree::Configure()`, and `GetConfiguration()` for one atomic bounds/depth/capacity update.

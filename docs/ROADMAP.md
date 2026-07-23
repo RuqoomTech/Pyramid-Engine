@@ -13,7 +13,7 @@ The current `0.6.0-pre-alpha` baseline includes:
 - strict required window operations with Win32 implementations;
 - relocatable install/export package and external-consumer test;
 - Windows Debug/Release CI for build, CTest, install, and package consumption;
-- 17 registered tests, including real PNG/JPEG decoding, transactional texture loading, OpenGL diagnostics, window events, camera resize/frustum behavior, framebuffer resize, scene-hierarchy transforms, incremental octree synchronization, bounds-accurate spatial queries, bounds-aware nearest-neighbor queries, and transactional octree configuration;
+- 18 registered tests, including real PNG/JPEG decoding, transactional texture loading, OpenGL diagnostics, window events, camera resize/frustum behavior, framebuffer resize, scene-hierarchy transforms, incremental octree synchronization, bounds-accurate spatial queries, bounds-aware nearest-neighbor queries, transactional octree configuration, and automatic octree compaction/health metrics;
 - corrected standards-invalid PNG, zlib, and JPEG test fixtures;
 - public texture convenience definitions and explicit depth-target failure;
 - definitions for scene events, box queries, visibility statistics, spatial test scenes, and octree operations;
@@ -69,6 +69,7 @@ The current `0.6.0-pre-alpha` baseline includes:
 - [x] Add focused octree tests for point, ray, exact box/sphere intersections, root-overflow objects, and linear/octree parity.
 - [x] Use full object bounds and branch pruning for nearest-object and K-nearest queries.
 - [x] Add focused octree tests for transactional bounds, depth, and capacity changes.
+- [x] Add automatic octree branch compaction and structural health metrics.
 - Implement scene persistence only after a stable resource identity model exists.
 
 ## P1 — stable OpenGL core

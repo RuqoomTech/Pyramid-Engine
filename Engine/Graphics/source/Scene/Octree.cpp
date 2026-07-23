@@ -374,6 +374,49 @@ namespace Pyramid
             m_needsRebuild = false;
         }
 
+        OctreeCompactionStats OctreeNode::Compact()
+        {
+            OctreeCompactionStats stats;
+            if (IsLeaf())
+            {
+                return stats;
+            }
+
+            u32 descendantObjects = 0;
+            for (auto &child : m_children)
+            {
+                if (!child)
+                {
+                    continue;
+                }
+
+                const auto childStats = child->Compact();
+                stats.collapsedNodes += childStats.collapsedNodes;
+                stats.promotedObjects += childStats.promotedObjects;
+                descendantObjects += child->GetTotalObjectCount();
+            }
+
+            const u32 totalObjects = static_cast<u32>(m_objects.size()) + descendantObjects;
+            if (descendantObjects == 0 || totalObjects <= m_maxObjects)
+            {
+                for (auto &child : m_children)
+                {
+                    if (!child)
+                    {
+                        continue;
+                    }
+
+                    stats.collapsedNodes += child->GetNodeCount();
+                    child->CollectObjects(m_objects);
+                    child.reset();
+                }
+
+                stats.promotedObjects += descendantObjects;
+            }
+
+            return stats;
+        }
+
         u32 OctreeNode::GetMaxDepth() const
         {
             u32 depth = m_depth;
@@ -396,6 +439,18 @@ namespace Pyramid
             Math::Vec3 boundsMax;
             object->GetWorldBounds(boundsMin, boundsMax);
             return AABB(boundsMin, boundsMax);
+        }
+
+        void OctreeNode::CollectObjects(std::vector<std::shared_ptr<RenderObject>> &objects) const
+        {
+            objects.insert(objects.end(), m_objects.begin(), m_objects.end());
+            for (const auto &child : m_children)
+            {
+                if (child)
+                {
+                    child->CollectObjects(objects);
+                }
+            }
         }
 
         u32 OctreeNode::GetTotalObjectCount() const
@@ -595,31 +650,47 @@ namespace Pyramid
 
         void Octree::Remove(std::shared_ptr<RenderObject> object)
         {
-            if (!object || !m_root)
+            if (!object || !m_root || m_objectBounds.erase(object) == 0)
             {
+                m_lastCompactionStats = {};
                 return;
             }
 
             m_root->Remove(object);
-            m_objectBounds.erase(object);
+            Compact();
         }
 
         void Octree::Update(std::shared_ptr<RenderObject> object)
         {
             if (!object || !m_root)
             {
+                m_lastCompactionStats = {};
                 return;
             }
 
-            m_root->Remove(object);
+            const bool wasTracked = m_objectBounds.find(object) != m_objectBounds.end();
+            if (wasTracked)
+            {
+                m_root->Remove(object);
+            }
+
             m_root->Insert(object);
             m_objectBounds[object] = SpatialUtils::CalculateAABB(object);
+            if (wasTracked)
+            {
+                Compact();
+            }
+            else
+            {
+                m_lastCompactionStats = {};
+            }
         }
 
         bool Octree::UpdateIfMoved(std::shared_ptr<RenderObject> object)
         {
             if (!object || !m_root)
             {
+                m_lastCompactionStats = {};
                 return false;
             }
 
@@ -629,17 +700,20 @@ namespace Pyramid
             {
                 m_root->Insert(object);
                 m_objectBounds.emplace(object, currentBounds);
+                m_lastCompactionStats = {};
                 return true;
             }
 
             if (BoundsEqual(tracked->second, currentBounds))
             {
+                m_lastCompactionStats = {};
                 return false;
             }
 
             m_root->Remove(object);
             m_root->Insert(object);
             tracked->second = currentBounds;
+            Compact();
             return true;
         }
 
@@ -648,6 +722,7 @@ namespace Pyramid
             OctreeSyncStats stats;
             if (!m_root)
             {
+                m_lastCompactionStats = {};
                 return stats;
             }
 
@@ -661,13 +736,19 @@ namespace Pyramid
                     continue;
                 }
 
-                if (m_objectBounds.find(object) == m_objectBounds.end())
+                const AABB currentBounds = SpatialUtils::CalculateAABB(object);
+                const auto tracked = m_objectBounds.find(object);
+                if (tracked == m_objectBounds.end())
                 {
-                    Insert(object);
+                    m_root->Insert(object);
+                    m_objectBounds.emplace(object, currentBounds);
                     ++stats.insertedObjects;
                 }
-                else if (UpdateIfMoved(object))
+                else if (!BoundsEqual(tracked->second, currentBounds))
                 {
+                    m_root->Remove(object);
+                    m_root->Insert(object);
+                    tracked->second = currentBounds;
                     ++stats.movedObjects;
                 }
                 else
@@ -688,8 +769,18 @@ namespace Pyramid
 
             for (const auto &object : removedObjects)
             {
-                Remove(object);
+                m_root->Remove(object);
+                m_objectBounds.erase(object);
                 ++stats.removedObjects;
+            }
+
+            if (stats.movedObjects > 0 || stats.removedObjects > 0)
+            {
+                stats.compaction = Compact();
+            }
+            else
+            {
+                m_lastCompactionStats = {};
             }
 
             return stats;
@@ -702,6 +793,7 @@ namespace Pyramid
                 m_root->Clear();
             }
             m_objectBounds.clear();
+            m_lastCompactionStats = {};
         }
 
         std::vector<std::shared_ptr<RenderObject>> Octree::QueryPoint(const Math::Vec3 &point) const
@@ -995,13 +1087,24 @@ namespace Pyramid
             const auto stats = GetStats();
             PYRAMID_LOG_DEBUG(
                 "Octree stats: nodes=", stats.totalNodes,
+                ", leaves=", stats.leafNodes,
+                ", emptyLeaves=", stats.emptyLeafNodes,
                 ", objects=", stats.totalObjects,
-                ", maxDepth=", stats.maxDepth);
+                ", tracked=", stats.trackedObjects,
+                ", maxDepth=", stats.maxDepth,
+                ", memoryMB=", stats.memoryUsage,
+                ", lastCollapsedNodes=", m_lastCompactionStats.collapsedNodes);
         }
 
         void Octree::Rebuild()
         {
             RebuildWithConfiguration(GetConfiguration());
+        }
+
+        OctreeCompactionStats Octree::Compact()
+        {
+            m_lastCompactionStats = m_root ? m_root->Compact() : OctreeCompactionStats{};
+            return m_lastCompactionStats;
         }
 
         bool Octree::RebuildWithConfiguration(const OctreeConfiguration &configuration)
@@ -1038,6 +1141,7 @@ namespace Pyramid
                 m_objectBounds.swap(replacementBounds);
                 m_maxDepth = configuration.maxDepth;
                 m_maxObjectsPerNode = configuration.maxObjectsPerNode;
+                m_lastCompactionStats = {};
                 return true;
             }
             catch (const std::exception &error)
@@ -1065,12 +1169,75 @@ namespace Pyramid
         Octree::OctreeStats Octree::GetStats() const
         {
             OctreeStats stats;
-            if (m_root)
+            stats.configuredMaxDepth = m_maxDepth;
+            stats.trackedObjects = static_cast<u32>(m_objectBounds.size());
+            if (!m_root)
             {
-                stats.totalNodes = m_root->GetNodeCount();
-                stats.totalObjects = m_root->GetTotalObjectCount();
-                stats.maxDepth = m_maxDepth;
+                return stats;
             }
+
+            u64 leafDepthTotal = 0;
+            u64 leafObjectTotal = 0;
+            size_t estimatedBytes = m_objectBounds.size() *
+                (sizeof(std::shared_ptr<RenderObject>) + sizeof(AABB) + sizeof(void *) * 2);
+
+            const auto accumulate = [&](const auto &self, const OctreeNode *node) -> void
+            {
+                ++stats.totalNodes;
+                stats.maxDepth = Math::Max(stats.maxDepth, node->m_depth);
+                stats.maxObjectsInNode = Math::Max(
+                    stats.maxObjectsInNode,
+                    static_cast<u32>(node->m_objects.size()));
+                stats.totalObjects += static_cast<u32>(node->m_objects.size());
+                estimatedBytes += sizeof(OctreeNode) +
+                                  node->m_objects.capacity() * sizeof(std::shared_ptr<RenderObject>);
+
+                if (node->IsLeaf())
+                {
+                    ++stats.leafNodes;
+                    leafDepthTotal += node->m_depth;
+                    leafObjectTotal += node->m_objects.size();
+                    if (node->m_objects.empty())
+                    {
+                        ++stats.emptyLeafNodes;
+                    }
+                    else
+                    {
+                        ++stats.occupiedLeafNodes;
+                    }
+                    return;
+                }
+
+                ++stats.internalNodes;
+                stats.objectsInInternalNodes += static_cast<u32>(node->m_objects.size());
+                for (const auto &child : node->m_children)
+                {
+                    if (child)
+                    {
+                        self(self, child.get());
+                    }
+                }
+            };
+
+            accumulate(accumulate, m_root.get());
+
+            if (stats.leafNodes > 0)
+            {
+                stats.averageObjectsPerLeaf = static_cast<f32>(leafObjectTotal) /
+                                              static_cast<f32>(stats.leafNodes);
+                stats.averageDepth = static_cast<f32>(leafDepthTotal) /
+                                     static_cast<f32>(stats.leafNodes);
+                stats.emptyLeafRatio = static_cast<f32>(stats.emptyLeafNodes) /
+                                       static_cast<f32>(stats.leafNodes);
+
+                const u64 totalLeafCapacity = static_cast<u64>(stats.leafNodes) *
+                                              static_cast<u64>(Math::Max(1u, m_maxObjectsPerNode));
+                stats.leafUtilization = totalLeafCapacity > 0
+                    ? static_cast<f32>(leafObjectTotal) / static_cast<f32>(totalLeafCapacity)
+                    : 0.0f;
+            }
+
+            stats.memoryUsage = static_cast<f32>(estimatedBytes) / (1024.0f * 1024.0f);
             return stats;
         }
 
