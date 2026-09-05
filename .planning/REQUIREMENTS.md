@@ -118,47 +118,47 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FRZ-01 | Phase TBD | Pending |
-| FRZ-02 | Phase TBD | Pending |
-| FRZ-03 | Phase TBD | Pending |
-| FRZ-04 | Phase TBD | Pending |
-| FRZ-05 | Phase TBD | Pending |
-| QLT-01 | Phase TBD | Pending |
-| QLT-02 | Phase TBD | Pending |
-| QLT-03 | Phase TBD | Pending |
-| QLT-04 | Phase TBD | Pending |
-| HDL-01 | Phase TBD | Pending |
-| HDL-02 | Phase TBD | Pending |
-| HDL-03 | Phase TBD | Pending |
-| HDL-04 | Phase TBD | Pending |
-| SCN-01 | Phase TBD | Pending |
-| SCN-02 | Phase TBD | Pending |
-| SCN-03 | Phase TBD | Pending |
-| DAT-01 | Phase TBD | Pending |
-| DAT-02 | Phase TBD | Pending |
-| DAT-03 | Phase TBD | Pending |
-| DAT-04 | Phase TBD | Pending |
-| SDK-01 | Phase TBD | Pending |
-| SDK-02 | Phase TBD | Pending |
-| SDK-03 | Phase TBD | Pending |
-| SDK-04 | Phase TBD | Pending |
-| CNV-01 | Phase TBD | Pending |
-| CNV-02 | Phase TBD | Pending |
-| CAT-01 | Phase TBD | Pending |
-| CAT-02 | Phase TBD | Pending |
-| DOC-01 | Phase TBD | Pending |
-| DOC-02 | Phase TBD | Pending |
-| DOC-03 | Phase TBD | Pending |
-| REG-01 | Phase TBD | Pending |
-| REG-02 | Phase TBD | Pending |
-| PRF-01 | Phase TBD | Pending |
-| PRF-02 | Phase TBD | Pending |
-| PRF-03 | Phase TBD | Pending |
+| FRZ-01 | Phase 1 | Pending |
+| FRZ-02 | Phase 1 | Pending |
+| FRZ-03 | Phase 1 | Pending |
+| FRZ-04 | Phase 1 | Pending |
+| FRZ-05 | Phase 1 | Pending |
+| QLT-01 | Phase 2 | Pending |
+| QLT-02 | Phase 2 | Pending |
+| QLT-03 | Phase 2 | Pending |
+| QLT-04 | Phase 2 | Pending |
+| HDL-01 | Phase 3 | Pending |
+| HDL-02 | Phase 3 | Pending |
+| HDL-03 | Phase 3 | Pending |
+| HDL-04 | Phase 3 | Pending |
+| SCN-01 | Phase 4 | Pending |
+| SCN-02 | Phase 4 | Pending |
+| SCN-03 | Phase 4 | Pending |
+| DAT-01 | Phase 5 | Pending |
+| DAT-02 | Phase 5 | Pending |
+| DAT-03 | Phase 5 | Pending |
+| DAT-04 | Phase 5 | Pending |
+| SDK-01 | Phase 6 | Pending |
+| SDK-02 | Phase 6 | Pending |
+| SDK-03 | Phase 6 | Pending |
+| SDK-04 | Phase 6 | Pending |
+| CNV-01 | Phase 7 | Pending |
+| CNV-02 | Phase 7 | Pending |
+| CAT-01 | Phase 7 | Pending |
+| CAT-02 | Phase 7 | Pending |
+| DOC-01 | Phase 8 | Pending |
+| DOC-02 | Phase 8 | Pending |
+| DOC-03 | Phase 8 | Pending |
+| REG-01 | Phase 4 | Pending |
+| REG-02 | Phase 4 | Pending |
+| PRF-01 | Phase 9 | Pending |
+| PRF-02 | Phase 9 | Pending |
+| PRF-03 | Phase 9 | Pending |
 
 **Coverage:**
 - v1 requirements: 36 total
-- Mapped to phases: 0
-- Unmapped: 36 (roadmap creation fills this in)
+- Mapped to phases: 36
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-09-05*
