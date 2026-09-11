@@ -162,7 +162,6 @@ namespace Pyramid
             // Advanced features
             void SetLODEnabled(bool enabled) { m_lodEnabled = enabled; }
             void SetFrustumCullingEnabled(bool enabled) { m_frustumCullingEnabled = enabled; }
-            void SetOcclusionCullingEnabled(bool enabled) { m_occlusionCullingEnabled = enabled; }
 
             // Debug visualization
             void SetDebugVisualization(bool enabled) { m_debugVisualization = enabled; }
@@ -174,7 +173,6 @@ namespace Pyramid
 
             // Culling algorithms
             bool FrustumCull(const std::shared_ptr<RenderObject> &object, const Camera &camera);
-            bool OcclusionCull(const std::shared_ptr<RenderObject> &object, const Camera &camera);
             f32 CalculateLOD(const std::shared_ptr<RenderObject> &object, const Camera &camera);
 
             // Scene data
@@ -191,7 +189,6 @@ namespace Pyramid
             // Performance settings
             bool m_lodEnabled = true;
             bool m_frustumCullingEnabled = true;
-            bool m_occlusionCullingEnabled = false;
             bool m_debugVisualization = false;
 
             // Statistics

@@ -14,7 +14,7 @@ namespace Pyramid
     {
 
         SceneManager::SceneManager()
-            : m_activeScene(nullptr), m_spatialPartitioningEnabled(true), m_octreeMaxDepth(8), m_octreeSize(1000.0f, 1000.0f, 1000.0f), m_octreeCenter(Math::Vec3::Zero), m_lodEnabled(true), m_frustumCullingEnabled(true), m_occlusionCullingEnabled(false), m_debugVisualization(false), m_needsOctreeRebuild(false), m_lastUpdateTime(0.0f)
+            : m_activeScene(nullptr), m_spatialPartitioningEnabled(true), m_octreeMaxDepth(8), m_octreeSize(1000.0f, 1000.0f, 1000.0f), m_octreeCenter(Math::Vec3::Zero), m_lodEnabled(true), m_frustumCullingEnabled(true), m_debugVisualization(false), m_needsOctreeRebuild(false), m_lastUpdateTime(0.0f)
         {
             // SceneManager initialized
             InitializeOctree();
@@ -296,17 +296,6 @@ namespace Pyramid
                 }
             }
 
-            // Apply additional culling if enabled
-            if (m_occlusionCullingEnabled)
-            {
-                auto it = std::remove_if(visibleObjects.begin(), visibleObjects.end(),
-                                         [this, &camera](const std::shared_ptr<RenderObject> &obj)
-                                         {
-                                             return OcclusionCull(obj, camera);
-                                         });
-                visibleObjects.erase(it, visibleObjects.end());
-            }
-
             m_stats.visibleObjects = static_cast<u32>(visibleObjects.size());
             return visibleObjects;
         }
@@ -536,14 +525,6 @@ namespace Pyramid
             Math::Vec3 boundsMax;
             object->GetWorldBounds(boundsMin, boundsMax);
             return !camera.IsAABBVisible(boundsMin, boundsMax);
-        }
-
-        bool SceneManager::OcclusionCull(const std::shared_ptr<RenderObject> &object, const Camera &camera)
-        {
-            (void)object;
-            (void)camera;
-            // Occlusion culling is not implemented yet.
-            return false;
         }
 
         f32 SceneManager::CalculateLOD(const std::shared_ptr<RenderObject> &object, const Camera &camera)
