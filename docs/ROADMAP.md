@@ -47,7 +47,7 @@ The current `0.6.0-pre-alpha` baseline includes:
 
 ### Rendering correctness
 
-- Implement compute dispatch or remove it from the command model.
+- [x] Removed compute dispatch from the command model (requires OpenGL 4.3-plus; baseline is 3.3 — re-add only with a higher-baseline backend decision).
 - Complete backend-neutral framebuffer binding.
 - [x] Add platform-neutral window resize events.
 - [x] Propagate renderable resize events into the default viewport and active camera.
@@ -71,7 +71,7 @@ The current `0.6.0-pre-alpha` baseline includes:
 
 - [x] Implement hierarchy-wide transform dirty propagation and cycle-safe reparenting.
 - [x] Extract normalized camera frustum planes and use transformed object bounds for scene/octree visibility.
-- Replace placeholder occlusion culling with a supported technique or remove the setting.
+- [x] Removed the occlusion-culling setting; visibility equals frustum plus octree (occlusion deferred until a device-side query technique earns its own phase).
 - [x] Introduce an engine-owned mesh resource with validated vertex/index ownership, layout, topology, draw count, and immutable local bounds.
 - [x] Add stable mesh identifiers and a graphics-device-bound resource cache that shares exact geometry across aliases; manual `RenderObject` bounds overrides and the unit-cube fallback remain supported.
 - [x] Integrate dependency-free OBJ primitives transactionally with the mesh cache while preserving material-slot metadata.

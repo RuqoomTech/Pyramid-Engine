@@ -4,6 +4,11 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 
 ## [Unreleased]
 
+### P0 core freeze
+
+- Removed compute dispatch from the command model: deleted `RenderCommandType::Dispatch`, `CommandBuffer::Dispatch`, `IShader::CompileCompute`/`DispatchCompute` and the `OpenGLShader` implementations, plus the `ShaderProgram` compute path (`computeSource`, `ShaderProgramType::Compute`, `IsCompute`). Compute shaders require OpenGL 4.3-plus while the baseline is 3.3 core; re-add only with a higher-baseline backend decision.
+- Removed the occlusion-culling placeholder: deleted `SceneManager::SetOcclusionCullingEnabled`, `OcclusionCull`, and `m_occlusionCullingEnabled`. Visibility is frustum plus octree; occlusion deferred until a device-side query technique earns its own phase.
+
 ### Ecosystem boundary documentation
 
 - Registered Pyramid Engine as an independent Eco runtime consumer and defined
