@@ -71,28 +71,10 @@ namespace Pyramid
             const ShaderProgramSpecification& specification,
             bool logErrors)
         {
-            const bool hasCompute = !specification.computeSource.empty();
             const bool hasVertex = !specification.vertexSource.empty();
             const bool hasFragment = !specification.fragmentSource.empty();
-            const bool hasGeometry = !specification.geometrySource.empty();
             const bool hasTessControl = !specification.tessellationControlSource.empty();
             const bool hasTessEvaluation = !specification.tessellationEvaluationSource.empty();
-            const bool hasAnyGraphics = hasVertex || hasFragment || hasGeometry ||
-                                        hasTessControl || hasTessEvaluation;
-
-            if (hasCompute)
-            {
-                if (hasAnyGraphics)
-                {
-                    if (logErrors)
-                    {
-                        PYRAMID_LOG_ERROR(
-                            "Shader program creation failed: compute source cannot be combined with graphics stages");
-                    }
-                    return false;
-                }
-                return true;
-            }
 
             if (!hasVertex || !hasFragment)
             {
@@ -120,13 +102,12 @@ namespace Pyramid
         ShaderAssetId HashSpecification(const ShaderProgramSpecification& specification)
         {
             StableHasher128 hasher;
-            hasher.AddString("Pyramid.ShaderProgram.Content.v1");
+            hasher.AddString("Pyramid.ShaderProgram.Content.v2");
             hasher.AddString(specification.vertexSource);
             hasher.AddString(specification.tessellationControlSource);
             hasher.AddString(specification.tessellationEvaluationSource);
             hasher.AddString(specification.geometrySource);
             hasher.AddString(specification.fragmentSource);
-            hasher.AddString(specification.computeSource);
             return hasher.Finish();
         }
 
@@ -136,8 +117,7 @@ namespace Pyramid
                    static_cast<u64>(specification.tessellationControlSource.size()) +
                    static_cast<u64>(specification.tessellationEvaluationSource.size()) +
                    static_cast<u64>(specification.geometrySource.size()) +
-                   static_cast<u64>(specification.fragmentSource.size()) +
-                   static_cast<u64>(specification.computeSource.size());
+                   static_cast<u64>(specification.fragmentSource.size());
         }
     }
 
@@ -220,10 +200,8 @@ namespace Pyramid
                 return nullptr;
             }
 
-            const bool compute = !specification.computeSource.empty();
             return std::shared_ptr<ShaderProgram>(new ShaderProgram(
                 std::move(shader),
-                compute ? ShaderProgramType::Compute : ShaderProgramType::Graphics,
                 !specification.geometrySource.empty(),
                 !specification.tessellationControlSource.empty(),
                 CalculateSourceBytes(specification),
@@ -240,7 +218,6 @@ namespace Pyramid
 
     ShaderProgram::ShaderProgram(
         std::shared_ptr<IShader> shader,
-        ShaderProgramType type,
         bool hasGeometryStage,
         bool hasTessellationStages,
         u64 sourceBytes,
@@ -248,7 +225,6 @@ namespace Pyramid
         ShaderAssetId contentId,
         std::string name)
         : m_shader(std::move(shader)),
-          m_type(type),
           m_hasGeometryStage(hasGeometryStage),
           m_hasTessellationStages(hasTessellationStages),
           m_sourceBytes(sourceBytes),
@@ -262,11 +238,6 @@ namespace Pyramid
         IShader& shader,
         const ShaderProgramSpecification& specification)
     {
-        if (!specification.computeSource.empty())
-        {
-            return shader.CompileCompute(specification.computeSource);
-        }
-
         const bool hasGeometry = !specification.geometrySource.empty();
         const bool hasTessellation = !specification.tessellationControlSource.empty();
         if (hasGeometry || hasTessellation)
@@ -335,19 +306,6 @@ namespace Pyramid
         const std::string&)
     {
         return RejectDirectCompilation();
-    }
-
-    bool ShaderProgram::CompileCompute(const std::string&)
-    {
-        return RejectDirectCompilation();
-    }
-
-    void ShaderProgram::DispatchCompute(u32 x, u32 y, u32 z)
-    {
-        if (m_shader)
-        {
-            m_shader->DispatchCompute(x, y, z);
-        }
     }
 
     void ShaderProgram::SetUniformInt(const std::string& name, int value)

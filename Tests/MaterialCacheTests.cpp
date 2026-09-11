@@ -28,8 +28,6 @@ namespace
         bool CompileWithGeometry(const std::string&, const std::string&, const std::string&) override { return true; }
         bool CompileWithTessellation(const std::string&, const std::string&, const std::string&, const std::string&) override { return true; }
         bool CompileAdvanced(const std::string&, const std::string&, const std::string&, const std::string&, const std::string&) override { return true; }
-        bool CompileCompute(const std::string&) override { return true; }
-        void DispatchCompute(Pyramid::u32, Pyramid::u32, Pyramid::u32) override {}
         void SetUniformInt(const std::string&, int) override {}
         void SetUniformFloat(const std::string&, float) override {}
         void SetUniformFloat2(const std::string&, float, float) override {}

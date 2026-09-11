@@ -24,9 +24,7 @@ namespace Pyramid
                                      const std::string &tessEvalSrc, const std::string &fragmentSrc) override;
         bool CompileAdvanced(const std::string &vertexSrc, const std::string &tessControlSrc,
                              const std::string &tessEvalSrc, const std::string &geometrySrc,
-                             const std::string &fragmentSrc) override;
-        bool CompileCompute(const std::string &computeSrc) override;
-        void DispatchCompute(u32 numGroupsX, u32 numGroupsY, u32 numGroupsZ) override;
+                              const std::string &fragmentSrc) override;
 
         // Uniform setters
         void SetUniformInt(const std::string &name, int value) override;

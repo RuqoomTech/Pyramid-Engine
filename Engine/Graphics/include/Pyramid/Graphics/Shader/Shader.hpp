@@ -64,21 +64,6 @@ namespace Pyramid
                                      const std::string &tessEvalSrc, const std::string &geometrySrc,
                                      const std::string &fragmentSrc) = 0;
 
-        /**
-         * @brief Compile compute shader from source code
-         * @param computeSrc Compute shader source code
-         * @return true if compilation was successful
-         */
-        virtual bool CompileCompute(const std::string &computeSrc) = 0;
-
-        /**
-         * @brief Dispatch compute shader
-         * @param numGroupsX Number of work groups in X dimension
-         * @param numGroupsY Number of work groups in Y dimension
-         * @param numGroupsZ Number of work groups in Z dimension
-         */
-        virtual void DispatchCompute(u32 numGroupsX, u32 numGroupsY, u32 numGroupsZ) = 0;
-
         // Uniform setters
         virtual void SetUniformInt(const std::string &name, int value) = 0;
         virtual void SetUniformFloat(const std::string &name, float value) = 0;
@@ -109,6 +94,11 @@ namespace Pyramid
 
         /**
          * @brief Bind a shader storage buffer to a named storage block
+         *
+         * Shader storage buffers are generic stage-agnostic storage usable from
+         * any shader stage, not a compute-dispatch capability. They are retained
+         * while compute dispatch itself is removed (OpenGL 3.3 baseline has no
+         * compute shaders; see docs/ROADMAP.md P0 rationale).
          * @param blockName The name of the storage block in the shader
          * @param buffer The shader storage buffer to bind
          * @param bindingPoint The binding point index

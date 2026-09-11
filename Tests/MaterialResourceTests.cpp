@@ -31,9 +31,6 @@ namespace
         bool CompileWithGeometry(const std::string&, const std::string&, const std::string&) override { return true; }
         bool CompileWithTessellation(const std::string&, const std::string&, const std::string&, const std::string&) override { return true; }
         bool CompileAdvanced(const std::string&, const std::string&, const std::string&, const std::string&, const std::string&) override { return true; }
-        bool CompileCompute(const std::string&) override { return true; }
-        void DispatchCompute(Pyramid::u32, Pyramid::u32, Pyramid::u32) override {}
-
         void SetUniformInt(const std::string& name, int value) override
         {
             ints[name] = value;

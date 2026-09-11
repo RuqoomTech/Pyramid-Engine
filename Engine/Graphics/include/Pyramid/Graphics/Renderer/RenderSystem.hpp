@@ -62,7 +62,6 @@ namespace Pyramid
             SetUniform,
             DrawIndexed,
             DrawArrays,
-            Dispatch,       // Compute shader dispatch
             ClearTarget
         };
 
@@ -86,7 +85,6 @@ namespace Pyramid
                 struct { std::uintptr_t material; u32 bindShader; } setMaterialPtr;
                 struct { u32 uniformIndex; } setUniform;
                 struct { u32 count; u32 instanceCount; u32 firstVertex; u32 topology; } draw;
-                struct { u32 x, y, z; } dispatch;
                 struct { f32 r, g, b, a; } clear;
             } data;
         };
@@ -142,7 +140,6 @@ namespace Pyramid
                 u32 instanceCount = 1,
                 PrimitiveTopology topology = PrimitiveTopology::Triangles);
             void DrawMesh(const Mesh& mesh, u32 instanceCount = 1);
-            void Dispatch(u32 x, u32 y, u32 z);
             void ClearTarget(f32 r, f32 g, f32 b, f32 a);
 
             // Resource registration for ID-based commands

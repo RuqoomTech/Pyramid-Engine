@@ -39,13 +39,7 @@ namespace Pyramid
         std::size_t operator()(const ShaderAssetId& identifier) const noexcept;
     };
 
-    enum class ShaderProgramType : u8
-    {
-        Graphics,
-        Compute
-    };
-
-    /** Immutable source description used to compile one shader program. */
+    /** Immutable source description used to compile one graphics shader program. */
     struct ShaderProgramSpecification
     {
         std::string vertexSource;
@@ -53,7 +47,6 @@ namespace Pyramid
         std::string tessellationEvaluationSource;
         std::string geometrySource;
         std::string fragmentSource;
-        std::string computeSource;
         std::string name;
         ShaderAssetId assetId;
     };
@@ -83,8 +76,6 @@ namespace Pyramid
         ~ShaderProgram() override = default;
 
         bool IsValid() const { return m_shader && m_assetId.IsValid() && m_contentId.IsValid(); }
-        ShaderProgramType GetType() const { return m_type; }
-        bool IsCompute() const { return m_type == ShaderProgramType::Compute; }
         bool HasGeometryStage() const { return m_hasGeometryStage; }
         bool HasTessellationStages() const { return m_hasTessellationStages; }
         u64 GetSourceBytes() const { return m_sourceBytes; }
@@ -111,8 +102,6 @@ namespace Pyramid
             const std::string& tessEvalSrc,
             const std::string& geometrySrc,
             const std::string& fragmentSrc) override;
-        bool CompileCompute(const std::string& computeSrc) override;
-        void DispatchCompute(u32 numGroupsX, u32 numGroupsY, u32 numGroupsZ) override;
 
         void SetUniformInt(const std::string& name, int value) override;
         void SetUniformFloat(const std::string& name, float value) override;
@@ -151,7 +140,6 @@ namespace Pyramid
     private:
         ShaderProgram(
             std::shared_ptr<IShader> shader,
-            ShaderProgramType type,
             bool hasGeometryStage,
             bool hasTessellationStages,
             u64 sourceBytes,
@@ -165,7 +153,6 @@ namespace Pyramid
         static bool RejectDirectCompilation();
 
         std::shared_ptr<IShader> m_shader;
-        ShaderProgramType m_type = ShaderProgramType::Graphics;
         bool m_hasGeometryStage = false;
         bool m_hasTessellationStages = false;
         u64 m_sourceBytes = 0;

@@ -102,8 +102,6 @@ namespace Pyramid
             };
             if (!specification.shader || !specification.shader->IsValid())
                 return fail("a valid shader program is required");
-            if (specification.shader->IsCompute())
-                return fail("compute shader programs cannot be used as render materials");
 
             std::set<u32> slots;
             std::set<std::string> names;

@@ -520,58 +520,6 @@ namespace Pyramid
         return true;
     }
 
-    bool OpenGLShader::CompileCompute(const std::string &computeSrc)
-    {
-        // Delete existing program if it exists
-        if (m_programId != 0)
-        {
-            glDeleteProgram(m_programId);
-            m_uniformLocationCache.clear();
-        }
-
-        // Compile compute shader
-        GLuint computeShader = CompileShader(GL_COMPUTE_SHADER, computeSrc);
-        if (computeShader == 0)
-            return false;
-
-        // Create and link program
-        m_programId = glCreateProgram();
-        glAttachShader(m_programId, computeShader);
-
-        bool linkSuccess = LinkProgram(m_programId);
-
-        // Cleanup shader
-        glDetachShader(m_programId, computeShader);
-        DeleteShader(computeShader);
-
-        if (!linkSuccess)
-        {
-            glDeleteProgram(m_programId);
-            m_programId = 0;
-            return false;
-        }
-
-        PYRAMID_LOG_INFO("Compute shader program compiled successfully");
-        return true;
-    }
-
-    void OpenGLShader::DispatchCompute(u32 numGroupsX, u32 numGroupsY, u32 numGroupsZ)
-    {
-        if (m_programId == 0)
-        {
-            PYRAMID_LOG_ERROR("Cannot dispatch compute shader: no program loaded");
-            return;
-        }
-
-        OpenGLStateManager::GetInstance().UseProgram(m_programId);
-        glDispatchCompute(numGroupsX, numGroupsY, numGroupsZ);
-
-        // Add memory barrier to ensure compute shader writes are visible
-        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
-
-        PYRAMID_LOG_DEBUG("Dispatched compute shader with groups: ", numGroupsX, "x", numGroupsY, "x", numGroupsZ);
-    }
-
     void OpenGLShader::BindShaderStorageBuffer(const std::string &blockName, IShaderStorageBuffer *buffer, u32 bindingPoint)
     {
         if (!buffer)

@@ -16,15 +16,13 @@ namespace
     using Pyramid::ShaderCache;
     using Pyramid::ShaderProgram;
     using Pyramid::ShaderProgramSpecification;
-    using Pyramid::ShaderProgramType;
     using Pyramid::u32;
 
     enum class CompilePath
     {
         None,
         Graphics,
-        Advanced,
-        Compute
+        Advanced
     };
 
     class FakeShader final : public IShader
@@ -73,14 +71,6 @@ namespace
             return ShouldCompile();
         }
 
-        bool CompileCompute(const std::string& compute) override
-        {
-            path = CompilePath::Compute;
-            sources = compute;
-            return ShouldCompile();
-        }
-
-        void DispatchCompute(u32, u32, u32) override { ++dispatches; }
         void SetUniformInt(const std::string&, int) override { ++uniformWrites; }
         void SetUniformFloat(const std::string&, float) override { ++uniformWrites; }
         void SetUniformFloat2(const std::string&, float, float) override { ++uniformWrites; }
@@ -109,7 +99,6 @@ namespace
         std::string sources;
         u32 binds = 0;
         u32 unbinds = 0;
-        u32 dispatches = 0;
         u32 uniformWrites = 0;
 
     private:
@@ -154,7 +143,7 @@ int main()
     auto specification = MakeGraphics();
     const ShaderAssetId contentId = ShaderProgram::CalculateContentId(specification);
     if (!contentId.IsValid() ||
-        contentId.ToString() != "2f8ef7c76be6f19e266653755c982e10")
+        contentId.ToString() != "169d157c7b97692700583a44c06f8179")
     {
         return Fail("graphics content identifier is invalid or unstable");
     }
@@ -196,17 +185,16 @@ int main()
         return Fail("unpaired tessellation stage was accepted");
     }
 
-    auto invalidCompute = specification;
-    invalidCompute.computeSource = "compute";
-    if (ShaderProgram::CalculateContentId(invalidCompute).IsValid())
+    ShaderProgramSpecification emptySpecification;
+    if (ShaderProgram::CalculateContentId(emptySpecification).IsValid())
     {
-        return Fail("mixed compute and graphics specification was accepted");
+        return Fail("empty shader specification was accepted");
     }
 
     specification.assetId = stableId;
     auto first = cache.GetOrCreate(specification);
     if (!first || !first->IsValid() || first->GetAssetId() != stableId ||
-        first->GetContentId() != contentId || first->GetType() != ShaderProgramType::Graphics ||
+        first->GetContentId() != contentId ||
         first->GetSourceBytes() != specification.vertexSource.size() +
                                    specification.fragmentSource.size() ||
         device.shaderCreations != 1 || createdShaders.size() != 1 ||
@@ -304,16 +292,6 @@ int main()
         return Fail("content-derived identifier was allowed to recompile");
     }
 
-    ShaderProgramSpecification compute;
-    compute.computeSource = "compute-v1";
-    compute.name = "Compute";
-    auto computeProgram = cache.GetOrCreate(compute);
-    if (!computeProgram || !computeProgram->IsCompute() ||
-        createdShaders.back()->path != CompilePath::Compute)
-    {
-        return Fail("compute program did not use the compute compilation path");
-    }
-
     auto advanced = MakeGraphics("fragment-advanced", "Advanced");
     advanced.geometrySource = "geometry";
     advanced.tessellationControlSource = "tess-control";
@@ -327,11 +305,11 @@ int main()
     }
 
     auto stats = cache.GetStats();
-    if (stats.cacheHits < 2 || stats.cacheMisses != 4 || stats.programsCreated != 5 ||
+    if (stats.cacheHits < 2 || stats.cacheMisses != 3 || stats.programsCreated != 4 ||
         stats.compilationFailures != 1 || stats.identifierConflicts != 1 ||
         stats.recompilationAttempts != 5 || stats.recompilationSuccesses != 3 ||
         stats.recompilationFailures != 2 || stats.recompilationReuses != 2 ||
-        stats.residentPrograms != 5 || stats.residentAssetIds < 7 ||
+        stats.residentPrograms != 4 || stats.residentAssetIds < 6 ||
         stats.residentSourceBytes == 0)
     {
         return Fail("shader cache statistics are incorrect");
@@ -343,11 +321,10 @@ int main()
     replacement.reset();
     beforeFailure.reset();
     alternateProgram.reset();
-    computeProgram.reset();
     advancedProgram.reset();
 
     const u32 collected = cache.CollectUnused();
-    if (collected != 5 || cache.GetResidentCount() != 0)
+    if (collected != 4 || cache.GetResidentCount() != 0)
     {
         return Fail("unused shader programs were not collected");
     }
