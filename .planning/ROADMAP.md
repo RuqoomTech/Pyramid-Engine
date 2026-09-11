@@ -34,10 +34,13 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Agent using deferred shadow-map-array bindings and backend-neutral framebuffer depth targets gets complete documented behavior through the texture interface (FRZ-02, FRZ-05)
   3. Agent enabling occlusion culling gets a supported technique with observable effect, or the setting is gone with documented rationale (FRZ-03)
   4. Agent using any advertised texture format gets a working mapping — no unmapped enum value reaches agent-visible API (FRZ-04)
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 01-01: TBD during plan-phase
+- [ ] 01-01-PLAN.md — Remove compute-dispatch and occlusion-culling placeholders with linkage proof and rationale (FRZ-01, FRZ-03)
+- [ ] 01-02-PLAN.md — Map all 3.3-core texture formats with S3TC gate and BC7 decision (FRZ-04)
+- [ ] 01-03-PLAN.md — Complete shadow-map-array binding with uploads and visual sign-off (FRZ-02)
+- [ ] 01-04-PLAN.md — Define IFramebuffer, route neutral binding, implement depth targets (FRZ-05)
 
 ### Phase 2: Quality Baseline
 **Goal**: The agent path is guarded by warning-clean builds, sanitizers, fuzzing, and linkage guarantees
