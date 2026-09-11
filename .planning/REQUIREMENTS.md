@@ -9,9 +9,9 @@ Requirements for initial release. Each maps to roadmap phases. The "user" below 
 
 ### P0 Core Freeze
 
-- [ ] **FRZ-01**: Agent builds never hit a log-only compute-dispatch stub — dispatch is implemented or removed from the command model
+- [x] **FRZ-01**: Agent builds never hit a log-only compute-dispatch stub — dispatch is implemented or removed from the command model
 - [ ] **FRZ-02**: Deferred shadow-map-array binding is complete (or explicitly removed with documented rationale)
-- [ ] **FRZ-03**: Occlusion culling uses a supported technique or the setting is removed (no placeholder flag)
+- [x] **FRZ-03**: Occlusion culling uses a supported technique or the setting is removed (no placeholder flag)
 - [ ] **FRZ-04**: Every advertised texture format is mapped, or unsupported enum values are removed
 - [ ] **FRZ-05**: Backend-neutral framebuffer binding is complete, including depth-texture creation through the texture interface
 
@@ -118,9 +118,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FRZ-01 | Phase 1 | Pending |
+| FRZ-01 | Phase 1 | Complete |
 | FRZ-02 | Phase 1 | Pending |
-| FRZ-03 | Phase 1 | Pending |
+| FRZ-03 | Phase 1 | Complete |
 | FRZ-04 | Phase 1 | Pending |
 | FRZ-05 | Phase 1 | Pending |
 | QLT-01 | Phase 2 | Pending |
@@ -156,6 +156,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PRF-03 | Phase 9 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 36 total
 - Mapped to phases: 36
 - Unmapped: 0
