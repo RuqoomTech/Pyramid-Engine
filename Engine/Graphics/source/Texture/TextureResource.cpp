@@ -109,6 +109,10 @@ namespace Pyramid
                 output = TextureFormat::RGBA8;
                 bytesPerPixel = 4;
                 return true;
+            case TextureFormat::RGBA16F:
+                output = TextureFormat::RGBA16F;
+                bytesPerPixel = 8;
+                return true;
             default:
                 return false;
             }
@@ -282,7 +286,7 @@ namespace Pyramid
         u32 bytesPerPixel = 0;
         if (!ResolveBaseFormat(specification.texture.Format, baseFormat, bytesPerPixel))
         {
-            error = "Texture resource supports only RGB8/RGBA8 source pixels";
+            error = "Texture resource supports only RGB8/RGBA8/RGBA16F source pixels";
             return false;
         }
         if (!IsSamplerStateValid(

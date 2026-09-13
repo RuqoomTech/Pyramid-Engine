@@ -38,6 +38,7 @@ namespace Pyramid
             bool srgb,
             GLenum& internalFormat,
             GLenum& dataFormat,
+            GLenum& dataType,
             u32& bytesPerPixel);
         static GLenum ToGLMinFilter(TextureFilter filter, bool hasMipmaps);
         static GLenum ToGLMagFilter(TextureFilter filter);
@@ -48,6 +49,7 @@ namespace Pyramid
             const TextureSpecification& specification,
             GLenum internalFormat,
             GLenum dataFormat,
+            GLenum dataType,
             const void* data,
             GLuint& texture,
             std::string& error) const;
@@ -60,6 +62,7 @@ namespace Pyramid
         GLuint m_RendererID = 0;
         GLenum m_InternalFormat = GL_RGBA8;
         GLenum m_DataFormat = GL_RGBA;
+        GLenum m_DataType = GL_UNSIGNED_BYTE;
         u32 m_BytesPerPixel = 4;
         bool m_IsLoaded = false;
     };

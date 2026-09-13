@@ -54,6 +54,7 @@ namespace Pyramid
                 specification.SRGB,
                 m_InternalFormat,
                 m_DataFormat,
+                m_DataType,
                 m_BytesPerPixel))
         {
             SetError("Unsupported OpenGLTexture2D format");
@@ -68,7 +69,7 @@ namespace Pyramid
 
         GLuint texture = 0;
         std::string error;
-        if (!CreateTextureObject(normalized, m_InternalFormat, m_DataFormat, data, texture, error))
+        if (!CreateTextureObject(normalized, m_InternalFormat, m_DataFormat, m_DataType, data, texture, error))
         {
             SetError(error);
             return;
@@ -132,8 +133,9 @@ namespace Pyramid
 
         GLenum internalFormat = GL_RGBA8;
         GLenum dataFormat = GL_RGBA;
+        GLenum dataType = GL_UNSIGNED_BYTE;
         u32 bytesPerPixel = 0;
-        if (!ResolveFormats(specification.Format, srgb, internalFormat, dataFormat, bytesPerPixel))
+        if (!ResolveFormats(specification.Format, srgb, internalFormat, dataFormat, dataType, bytesPerPixel))
         {
             Util::Image::Free(image.Data);
             SetError("Unsupported decoded texture format for " + filepath);
@@ -146,6 +148,7 @@ namespace Pyramid
             specification,
             internalFormat,
             dataFormat,
+            dataType,
             image.Data,
             replacement,
             error);
@@ -163,6 +166,7 @@ namespace Pyramid
         m_Filepath = filepath;
         m_InternalFormat = internalFormat;
         m_DataFormat = dataFormat;
+        m_DataType = dataType;
         m_BytesPerPixel = bytesPerPixel;
         m_IsLoaded = true;
         m_LastError.clear();
@@ -219,7 +223,7 @@ namespace Pyramid
             static_cast<GLsizei>(m_Specification.Width),
             static_cast<GLsizei>(m_Specification.Height),
             m_DataFormat,
-            GL_UNSIGNED_BYTE,
+            m_DataType,
             data);
 
         if (m_Specification.GenerateMips)
@@ -292,6 +296,7 @@ namespace Pyramid
         bool srgb,
         GLenum& internalFormat,
         GLenum& dataFormat,
+        GLenum& dataType,
         u32& bytesPerPixel)
     {
         switch (format)
@@ -300,13 +305,21 @@ namespace Pyramid
         case TextureFormat::SRGB8:
             internalFormat = (srgb || format == TextureFormat::SRGB8) ? GL_SRGB8 : GL_RGB8;
             dataFormat = GL_RGB;
+            dataType = GL_UNSIGNED_BYTE;
             bytesPerPixel = 3;
             return true;
         case TextureFormat::RGBA8:
         case TextureFormat::SRGBA8:
             internalFormat = (srgb || format == TextureFormat::SRGBA8) ? GL_SRGB8_ALPHA8 : GL_RGBA8;
             dataFormat = GL_RGBA;
+            dataType = GL_UNSIGNED_BYTE;
             bytesPerPixel = 4;
+            return true;
+        case TextureFormat::RGBA16F:
+            internalFormat = GL_RGBA16F;
+            dataFormat = GL_RGBA;
+            dataType = GL_FLOAT;
+            bytesPerPixel = 8;
             return true;
         default:
             return false;
@@ -385,6 +398,7 @@ namespace Pyramid
         const TextureSpecification& specification,
         GLenum internalFormat,
         GLenum dataFormat,
+        GLenum dataType,
         const void* data,
         GLuint& texture,
         std::string& error) const
@@ -419,7 +433,7 @@ namespace Pyramid
             static_cast<GLsizei>(specification.Height),
             0,
             dataFormat,
-            GL_UNSIGNED_BYTE,
+            dataType,
             data);
 
         ApplyParameters(specification);

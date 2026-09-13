@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -15,6 +16,8 @@ namespace
     GLuint g_nextTexture = 10;
     GLenum g_lastInternalFormat = 0;
     GLenum g_lastDataFormat = 0;
+    GLenum g_lastDataType = 0;
+    GLenum g_lastSubImageDataType = 0;
     GLint g_lastMinFilter = 0;
     int g_generateMipmapCalls = 0;
     int g_subImageCalls = 0;
@@ -74,11 +77,12 @@ namespace
         GLsizei,
         GLint,
         GLenum dataFormat,
-        GLenum,
+        GLenum dataType,
         const void*)
     {
         g_lastInternalFormat = static_cast<GLenum>(internalFormat);
         g_lastDataFormat = dataFormat;
+        g_lastDataType = dataType;
     }
 
     void APIENTRY FakeTexSubImage2D(
@@ -89,10 +93,11 @@ namespace
         GLsizei,
         GLsizei,
         GLenum,
-        GLenum,
+        GLenum dataType,
         const void*)
     {
         ++g_subImageCalls;
+        g_lastSubImageDataType = dataType;
     }
 
     void APIENTRY FakeTexParameteri(GLenum, GLenum name, GLint value)
@@ -211,6 +216,67 @@ int main()
         g_deletedTextures.end())
     {
         return Fail("texture object was not released");
+    }
+
+    {
+        Pyramid::TextureSpecification floatSpec;
+        floatSpec.Width = 4;
+        floatSpec.Height = 4;
+        floatSpec.Format = TextureFormat::RGBA16F;
+        floatSpec.GenerateMips = false;
+        floatSpec.MinFilter = Pyramid::TextureFilter::Linear;
+        std::vector<unsigned char> floatPixels(4U * 4U * 8U, 0);
+        OpenGLTexture2D floatTexture(floatSpec, floatPixels.data());
+        if (!floatTexture.IsLoaded() || floatTexture.GetRendererID() == 0)
+        {
+            return Fail("RGBA16F texture did not load");
+        }
+        if (g_lastInternalFormat != GL_RGBA16F || g_lastDataFormat != GL_RGBA ||
+            g_lastDataType != GL_FLOAT)
+        {
+            return Fail("RGBA16F upload used incorrect OpenGL format triple");
+        }
+
+        floatTexture.SetData(floatPixels.data(), static_cast<Pyramid::u32>(floatPixels.size()));
+        if (!floatTexture.GetLastError().empty() || g_subImageCalls != 2)
+        {
+            return Fail("RGBA16F SetData update failed");
+        }
+        if (g_lastSubImageDataType != GL_FLOAT)
+        {
+            return Fail("RGBA16F SetData upload used an incorrect pixel type");
+        }
+
+        std::vector<unsigned char> shortPixels(floatPixels.size() - 1, 0);
+        floatTexture.SetData(shortPixels.data(), static_cast<Pyramid::u32>(shortPixels.size()));
+        if (floatTexture.GetLastError().empty())
+        {
+            return Fail("RGBA16F SetData size mismatch was not rejected");
+        }
+    }
+
+    {
+        Pyramid::TextureSpecification malformedSpec;
+        malformedSpec.Width = 0;
+        malformedSpec.Height = 4;
+        malformedSpec.Format = TextureFormat::RGBA16F;
+        OpenGLTexture2D malformedTexture(malformedSpec, nullptr);
+        if (malformedTexture.IsLoaded() || malformedTexture.GetLastError().empty())
+        {
+            return Fail("zero-extent RGBA16F texture did not fail explicitly");
+        }
+    }
+
+    {
+        Pyramid::TextureSpecification oversizedSpec;
+        oversizedSpec.Width = static_cast<Pyramid::u32>(std::numeric_limits<GLsizei>::max()) + 1U;
+        oversizedSpec.Height = 4;
+        oversizedSpec.Format = TextureFormat::RGBA16F;
+        OpenGLTexture2D oversizedTexture(oversizedSpec, nullptr);
+        if (oversizedTexture.IsLoaded() || oversizedTexture.GetLastError().empty())
+        {
+            return Fail("oversized-extent RGBA16F texture did not fail explicitly");
+        }
     }
 
     std::cout << "Texture loading tests passed\n";
