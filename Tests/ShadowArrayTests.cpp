@@ -495,6 +495,222 @@ int main()
         return Fail("forward pass must carry no shadow texture binds (unshadowed by design)");
     }
 
+    // Four cascades: the general path. Layer count must equal cascade count,
+    // attaches must follow cascade order, and all cascades still bind through
+    // one array exactly once with matrices, splits, and count uploaded.
+    ResetCaptures();
+
+    Tests::TestGraphicsDevice multiDevice;
+    auto multiShader = std::make_shared<RecordingShader>();
+    multiDevice.shaderFactory = [multiShader]() { return multiShader; };
+
+    ShadowMapPass multiShadow("Shadow", &multiDevice, 4);
+    if (multiShadow.GetShadowArrayTexture() == 0 || multiShadow.GetShadowArrayLayers() != 4)
+    {
+        return Fail("four-cascade shadow array must allocate four layers");
+    }
+    if (g_texImage3DCalls.size() != 1 || g_texImage3DCalls.front().depth != 4)
+    {
+        return Fail("four-cascade array storage must allocate exactly four layers");
+    }
+
+    auto multiScene = std::make_shared<Scene>("ShadowArrayMulti");
+    auto multiLight = SceneUtils::CreateDirectionalLight(Math::Vec3(0.5f, -1.0f, 0.5f));
+    multiScene->AddLight(multiLight);
+    multiScene->SetPrimaryLight(multiLight);
+
+    g_layerAttachCalls.clear();
+    multiShadow.Execute(cmd, *multiScene, camera);
+
+    if (g_layerAttachCalls.size() != 4)
+    {
+        return Fail("four cascades must attach exactly four layers");
+    }
+    for (u32 i = 0; i < 4; ++i)
+    {
+        if (g_layerAttachCalls[i].layer != static_cast<GLint>(i) ||
+            g_layerAttachCalls[i].texture != multiShadow.GetShadowArrayTexture() ||
+            g_layerAttachCalls[i].attachment != GL_DEPTH_ATTACHMENT)
+        {
+            return Fail("cascade layer order must match matrix and split order");
+        }
+    }
+    if (multiDevice.boundFramebufferHandle != 0)
+    {
+        return Fail("multi-cascade shadow pass leaked its framebuffer");
+    }
+    if (multiShadow.GetLightSpaceMatrices().size() != 4 ||
+        multiShadow.GetCascadeSplits().size() != 5)
+    {
+        return Fail("four cascades must produce four matrices and five splits");
+    }
+
+    auto multiGbuffer = std::make_shared<OpenGLFramebuffer>(gbufferSpec);
+    if (!multiGbuffer->Initialize())
+    {
+        return Fail("multi-cascade G-buffer fixture did not initialize");
+    }
+
+    DeferredLightingPass multiLighting("Lighting", &multiDevice);
+    multiLighting.SetGBuffer(multiGbuffer);
+    multiLighting.SetShadowPass(&multiShadow);
+    multiLighting.Begin(cmd);
+    multiLighting.Execute(cmd, *multiScene, camera);
+    multiLighting.End(cmd);
+
+    if (CountSlotBinds(multiDevice, 5) != 2)
+    {
+        return Fail("four cascades must still bind through one array exactly once");
+    }
+    for (const auto& bind : multiDevice.nativeTextureBinds)
+    {
+        if (bind.slot == 5 && bind.target == GL_TEXTURE_2D)
+        {
+            return Fail("multi-cascade shadow path binds GL_TEXTURE_2D");
+        }
+    }
+
+    const auto multiMatrices = multiShader->mat4Uniforms.find("u_LightSpaceMatrices");
+    if (multiMatrices == multiShader->mat4Uniforms.end() ||
+        multiMatrices->second.count != 4 || multiMatrices->second.values.size() != 64)
+    {
+        return Fail("four-cascade matrix upload must carry four 4x4 matrices");
+    }
+
+    const auto multiCount = multiShader->intUniforms.find("u_CascadeCount");
+    if (multiCount == multiShader->intUniforms.end() || multiCount->second != 4)
+    {
+        return Fail("four-cascade count upload must be 4");
+    }
+
+    const std::vector<f32>& expectedSplits = multiShadow.GetCascadeSplits();
+    for (u32 i = 0; i < 5; ++i)
+    {
+        const std::string splitName = "u_CascadeSplits[" + std::to_string(i) + "]";
+        const auto split = multiShader->floatUniforms.find(splitName);
+        if (split == multiShader->floatUniforms.end() || split->second != expectedSplits[i])
+        {
+            return Fail("cascade split upload is missing or out of order");
+        }
+    }
+
+    // The lighting End must unbind the shadow slot with the array target.
+    bool slot5UnboundWithArrayTarget = false;
+    for (const auto& bind : multiDevice.nativeTextureBinds)
+    {
+        if (bind.slot == 5 && bind.textureId == 0 && bind.target == GL_TEXTURE_2D_ARRAY)
+        {
+            slot5UnboundWithArrayTarget = true;
+        }
+    }
+    if (!slot5UnboundWithArrayTarget)
+    {
+        return Fail("lighting End must unbind the shadow slot with the array target");
+    }
+
+    // Transactional recreation: a failed replacement preserves the previous
+    // array, configuration, and texture instead of serving a half-update.
+    const GLuint fourCascadeTexture = multiShadow.GetShadowArrayTexture();
+    g_framebufferStatus = GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT;
+    multiShadow.SetCascadeCount(1);
+    g_framebufferStatus = GL_FRAMEBUFFER_COMPLETE;
+    if (multiShadow.GetShadowArrayTexture() != fourCascadeTexture ||
+        multiShadow.GetShadowArrayLayers() != 4 || multiShadow.GetCascadeCount() != 4)
+    {
+        return Fail("failed recreation must preserve the previous array and count");
+    }
+
+    // Successful recreation swaps the array and releases the old texture.
+    multiShadow.SetCascadeCount(2);
+    if (multiShadow.GetShadowArrayLayers() != 2 || multiShadow.GetCascadeCount() != 2)
+    {
+        return Fail("recreation on count change must swap to two layers");
+    }
+    if (multiShadow.GetShadowArrayTexture() == fourCascadeTexture)
+    {
+        return Fail("recreation must allocate a new array texture");
+    }
+    bool releasedOldArray = false;
+    for (GLuint deleted : g_deletedTextures)
+    {
+        if (deleted == fourCascadeTexture)
+        {
+            releasedOldArray = true;
+        }
+    }
+    if (!releasedOldArray)
+    {
+        return Fail("recreation must release the previous array texture");
+    }
+
+    // Over-limit counts fail explicitly and preserve the live array.
+    const GLuint twoCascadeTexture = multiShadow.GetShadowArrayTexture();
+    g_maxArrayTextureLayers = 1;
+    multiShadow.SetCascadeCount(4);
+    g_maxArrayTextureLayers = 256;
+    if (multiShadow.GetShadowArrayTexture() != twoCascadeTexture ||
+        multiShadow.GetShadowArrayLayers() != 2 || multiShadow.GetCascadeCount() != 2)
+    {
+        return Fail("over-limit cascade count must preserve the previous array");
+    }
+
+    // Counts above the shader array bound fail explicitly too.
+    multiShadow.SetCascadeCount(5);
+    if (multiShadow.GetShadowArrayTexture() != twoCascadeTexture ||
+        multiShadow.GetCascadeCount() != 2)
+    {
+        return Fail("above-shader-limit cascade count must preserve the previous array");
+    }
+
+    // Empty input: with no shadow pass linked, the bind is skipped and
+    // lighting continues unshadowed (quad still drawn, count zero).
+    Tests::TestGraphicsDevice emptyDevice;
+    auto emptyShader = std::make_shared<RecordingShader>();
+    emptyDevice.shaderFactory = [emptyShader]() { return emptyShader; };
+    DeferredLightingPass emptyLighting("Lighting", &emptyDevice);
+    emptyLighting.SetGBuffer(multiGbuffer);
+    emptyLighting.Begin(cmd);
+    emptyLighting.Execute(cmd, *multiScene, camera);
+    emptyLighting.End(cmd);
+
+    if (CountSlotBinds(emptyDevice, 5) != 1)
+    {
+        return Fail("empty shadow set must skip the array bind but still unbind the slot");
+    }
+    for (const auto& bind : emptyDevice.nativeTextureBinds)
+    {
+        if (bind.slot == 5 && (bind.textureId != 0 || bind.target != GL_TEXTURE_2D_ARRAY))
+        {
+            return Fail("empty shadow set must never bind a shadow handle");
+        }
+    }
+    const auto emptyCount = emptyShader->intUniforms.find("u_CascadeCount");
+    if (emptyCount == emptyShader->intUniforms.end() || emptyCount->second != 0)
+    {
+        return Fail("empty shadow set must upload a zero cascade count");
+    }
+    if (emptyShader->mat4Uniforms.find("u_LightSpaceMatrices") != emptyShader->mat4Uniforms.end())
+    {
+        return Fail("empty shadow set must not upload matrices");
+    }
+    if (emptyDevice.drawCalls != 1)
+    {
+        return Fail("lighting must continue (draw its quad) with an empty shadow set");
+    }
+
+    // Zero cascades create no array and attach no layers.
+    ShadowMapPass zeroShadow("Shadow", &emptyDevice, 0);
+    if (zeroShadow.GetShadowArrayTexture() != 0 || zeroShadow.GetShadowArrayLayers() != 0)
+    {
+        return Fail("zero cascades must create no array texture");
+    }
+    const std::size_t attachesBefore = g_layerAttachCalls.size();
+    zeroShadow.Execute(cmd, *multiScene, camera);
+    if (g_layerAttachCalls.size() != attachesBefore)
+    {
+        return Fail("zero-cascade execute must attach no layers");
+    }
+
     std::cout << "Shadow array tests passed\n";
     return EXIT_SUCCESS;
 }

@@ -48,7 +48,7 @@ namespace Pyramid
             }
 
             // Create the single shadow array texture plus its framebuffer
-            CreateShadowArray();
+            CreateShadowArrayTexture(m_cascadeCount, m_shadowMapResolution);
         }
 
         ShadowMapPass::~ShadowMapPass()
@@ -74,24 +74,47 @@ namespace Pyramid
             m_shadowArrayResolution = 0;
         }
 
-        void ShadowMapPass::CreateShadowArray()
+        bool ShadowMapPass::CreateShadowArrayTexture(u32 cascadeCount, u32 resolution)
         {
-            DestroyShadowArray();
-
-            if (m_cascadeCount == 0)
+            if (cascadeCount == 0)
             {
                 PYRAMID_LOG_ERROR("Cannot create shadow array with zero cascades; lighting continues unshadowed");
-                return;
+                DestroyShadowArray();
+                return false;
             }
 
-            if (m_shadowMapResolution == 0)
+            if (resolution == 0)
             {
                 PYRAMID_LOG_ERROR("Cannot create shadow array with zero resolution");
-                return;
+                DestroyShadowArray();
+                return false;
             }
 
-            PYRAMID_LOG_INFO("Creating shadow array with ", m_cascadeCount, " layers at ",
-                             m_shadowMapResolution, "x", m_shadowMapResolution);
+            // Cascade layers must fit the driver array limit; without a valid
+            // array the lighting pass skips its bind and continues unshadowed.
+            GLint maxArrayLayers = 0;
+            glGetIntegerv(GL_MAX_ARRAY_TEXTURE_LAYERS, &maxArrayLayers);
+            if (maxArrayLayers <= 0 || cascadeCount > static_cast<u32>(maxArrayLayers))
+            {
+                PYRAMID_LOG_ERROR("Shadow cascade count ", cascadeCount,
+                                  " exceeds GL_MAX_ARRAY_TEXTURE_LAYERS (", maxArrayLayers,
+                                  "); keeping the previous array");
+                return false;
+            }
+
+            // The lighting shaders declare room for kMaxShaderCascades; larger
+            // counts would overflow u_LightSpaceMatrices/u_CascadeSplits, so
+            // they fail explicitly here instead of sampling out of bounds.
+            if (cascadeCount > kMaxShaderCascades)
+            {
+                PYRAMID_LOG_ERROR("Shadow cascade count ", cascadeCount,
+                                  " exceeds the shader limit of ", kMaxShaderCascades,
+                                  " cascades; keeping the previous array");
+                return false;
+            }
+
+            PYRAMID_LOG_INFO("Creating shadow array with ", cascadeCount, " layers at ",
+                             resolution, "x", resolution);
 
             // One depth texture array with a layer per cascade. Parameters reuse
             // the previous per-cascade values (DEPTH_COMPONENT24, NEAREST
@@ -103,9 +126,9 @@ namespace Pyramid
             glTexImage3D(GL_TEXTURE_2D_ARRAY,
                          0,
                          GL_DEPTH_COMPONENT24,
-                         static_cast<GLsizei>(m_shadowMapResolution),
-                         static_cast<GLsizei>(m_shadowMapResolution),
-                         static_cast<GLsizei>(m_cascadeCount),
+                         static_cast<GLsizei>(resolution),
+                         static_cast<GLsizei>(resolution),
+                         static_cast<GLsizei>(cascadeCount),
                          0,
                          GL_DEPTH_COMPONENT,
                          GL_FLOAT,
@@ -139,7 +162,8 @@ namespace Pyramid
             if (!glClean || status != GL_FRAMEBUFFER_COMPLETE)
             {
                 PYRAMID_LOG_ERROR("Shadow array framebuffer is not complete (status ",
-                                  static_cast<u32>(status), "): ", glError);
+                                  static_cast<u32>(status), "): ", glError,
+                                  "; keeping the previous array");
                 if (arrayFBO != 0)
                 {
                     glDeleteFramebuffers(1, &arrayFBO);
@@ -149,15 +173,19 @@ namespace Pyramid
                     glDeleteTextures(1, &arrayTexture);
                 }
                 m_device->BindFramebufferHandle(0);
-                return;
+                return false;
             }
 
+            // Commit: the replacement is complete, so release the previous
+            // array and swap the new one into service.
+            DestroyShadowArray();
             m_shadowArrayTexture = arrayTexture;
             m_shadowArrayFBO = arrayFBO;
-            m_shadowArrayLayers = m_cascadeCount;
-            m_shadowArrayResolution = m_shadowMapResolution;
+            m_shadowArrayLayers = cascadeCount;
+            m_shadowArrayResolution = resolution;
 
             PYRAMID_LOG_DEBUG("Shadow array created with ", m_shadowArrayLayers, " layers");
+            return true;
         }
 
         void ShadowMapPass::CalculateCascadeSplits(const Camera& camera)
@@ -450,12 +478,16 @@ namespace Pyramid
                 return;
             }
 
+            // Transactional recreation: the previous array and configuration
+            // stay live unless the replacement for the new count succeeds.
+            if (!CreateShadowArrayTexture(count, m_shadowMapResolution))
+            {
+                return;
+            }
+
             m_cascadeCount = count;
             m_cascadeSplits.resize(count + 1);
             m_lightSpaceMatrices.resize(count);
-
-            // Recreate the shadow array with the new cascade count
-            CreateShadowArray();
 
             PYRAMID_LOG_INFO("Cascade count set to ", count);
         }
@@ -468,10 +500,14 @@ namespace Pyramid
                 return;
             }
 
-            m_shadowMapResolution = resolution;
+            // Transactional recreation: the previous array stays live unless
+            // the replacement at the new resolution succeeds.
+            if (!CreateShadowArrayTexture(m_cascadeCount, resolution))
+            {
+                return;
+            }
 
-            // Recreate the shadow array with the new resolution
-            CreateShadowArray();
+            m_shadowMapResolution = resolution;
 
             PYRAMID_LOG_INFO("Shadow map resolution set to ", resolution);
         }

@@ -117,6 +117,17 @@ namespace Pyramid
          * binds the array once and indexes layers by cascade. Shadow
          * resolution is fixed at construction time and never follows the
          * window size.
+         *
+         * Method: layered rendering via glFramebufferTextureLayer (one shared
+         * framebuffer, per-cascade layer attach). Chosen over keep-N-framebuffers
+         * plus a depth blit: no per-frame copies and a single depth store.
+         * The blit stays the documented fallback if a 3.3 driver ever proves
+         * layered depth attaches risky. Layer index always equals the cascade
+         * index, matching light-space-matrix and split order.
+         *
+         * The engine shaders declare at most 4 cascades
+         * (u_LightSpaceMatrices[4], u_CascadeSplits[5]); larger counts fail
+         * explicitly at creation instead of overflowing the shader arrays.
          */
         class ShadowMapPass : public RenderPass
         {
@@ -143,8 +154,17 @@ namespace Pyramid
             const std::vector<f32>& GetCascadeSplits() const { return m_cascadeSplits; }
 
         private:
-            void CreateShadowArray();
+            // Builds a replacement array for the requested configuration and
+            // swaps it in only on success; on any failure the previous array
+            // and configuration are preserved. Returns true when the array is
+            // live for the requested configuration.
+            bool CreateShadowArrayTexture(u32 cascadeCount, u32 resolution);
             void DestroyShadowArray();
+
+            // Upper cascade bound shared with the engine shaders, which declare
+            // u_LightSpaceMatrices[4] and u_CascadeSplits[5]. Larger counts fail
+            // explicitly at creation instead of overflowing the shader arrays.
+            static constexpr u32 kMaxShaderCascades = 4u;
             void CalculateCascadeSplits(const Camera& camera);
             Math::Mat4 CalculateLightSpaceMatrix(const Camera& camera, f32 nearPlane, f32 farPlane, const Math::Vec3& lightDir);
 

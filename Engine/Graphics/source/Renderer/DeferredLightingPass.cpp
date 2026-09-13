@@ -12,6 +12,7 @@
 #include <Pyramid/Util/Log.hpp>
 #include "../OpenGL/OpenGLDiagnostics.hpp"
 #include <glad/glad.h>
+#include <string>
 
 namespace Pyramid
 {
@@ -158,6 +159,18 @@ namespace Pyramid
                                                      matrices.front().m,
                                                      false,
                                                      static_cast<int>(matrixCount));
+                }
+
+                // Upload the cascade split distances (one more entry than
+                // layers). IShader has no float-array setter, so each element
+                // uploads by indexed name; this keeps the backend-neutral
+                // interface unchanged during the freeze.
+                const std::vector<f32>& splits = m_shadowPass->GetCascadeSplits();
+                const u32 splitUploads = shadowLayers + 1;
+                for (u32 i = 0; i < splitUploads && i < splits.size(); ++i)
+                {
+                    m_lightingShader->SetUniformFloat("u_CascadeSplits[" + std::to_string(i) + "]",
+                                                      splits[i]);
                 }
                 m_lightingShader->SetUniformInt("u_CascadeCount", static_cast<int>(shadowLayers));
 
