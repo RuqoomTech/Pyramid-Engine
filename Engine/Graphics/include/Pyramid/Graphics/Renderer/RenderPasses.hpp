@@ -68,6 +68,15 @@ namespace Pyramid
         };
 
         /**
+         * @brief Shadow mapping pass with cascaded shadow maps (forward declaration)
+         *
+         * Defined below. The deferred lighting pass holds a non-owning link to
+         * the shadow pass so per-frame matrices and splits stay fresh without
+         * routing them through RenderSystem every frame.
+         */
+        class ShadowMapPass;
+
+        /**
          * @brief Deferred lighting pass
          */
         class DeferredLightingPass : public RenderPass
@@ -81,16 +90,18 @@ namespace Pyramid
             void End(CommandBuffer& cmd) override;
 
             void SetGBuffer(std::shared_ptr<Pyramid::OpenGLFramebuffer> gBuffer);
-            void SetShadowMaps(const std::vector<std::shared_ptr<Pyramid::OpenGLFramebuffer>>& shadowMaps);
+            void SetShadowPass(const ShadowMapPass* shadowPass);
             void SetEnableSSAO(bool enable) { m_enableSSAO = enable; }
             void SetEnableIBL(bool enable) { m_enableIBL = enable; }
 
         private:
             void CreateFullscreenQuad();
-            
+
+            static constexpr u32 kShadowMapSlot = 5u;
+
             IGraphicsDevice* m_device;
             std::shared_ptr<Pyramid::OpenGLFramebuffer> m_gBuffer;
-            std::vector<std::shared_ptr<Pyramid::OpenGLFramebuffer>> m_shadowMaps;
+            const ShadowMapPass* m_shadowPass = nullptr;
             std::shared_ptr<IShader> m_lightingShader;
             std::shared_ptr<IVertexArray> m_fullscreenQuad;
             bool m_enableSSAO = false;
@@ -98,13 +109,20 @@ namespace Pyramid
         };
 
         /**
-         * @brief Shadow mapping pass with cascaded shadow maps
+         * @brief Shadow mapping pass with cascaded shadow maps in a texture array
+         *
+         * Owns a single GL_TEXTURE_2D_ARRAY depth texture (one layer per
+         * cascade) plus one framebuffer object. Every frame each cascade
+         * renders directly into its array layer; the deferred lighting pass
+         * binds the array once and indexes layers by cascade. Shadow
+         * resolution is fixed at construction time and never follows the
+         * window size.
          */
         class ShadowMapPass : public RenderPass
         {
         public:
             ShadowMapPass(const std::string& name, IGraphicsDevice* device, u32 cascadeCount = 4);
-            ~ShadowMapPass() override = default;
+            ~ShadowMapPass() override;
 
             void Begin(CommandBuffer& cmd) override;
             void Execute(CommandBuffer& cmd, const Scene& scene, const Camera& camera) override;
@@ -117,11 +135,16 @@ namespace Pyramid
             void SetDepthBias(f32 bias);
 
             // Accessors
-            const std::vector<std::shared_ptr<Pyramid::OpenGLFramebuffer>>& GetShadowMaps() const { return m_shadowMaps; }
+            GLuint GetShadowArrayTexture() const { return m_shadowArrayTexture; }
+            u32 GetShadowArrayLayers() const { return m_shadowArrayLayers; }
+            u32 GetCascadeCount() const { return m_cascadeCount; }
+            u32 GetShadowMapResolution() const { return m_shadowMapResolution; }
             const std::vector<Math::Mat4>& GetLightSpaceMatrices() const { return m_lightSpaceMatrices; }
+            const std::vector<f32>& GetCascadeSplits() const { return m_cascadeSplits; }
 
         private:
-            void CreateShadowMaps();
+            void CreateShadowArray();
+            void DestroyShadowArray();
             void CalculateCascadeSplits(const Camera& camera);
             Math::Mat4 CalculateLightSpaceMatrix(const Camera& camera, f32 nearPlane, f32 farPlane, const Math::Vec3& lightDir);
 
@@ -129,8 +152,11 @@ namespace Pyramid
             u32 m_cascadeCount;
             u32 m_shadowMapResolution;
             std::vector<f32> m_cascadeSplits;
-            std::vector<std::shared_ptr<Pyramid::OpenGLFramebuffer>> m_shadowMaps;
             std::vector<Math::Mat4> m_lightSpaceMatrices;
+            GLuint m_shadowArrayTexture = 0;
+            GLuint m_shadowArrayFBO = 0;
+            u32 m_shadowArrayLayers = 0;
+            u32 m_shadowArrayResolution = 0;
             f32 m_depthBias;
             std::shared_ptr<IShader> m_shadowShader;
         };

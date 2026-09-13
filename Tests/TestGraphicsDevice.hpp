@@ -166,6 +166,13 @@ namespace Pyramid::Tests
     class TestGraphicsDevice final : public IGraphicsDevice
     {
     public:
+        struct NativeTextureBind
+        {
+            u32 textureId = 0;
+            u32 slot = 0;
+            u32 target = 0;
+        };
+
         bool Initialize() override { return true; }
         void Shutdown() override {}
         void Clear(const Color&) override {}
@@ -297,7 +304,10 @@ namespace Pyramid::Tests
             boundTextures[slot] = texture;
             if (texture) texture->Bind(slot);
         }
-        void BindNativeTexture(u32, u32, u32) override {}
+        void BindNativeTexture(u32 textureId, u32 slot, u32 target) override
+        {
+            nativeTextureBinds.push_back(NativeTextureBind{textureId, slot, target});
+        }
         void SetTextureBorderColor(u32, u32, f32, f32, f32, f32) override {}
         void BindUniformBuffer(IUniformBuffer*, u32) override {}
         void ClearBuffers(u32) override {}
@@ -344,6 +354,7 @@ namespace Pyramid::Tests
         u32 polygonMode = 0;
         IShader* boundShader = nullptr;
         std::vector<ITexture2D*> boundTextures;
+        std::vector<NativeTextureBind> nativeTextureBinds;
         u32 vertexBufferCreations = 0;
         u32 indexBufferCreations = 0;
         u32 vertexArrayCreations = 0;

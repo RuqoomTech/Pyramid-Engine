@@ -515,7 +515,7 @@ namespace Pyramid
             lightingPass->SetGBuffer(geometryPass->GetGBuffer());
 
             // Connect shadow maps from shadow pass to lighting pass
-            lightingPass->SetShadowMaps(shadowPass->GetShadowMaps());
+            lightingPass->SetShadowPass(shadowPass.get());
 
             AddRenderPass(lightingPass);
 

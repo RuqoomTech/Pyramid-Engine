@@ -4,9 +4,9 @@
 #include <Pyramid/Graphics/Geometry/Mesh.hpp>
 #include <Pyramid/Graphics/Camera.hpp>
 #include <Pyramid/Graphics/Shader/Shader.hpp>
-#include <Pyramid/Graphics/OpenGL/OpenGLFramebuffer.hpp>
 #include <Pyramid/Graphics/Renderer/ShaderPathResolver.hpp>
 #include <Pyramid/Util/Log.hpp>
+#include "../OpenGL/OpenGLDiagnostics.hpp"
 #include <glad/glad.h>
 #include <cmath>
 #include <algorithm>
@@ -47,57 +47,117 @@ namespace Pyramid
                 }
             }
 
-            // Create shadow map framebuffers
-            CreateShadowMaps();
+            // Create the single shadow array texture plus its framebuffer
+            CreateShadowArray();
         }
 
-        void ShadowMapPass::CreateShadowMaps()
+        ShadowMapPass::~ShadowMapPass()
         {
-            m_shadowMaps.clear();
+            DestroyShadowArray();
+        }
 
-            PYRAMID_LOG_INFO("Creating ", m_cascadeCount, " shadow maps at ",
-                           m_shadowMapResolution, "x", m_shadowMapResolution);
-
-            for (u32 i = 0; i < m_cascadeCount; i++)
+        void ShadowMapPass::DestroyShadowArray()
+        {
+            if (m_shadowArrayFBO != 0)
             {
-                // Create depth-only framebuffer specification
-                FramebufferSpec spec;
-                spec.width = m_shadowMapResolution;
-                spec.height = m_shadowMapResolution;
-                spec.samples = 1; // No MSAA for shadow maps
-                spec.swapChainTarget = false;
-
-                // Depth attachment only
-                FramebufferAttachmentSpec depthSpec;
-                depthSpec.type = FramebufferAttachmentType::Depth;
-                depthSpec.internalFormat = GL_DEPTH_COMPONENT24;
-                depthSpec.format = GL_DEPTH_COMPONENT;
-                depthSpec.dataType = GL_FLOAT;
-                depthSpec.minFilter = GL_NEAREST;
-                depthSpec.magFilter = GL_NEAREST;
-                depthSpec.wrapS = GL_CLAMP_TO_BORDER;
-                depthSpec.wrapT = GL_CLAMP_TO_BORDER;
-                depthSpec.multisampled = false;
-                depthSpec.samples = 1;
-
-                spec.attachments.push_back(depthSpec);
-
-                // Create framebuffer
-                auto shadowMap = std::make_shared<OpenGLFramebuffer>(spec);
-                if (!shadowMap->Initialize())
-                {
-                    PYRAMID_LOG_ERROR("Failed to initialize shadow map framebuffer ", i);
-                    continue;
-                }
-
-                // Set border color to 1.0 (outside shadow = not in shadow)
-                GLuint depthTexture = shadowMap->GetDepthAttachmentTexture();
-                m_device->SetTextureBorderColor(depthTexture, GL_TEXTURE_2D, 1.0f, 1.0f, 1.0f, 1.0f);
-
-                m_shadowMaps.push_back(shadowMap);
-
-                PYRAMID_LOG_DEBUG("Shadow map cascade ", i, " created successfully");
+                glDeleteFramebuffers(1, &m_shadowArrayFBO);
+                m_shadowArrayFBO = 0;
             }
+
+            if (m_shadowArrayTexture != 0)
+            {
+                glDeleteTextures(1, &m_shadowArrayTexture);
+                m_shadowArrayTexture = 0;
+            }
+
+            m_shadowArrayLayers = 0;
+            m_shadowArrayResolution = 0;
+        }
+
+        void ShadowMapPass::CreateShadowArray()
+        {
+            DestroyShadowArray();
+
+            if (m_cascadeCount == 0)
+            {
+                PYRAMID_LOG_ERROR("Cannot create shadow array with zero cascades; lighting continues unshadowed");
+                return;
+            }
+
+            if (m_shadowMapResolution == 0)
+            {
+                PYRAMID_LOG_ERROR("Cannot create shadow array with zero resolution");
+                return;
+            }
+
+            PYRAMID_LOG_INFO("Creating shadow array with ", m_cascadeCount, " layers at ",
+                             m_shadowMapResolution, "x", m_shadowMapResolution);
+
+            // One depth texture array with a layer per cascade. Parameters reuse
+            // the previous per-cascade values (DEPTH_COMPONENT24, NEAREST
+            // filtering, CLAMP_TO_BORDER) so sampling behavior is unchanged.
+            // Resolution is fixed here and never follows the window size.
+            GLuint arrayTexture = 0;
+            glGenTextures(1, &arrayTexture);
+            glBindTexture(GL_TEXTURE_2D_ARRAY, arrayTexture);
+            glTexImage3D(GL_TEXTURE_2D_ARRAY,
+                         0,
+                         GL_DEPTH_COMPONENT24,
+                         static_cast<GLsizei>(m_shadowMapResolution),
+                         static_cast<GLsizei>(m_shadowMapResolution),
+                         static_cast<GLsizei>(m_cascadeCount),
+                         0,
+                         GL_DEPTH_COMPONENT,
+                         GL_FLOAT,
+                         nullptr);
+            glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+            glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+            glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+
+            // Set border color to 1.0 (outside shadow = not in shadow)
+            m_device->SetTextureBorderColor(arrayTexture, GL_TEXTURE_2D_ARRAY, 1.0f, 1.0f, 1.0f, 1.0f);
+
+            // One framebuffer shared by all layers. Each cascade attaches its
+            // own layer before rendering (layered rendering): no per-cascade
+            // framebuffers and no per-frame copies. Depth-only, so no color
+            // buffers are drawn or read.
+            GLuint arrayFBO = 0;
+            glGenFramebuffers(1, &arrayFBO);
+            m_device->BindFramebufferHandle(arrayFBO);
+            glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, arrayTexture, 0, 0);
+            glDrawBuffer(GL_NONE);
+            glReadBuffer(GL_NONE);
+
+            const GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+            m_device->BindFramebufferHandle(0);
+
+            std::string glError;
+            const bool glClean =
+                OpenGLDiagnostics::CheckError("ShadowMapPass::CreateShadowArray", &glError, false);
+            if (!glClean || status != GL_FRAMEBUFFER_COMPLETE)
+            {
+                PYRAMID_LOG_ERROR("Shadow array framebuffer is not complete (status ",
+                                  static_cast<u32>(status), "): ", glError);
+                if (arrayFBO != 0)
+                {
+                    glDeleteFramebuffers(1, &arrayFBO);
+                }
+                if (arrayTexture != 0)
+                {
+                    glDeleteTextures(1, &arrayTexture);
+                }
+                m_device->BindFramebufferHandle(0);
+                return;
+            }
+
+            m_shadowArrayTexture = arrayTexture;
+            m_shadowArrayFBO = arrayFBO;
+            m_shadowArrayLayers = m_cascadeCount;
+            m_shadowArrayResolution = m_shadowMapResolution;
+
+            PYRAMID_LOG_DEBUG("Shadow array created with ", m_shadowArrayLayers, " layers");
         }
 
         void ShadowMapPass::CalculateCascadeSplits(const Camera& camera)
@@ -281,22 +341,27 @@ namespace Pyramid
             PYRAMID_LOG_DEBUG("Rendering shadows for ", shadowCasters.size(), " objects across ",
                             m_cascadeCount, " cascades");
 
-            // Render shadow map for each cascade
+            if (m_shadowArrayTexture == 0 || m_shadowArrayFBO == 0)
+            {
+                PYRAMID_LOG_DEBUG("ShadowMapPass::Execute skipped: no valid shadow array");
+                return;
+            }
+
+            // Render each cascade directly into its array layer
             for (u32 i = 0; i < m_cascadeCount; i++)
             {
-                if (i >= m_shadowMaps.size())
-                {
-                    PYRAMID_LOG_ERROR("Shadow map index out of range: ", i);
-                    continue;
-                }
-
                 // Calculate light space matrix for this cascade
                 f32 nearPlane = m_cascadeSplits[i];
                 f32 farPlane = m_cascadeSplits[i + 1];
                 m_lightSpaceMatrices[i] = CalculateLightSpaceMatrix(camera, nearPlane, farPlane, lightDir);
 
-                // Bind shadow map framebuffer
-                m_device->BindFramebufferHandle(m_shadowMaps[i]->GetFramebufferID());
+                // Attach layer i of the shadow array, then render into it
+                m_device->BindFramebufferHandle(m_shadowArrayFBO);
+                glFramebufferTextureLayer(GL_FRAMEBUFFER,
+                                          GL_DEPTH_ATTACHMENT,
+                                          m_shadowArrayTexture,
+                                          0,
+                                          static_cast<GLint>(i));
 
                 // Clear depth buffer
                 m_device->ClearBuffers(GL_DEPTH_BUFFER_BIT);
@@ -348,11 +413,15 @@ namespace Pyramid
                     }
                 }
 
-                // Unbind shadow map framebuffer
-                m_device->BindFramebufferHandle(0);
-
-                PYRAMID_LOG_DEBUG("Cascade ", i, " rendered (", nearPlane, " - ", farPlane, ")");
+                PYRAMID_LOG_DEBUG("Cascade ", i, " rendered into array layer ", i,
+                                  " (", nearPlane, " - ", farPlane, ")");
             }
+
+            // Restore the default framebuffer after the pass. RenderSystem
+            // re-establishes the main viewport after every pass; that restore
+            // convention is preserved and is not migrated to the neutral
+            // BindFramebuffer interface here (that migration belongs to 01-04).
+            m_device->BindFramebufferHandle(0);
         }
 
         void ShadowMapPass::End(CommandBuffer& cmd)
@@ -385,8 +454,8 @@ namespace Pyramid
             m_cascadeSplits.resize(count + 1);
             m_lightSpaceMatrices.resize(count);
 
-            // Recreate shadow maps with new cascade count
-            CreateShadowMaps();
+            // Recreate the shadow array with the new cascade count
+            CreateShadowArray();
 
             PYRAMID_LOG_INFO("Cascade count set to ", count);
         }
@@ -401,8 +470,8 @@ namespace Pyramid
 
             m_shadowMapResolution = resolution;
 
-            // Recreate shadow maps with new resolution
-            CreateShadowMaps();
+            // Recreate the shadow array with the new resolution
+            CreateShadowArray();
 
             PYRAMID_LOG_INFO("Shadow map resolution set to ", resolution);
         }

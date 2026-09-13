@@ -76,6 +76,11 @@ target_link_libraries(TextureLoadingTests PRIVATE Pyramid::Engine)
 set_target_properties(TextureLoadingTests PROPERTIES FOLDER "Tests/Graphics")
 add_test(NAME Graphics.TextureLoading COMMAND $<TARGET_FILE:TextureLoadingTests>)
 
+add_executable(ShadowArrayTests ShadowArrayTests.cpp)
+target_link_libraries(ShadowArrayTests PRIVATE Pyramid::Engine)
+set_target_properties(ShadowArrayTests PROPERTIES FOLDER "Tests/Graphics")
+add_test(NAME Graphics.ShadowArray COMMAND $<TARGET_FILE:ShadowArrayTests>)
+
 add_executable(EntitySceneTests EntitySceneTests.cpp)
 target_link_libraries(EntitySceneTests PRIVATE Pyramid::Engine)
 set_target_properties(EntitySceneTests PROPERTIES FOLDER "Tests/Graphics")

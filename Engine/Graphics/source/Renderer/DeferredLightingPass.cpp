@@ -10,6 +10,7 @@
 #include <Pyramid/Graphics/Buffer/BufferLayout.hpp>
 #include <Pyramid/Graphics/Renderer/ShaderPathResolver.hpp>
 #include <Pyramid/Util/Log.hpp>
+#include "../OpenGL/OpenGLDiagnostics.hpp"
 #include <glad/glad.h>
 
 namespace Pyramid
@@ -130,14 +131,43 @@ namespace Pyramid
             m_device->BindNativeTexture(depth, 4, GL_TEXTURE_2D);
             m_lightingShader->SetUniformInt("u_GDepth", 4);
             
-            // Bind shadow maps if available
-            if (!m_shadowMaps.empty())
+            // Bind the single shadow array texture when a shadow pass provides
+            // one. The bound target must be GL_TEXTURE_2D_ARRAY to match the
+            // shader's sampler2DArray; binding a plain GL_TEXTURE_2D here
+            // samples undefined data on some drivers.
+            const GLuint shadowArray =
+                (m_shadowPass != nullptr) ? m_shadowPass->GetShadowArrayTexture() : 0;
+            const u32 shadowLayers =
+                (m_shadowPass != nullptr) ? m_shadowPass->GetShadowArrayLayers() : 0;
+            if (shadowArray != 0 && shadowLayers > 0)
             {
-                // For now, bind first shadow map cascade
-                // TODO: Implement shadow map array binding
-                GLuint shadowMap = m_shadowMaps[0]->GetDepthAttachmentTexture();
-                m_device->BindNativeTexture(shadowMap, 5, GL_TEXTURE_2D);
-                m_lightingShader->SetUniformInt("u_ShadowMaps", 5);
+                m_device->BindNativeTexture(shadowArray, kShadowMapSlot, GL_TEXTURE_2D_ARRAY);
+                m_lightingShader->SetUniformInt("u_ShadowMaps", static_cast<int>(kShadowMapSlot));
+
+                // Upload the per-cascade transforms from the shadow pass so
+                // fragments address the intended layer instead of sticking to
+                // cascade zero with identity transforms.
+                const std::vector<Math::Mat4>& matrices = m_shadowPass->GetLightSpaceMatrices();
+                const u32 matrixCount =
+                    (matrices.size() < shadowLayers)
+                        ? static_cast<u32>(matrices.size())
+                        : shadowLayers;
+                if (matrixCount > 0)
+                {
+                    m_lightingShader->SetUniformMat4("u_LightSpaceMatrices",
+                                                     matrices.front().m,
+                                                     false,
+                                                     static_cast<int>(matrixCount));
+                }
+                m_lightingShader->SetUniformInt("u_CascadeCount", static_cast<int>(shadowLayers));
+
+                OpenGLDiagnostics::CheckError("DeferredLightingPass::Execute shadow array bind");
+            }
+            else
+            {
+                // No valid shadow array: skip the bind entirely (never bind an
+                // invalid handle) and let lighting continue unshadowed.
+                m_lightingShader->SetUniformInt("u_CascadeCount", 0);
             }
             
             // Set camera uniforms
@@ -164,9 +194,9 @@ namespace Pyramid
                 m_lightingShader->SetUniformFloat("u_LightIntensity", 1.0f);
             }
             
-            // Set shadow parameters
+            // Set shadow parameters (cascade count is uploaded alongside the
+            // shadow array bind above so the two can never disagree)
             m_lightingShader->SetUniformFloat("u_ShadowBias", 0.005f);
-            m_lightingShader->SetUniformInt("u_CascadeCount", static_cast<int>(m_shadowMaps.size()));
             
             // Set technique flags
             m_lightingShader->SetUniformInt("u_EnableSSAO", m_enableSSAO ? 1 : 0);
@@ -187,11 +217,13 @@ namespace Pyramid
                 m_device->EnableDepthTest(true);
             }
             
-            // Unbind textures
-            for (int i = 0; i < 6; i++)
+            // Unbind textures. The shadow slot holds a texture array, so it
+            // must be unbound with the array target, not GL_TEXTURE_2D.
+            for (u32 i = 0; i < kShadowMapSlot; i++)
             {
-                m_device->BindNativeTexture(0, static_cast<u32>(i), GL_TEXTURE_2D);
+                m_device->BindNativeTexture(0, i, GL_TEXTURE_2D);
             }
+            m_device->BindNativeTexture(0, kShadowMapSlot, GL_TEXTURE_2D_ARRAY);
             
             PYRAMID_LOG_DEBUG("DeferredLightingPass::End");
         }
@@ -202,10 +234,11 @@ namespace Pyramid
             PYRAMID_LOG_DEBUG("G-Buffer set for deferred lighting pass");
         }
 
-        void DeferredLightingPass::SetShadowMaps(const std::vector<std::shared_ptr<OpenGLFramebuffer>>& shadowMaps)
+        void DeferredLightingPass::SetShadowPass(const ShadowMapPass* shadowPass)
         {
-            m_shadowMaps = shadowMaps;
-            PYRAMID_LOG_DEBUG("Shadow maps set for deferred lighting pass (", shadowMaps.size(), " cascades)");
+            m_shadowPass = shadowPass;
+            const u32 layers = (shadowPass != nullptr) ? shadowPass->GetShadowArrayLayers() : 0;
+            PYRAMID_LOG_DEBUG("Shadow pass set for deferred lighting pass (", layers, " array layers)");
         }
 
     } // namespace Renderer
