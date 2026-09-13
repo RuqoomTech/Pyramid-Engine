@@ -113,6 +113,50 @@ namespace Pyramid
                 output = TextureFormat::RGBA16F;
                 bytesPerPixel = 8;
                 return true;
+            case TextureFormat::RGB16F:
+                output = TextureFormat::RGB16F;
+                bytesPerPixel = 6;
+                return true;
+            case TextureFormat::RGB32F:
+                output = TextureFormat::RGB32F;
+                bytesPerPixel = 12;
+                return true;
+            case TextureFormat::RGBA32F:
+                output = TextureFormat::RGBA32F;
+                bytesPerPixel = 16;
+                return true;
+            case TextureFormat::Depth16:
+                output = TextureFormat::Depth16;
+                bytesPerPixel = 2;
+                return true;
+            case TextureFormat::Depth24:
+                output = TextureFormat::Depth24;
+                bytesPerPixel = 4;
+                return true;
+            case TextureFormat::Depth32F:
+                output = TextureFormat::Depth32F;
+                bytesPerPixel = 4;
+                return true;
+            case TextureFormat::Depth24Stencil8:
+                output = TextureFormat::Depth24Stencil8;
+                bytesPerPixel = 4;
+                return true;
+            case TextureFormat::Depth32FStencil8:
+                output = TextureFormat::Depth32FStencil8;
+                bytesPerPixel = 8;
+                return true;
+            case TextureFormat::R8:
+                output = TextureFormat::R8;
+                bytesPerPixel = 1;
+                return true;
+            case TextureFormat::R16F:
+                output = TextureFormat::R16F;
+                bytesPerPixel = 2;
+                return true;
+            case TextureFormat::R32F:
+                output = TextureFormat::R32F;
+                bytesPerPixel = 4;
+                return true;
             default:
                 return false;
             }
@@ -286,7 +330,8 @@ namespace Pyramid
         u32 bytesPerPixel = 0;
         if (!ResolveBaseFormat(specification.texture.Format, baseFormat, bytesPerPixel))
         {
-            error = "Texture resource supports only RGB8/RGBA8/RGBA16F source pixels";
+            error = "Texture resource supports only uncompressed RGB8/RGBA8/sRGB/float/depth/stencil/R source pixels; "
+                "block-compressed S3TC uploads go through the graphics device directly";
             return false;
         }
         if (!IsSamplerStateValid(

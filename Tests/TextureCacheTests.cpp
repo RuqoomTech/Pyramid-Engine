@@ -221,6 +221,52 @@ int main()
         return Fail("failed reload did not preserve the previous valid texture");
     }
 
+    const std::array<u8, 32> floatPixels = {};
+    TextureResourceSpecification floatSpec;
+    floatSpec.texture.Width = 2;
+    floatSpec.texture.Height = 1;
+    floatSpec.texture.Format = TextureFormat::RGBA32F;
+    floatSpec.texture.GenerateMips = false;
+    floatSpec.texture.MinFilter = TextureFilter::Linear;
+    floatSpec.pixelData = floatPixels.data();
+    floatSpec.pixelDataSize = floatPixels.size();
+    floatSpec.colorSpace = TextureColorSpace::Linear;
+    floatSpec.assetId = TextureAssetId::FromString("textures/memory/float32");
+    floatSpec.name = "Memory float32";
+
+    auto floatTexture = cache.GetOrCreate(floatSpec);
+    auto floatTextureAgain = cache.GetOrCreate(floatSpec);
+    if (!floatTexture || floatTexture != floatTextureAgain ||
+        floatTexture->GetBaseLevelBytes() != floatPixels.size() ||
+        device.textureCreations != 5)
+    {
+        return Fail("float-format memory texture was not cached with matching byte size");
+    }
+
+    TextureResourceSpecification floatAlias = floatSpec;
+    floatAlias.assetId = TextureAssetId::FromString("textures/memory/float32-alias");
+    auto floatAliasTexture = cache.GetOrCreate(floatAlias);
+    if (floatAliasTexture != floatTexture || device.textureCreations != 5)
+    {
+        return Fail("identical float-format aliases did not share one upload");
+    }
+
+    TextureResourceSpecification compressedSpec = floatSpec;
+    compressedSpec.texture.Format = TextureFormat::BC1_RGBA;
+    compressedSpec.assetId = TextureAssetId::FromString("textures/memory/compressed-direct");
+    if (cache.GetOrCreate(compressedSpec))
+    {
+        return Fail("block-compressed pixels were accepted by the byte-oriented cache");
+    }
+
+    TextureResourceSpecification zeroExtentSpec = floatSpec;
+    zeroExtentSpec.texture.Width = 0;
+    zeroExtentSpec.assetId = TextureAssetId::FromString("textures/memory/zero-extent");
+    if (cache.GetOrCreate(zeroExtentSpec))
+    {
+        return Fail("zero-extent texture resource was not rejected explicitly");
+    }
+
     first.reset();
     second.reset();
     aliasTexture.reset();
@@ -228,6 +274,9 @@ int main()
     fileTextureA.reset();
     fileTextureAlias.reset();
     fileTextureB.reset();
+    floatTexture.reset();
+    floatTextureAgain.reset();
+    floatAliasTexture.reset();
 
     const u32 collected = cache.CollectUnused();
     if (collected == 0 || cache.GetResidentCount() != 0)
@@ -236,7 +285,7 @@ int main()
     }
 
     const auto stats = cache.GetStats();
-    if (stats.cacheHits < 3 || stats.cacheMisses < 4 || stats.texturesCreated != 4 ||
+    if (stats.cacheHits < 4 || stats.cacheMisses < 4 || stats.texturesCreated != 5 ||
         stats.reloadAttempts != 3 || stats.reloadSuccesses != 2 ||
         stats.reloadFailures != 1 || stats.reloadReuses != 1 ||
         stats.residentTextures != 0)

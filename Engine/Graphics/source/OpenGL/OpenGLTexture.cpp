@@ -38,6 +38,62 @@ namespace Pyramid
             size = rowSize * height;
             return true;
         }
+
+        bool IsCompressedFormat(TextureFormat format)
+        {
+            return format == TextureFormat::BC1_RGB ||
+                format == TextureFormat::BC1_RGBA ||
+                format == TextureFormat::BC3_RGBA;
+        }
+
+        bool CalculateCompressedByteSize(u32 width, u32 height, TextureFormat format, std::size_t& size)
+        {
+            if (!IsValidExtent(width, height))
+            {
+                return false;
+            }
+
+            u32 blockBytes = 0;
+            switch (format)
+            {
+            case TextureFormat::BC1_RGB:
+            case TextureFormat::BC1_RGBA:
+                blockBytes = 8;
+                break;
+            case TextureFormat::BC3_RGBA:
+                blockBytes = 16;
+                break;
+            default:
+                return false;
+            }
+
+            const u32 blocksX = (width + 3U) / 4U;
+            const u32 blocksY = (height + 3U) / 4U;
+            const std::size_t blocks = static_cast<std::size_t>(blocksX) * blocksY;
+            if (blocksX != 0 && blocks / blocksX != blocksY)
+            {
+                return false;
+            }
+            if (blocks > std::numeric_limits<std::size_t>::max() / blockBytes)
+            {
+                return false;
+            }
+
+            size = blocks * blockBytes;
+            return true;
+        }
+
+        bool RequireS3TCSupport()
+        {
+            if (GLAD_GL_EXT_texture_compression_s3tc == 0)
+            {
+                PYRAMID_LOG_ERROR(
+                    "OpenGLTexture2D: S3TC compressed texture upload requires "
+                    "EXT_texture_compression_s3tc, which the driver did not report");
+                return false;
+            }
+            return true;
+        }
     } // namespace
 
     OpenGLTexture2D::OpenGLTexture2D(const TextureSpecification& specification, const void* data)
@@ -69,7 +125,7 @@ namespace Pyramid
 
         GLuint texture = 0;
         std::string error;
-        if (!CreateTextureObject(normalized, m_InternalFormat, m_DataFormat, m_DataType, data, texture, error))
+        if (!CreateTextureObject(normalized, normalized.Format, m_InternalFormat, m_DataFormat, m_DataType, data, texture, error))
         {
             SetError(error);
             return;
@@ -146,6 +202,7 @@ namespace Pyramid
         std::string error;
         const bool created = CreateTextureObject(
             specification,
+            specification.Format,
             internalFormat,
             dataFormat,
             dataType,
@@ -195,13 +252,26 @@ namespace Pyramid
             return;
         }
 
+        const bool compressed = IsCompressedFormat(m_Specification.Format);
         std::size_t expectedSize = 0;
-        if (!CalculateByteSize(
+        bool sizeValid = false;
+        if (compressed)
+        {
+            sizeValid = CalculateCompressedByteSize(
+                m_Specification.Width,
+                m_Specification.Height,
+                m_Specification.Format,
+                expectedSize);
+        }
+        else
+        {
+            sizeValid = CalculateByteSize(
                 m_Specification.Width,
                 m_Specification.Height,
                 m_BytesPerPixel,
-                expectedSize) ||
-            expectedSize != size)
+                expectedSize);
+        }
+        if (!sizeValid || expectedSize != size)
         {
             SetError(
                 "Texture update size mismatch: expected " + std::to_string(expectedSize) +
@@ -214,17 +284,33 @@ namespace Pyramid
         OpenGLDiagnostics::ClearErrors();
 
         glBindTexture(GL_TEXTURE_2D, m_RendererID);
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        glTexSubImage2D(
-            GL_TEXTURE_2D,
-            0,
-            0,
-            0,
-            static_cast<GLsizei>(m_Specification.Width),
-            static_cast<GLsizei>(m_Specification.Height),
-            m_DataFormat,
-            m_DataType,
-            data);
+        if (compressed)
+        {
+            glCompressedTexSubImage2D(
+                GL_TEXTURE_2D,
+                0,
+                0,
+                0,
+                static_cast<GLsizei>(m_Specification.Width),
+                static_cast<GLsizei>(m_Specification.Height),
+                m_InternalFormat,
+                static_cast<GLsizei>(expectedSize),
+                data);
+        }
+        else
+        {
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+            glTexSubImage2D(
+                GL_TEXTURE_2D,
+                0,
+                0,
+                0,
+                static_cast<GLsizei>(m_Specification.Width),
+                static_cast<GLsizei>(m_Specification.Height),
+                m_DataFormat,
+                m_DataType,
+                data);
+        }
 
         if (m_Specification.GenerateMips)
         {
@@ -236,6 +322,98 @@ namespace Pyramid
 
         std::string error;
         if (!OpenGLDiagnostics::CheckError("OpenGLTexture2D::SetData", &error, false))
+        {
+            SetError(error);
+            return;
+        }
+
+        m_LastError.clear();
+    }
+
+    void OpenGLTexture2D::SetSubData(const void* data, u32 xOffset, u32 yOffset, u32 width, u32 height)
+    {
+        if (!m_IsLoaded || !m_RendererID)
+        {
+            SetError("Cannot update an unloaded texture");
+            return;
+        }
+        if (!data)
+        {
+            SetError("Texture sub-region update data is null");
+            return;
+        }
+        if (!IsValidExtent(width, height))
+        {
+            SetError("Texture sub-region dimensions must be greater than zero and fit OpenGL limits");
+            return;
+        }
+        if (xOffset > m_Specification.Width || yOffset > m_Specification.Height ||
+            width > m_Specification.Width - xOffset || height > m_Specification.Height - yOffset)
+        {
+            SetError("Texture sub-region lies outside the texture extents");
+            return;
+        }
+
+        const bool compressed = IsCompressedFormat(m_Specification.Format);
+        std::size_t expectedSize = 0;
+        bool sizeValid = false;
+        if (compressed)
+        {
+            if ((xOffset % 4U) != 0U || (yOffset % 4U) != 0U || (width % 4U) != 0U || (height % 4U) != 0U)
+            {
+                SetError("Compressed texture sub-region must be aligned to 4x4 blocks");
+                return;
+            }
+            sizeValid = CalculateCompressedByteSize(width, height, m_Specification.Format, expectedSize);
+        }
+        else
+        {
+            sizeValid = CalculateByteSize(width, height, m_BytesPerPixel, expectedSize);
+        }
+        if (!sizeValid || expectedSize == 0)
+        {
+            SetError("Texture sub-region byte size is invalid");
+            return;
+        }
+
+        GLint previousAlignment = 4;
+        glGetIntegerv(GL_UNPACK_ALIGNMENT, &previousAlignment);
+        OpenGLDiagnostics::ClearErrors();
+
+        glBindTexture(GL_TEXTURE_2D, m_RendererID);
+        if (compressed)
+        {
+            glCompressedTexSubImage2D(
+                GL_TEXTURE_2D,
+                0,
+                static_cast<GLint>(xOffset),
+                static_cast<GLint>(yOffset),
+                static_cast<GLsizei>(width),
+                static_cast<GLsizei>(height),
+                m_InternalFormat,
+                static_cast<GLsizei>(expectedSize),
+                data);
+        }
+        else
+        {
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+            glTexSubImage2D(
+                GL_TEXTURE_2D,
+                0,
+                static_cast<GLint>(xOffset),
+                static_cast<GLint>(yOffset),
+                static_cast<GLsizei>(width),
+                static_cast<GLsizei>(height),
+                m_DataFormat,
+                m_DataType,
+                data);
+        }
+
+        glPixelStorei(GL_UNPACK_ALIGNMENT, previousAlignment);
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        std::string error;
+        if (!OpenGLDiagnostics::CheckError("OpenGLTexture2D::SetSubData", &error, false))
         {
             SetError(error);
             return;
@@ -321,6 +499,102 @@ namespace Pyramid
             dataType = GL_FLOAT;
             bytesPerPixel = 8;
             return true;
+        case TextureFormat::RGB16F:
+            internalFormat = GL_RGB16F;
+            dataFormat = GL_RGB;
+            dataType = GL_FLOAT;
+            bytesPerPixel = 6;
+            return true;
+        case TextureFormat::RGB32F:
+            internalFormat = GL_RGB32F;
+            dataFormat = GL_RGB;
+            dataType = GL_FLOAT;
+            bytesPerPixel = 12;
+            return true;
+        case TextureFormat::RGBA32F:
+            internalFormat = GL_RGBA32F;
+            dataFormat = GL_RGBA;
+            dataType = GL_FLOAT;
+            bytesPerPixel = 16;
+            return true;
+        case TextureFormat::Depth16:
+            internalFormat = GL_DEPTH_COMPONENT16;
+            dataFormat = GL_DEPTH_COMPONENT;
+            dataType = GL_UNSIGNED_SHORT;
+            bytesPerPixel = 2;
+            return true;
+        case TextureFormat::Depth24:
+            internalFormat = GL_DEPTH_COMPONENT24;
+            dataFormat = GL_DEPTH_COMPONENT;
+            dataType = GL_UNSIGNED_INT;
+            bytesPerPixel = 4;
+            return true;
+        case TextureFormat::Depth32F:
+            internalFormat = GL_DEPTH_COMPONENT32F;
+            dataFormat = GL_DEPTH_COMPONENT;
+            dataType = GL_FLOAT;
+            bytesPerPixel = 4;
+            return true;
+        case TextureFormat::Depth24Stencil8:
+            internalFormat = GL_DEPTH24_STENCIL8;
+            dataFormat = GL_DEPTH_STENCIL;
+            dataType = GL_UNSIGNED_INT_24_8;
+            bytesPerPixel = 4;
+            return true;
+        case TextureFormat::Depth32FStencil8:
+            internalFormat = GL_DEPTH32F_STENCIL8;
+            dataFormat = GL_DEPTH_STENCIL;
+            dataType = GL_FLOAT_32_UNSIGNED_INT_24_8_REV;
+            bytesPerPixel = 8;
+            return true;
+        case TextureFormat::R8:
+            internalFormat = GL_R8;
+            dataFormat = GL_RED;
+            dataType = GL_UNSIGNED_BYTE;
+            bytesPerPixel = 1;
+            return true;
+        case TextureFormat::R16F:
+            internalFormat = GL_R16F;
+            dataFormat = GL_RED;
+            dataType = GL_FLOAT;
+            bytesPerPixel = 2;
+            return true;
+        case TextureFormat::R32F:
+            internalFormat = GL_R32F;
+            dataFormat = GL_RED;
+            dataType = GL_FLOAT;
+            bytesPerPixel = 4;
+            return true;
+        case TextureFormat::BC1_RGB:
+            if (!RequireS3TCSupport())
+            {
+                return false;
+            }
+            internalFormat = GL_COMPRESSED_RGB_S3TC_DXT1_EXT;
+            dataFormat = GL_RGB;
+            dataType = GL_UNSIGNED_BYTE;
+            bytesPerPixel = 0;
+            return true;
+        case TextureFormat::BC1_RGBA:
+            if (!RequireS3TCSupport())
+            {
+                return false;
+            }
+            internalFormat = GL_COMPRESSED_RGBA_S3TC_DXT1_EXT;
+            dataFormat = GL_RGBA;
+            dataType = GL_UNSIGNED_BYTE;
+            bytesPerPixel = 0;
+            return true;
+        case TextureFormat::BC3_RGBA:
+            if (!RequireS3TCSupport())
+            {
+                return false;
+            }
+            internalFormat = GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
+            dataFormat = GL_RGBA;
+            dataType = GL_UNSIGNED_BYTE;
+            bytesPerPixel = 0;
+            return true;
         default:
             return false;
         }
@@ -396,6 +670,7 @@ namespace Pyramid
 
     bool OpenGLTexture2D::CreateTextureObject(
         const TextureSpecification& specification,
+        TextureFormat format,
         GLenum internalFormat,
         GLenum dataFormat,
         GLenum dataType,
@@ -412,6 +687,15 @@ namespace Pyramid
             return false;
         }
 
+        const bool compressed = IsCompressedFormat(format);
+        std::size_t compressedSize = 0;
+        if (compressed &&
+            !CalculateCompressedByteSize(specification.Width, specification.Height, format, compressedSize))
+        {
+            error = "Compressed texture dimensions are invalid";
+            return false;
+        }
+
         GLint previousAlignment = 4;
         glGetIntegerv(GL_UNPACK_ALIGNMENT, &previousAlignment);
         OpenGLDiagnostics::ClearErrors();
@@ -424,17 +708,32 @@ namespace Pyramid
         }
 
         glBindTexture(GL_TEXTURE_2D, texture);
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        glTexImage2D(
-            GL_TEXTURE_2D,
-            0,
-            static_cast<GLint>(internalFormat),
-            static_cast<GLsizei>(specification.Width),
-            static_cast<GLsizei>(specification.Height),
-            0,
-            dataFormat,
-            dataType,
-            data);
+        if (compressed)
+        {
+            glCompressedTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                internalFormat,
+                static_cast<GLsizei>(specification.Width),
+                static_cast<GLsizei>(specification.Height),
+                0,
+                static_cast<GLsizei>(compressedSize),
+                data);
+        }
+        else
+        {
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+            glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                static_cast<GLint>(internalFormat),
+                static_cast<GLsizei>(specification.Width),
+                static_cast<GLsizei>(specification.Height),
+                0,
+                dataFormat,
+                dataType,
+                data);
+        }
 
         ApplyParameters(specification);
 

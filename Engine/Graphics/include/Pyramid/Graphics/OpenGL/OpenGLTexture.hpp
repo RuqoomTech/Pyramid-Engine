@@ -28,6 +28,7 @@ namespace Pyramid
         std::string GetLastError() const override { return m_LastError; }
 
         void SetData(const void* data, u32 size) override;
+        void SetSubData(const void* data, u32 xOffset, u32 yOffset, u32 width, u32 height) override;
         void GenerateMipmaps() override;
         u32 GetMipLevels() const override;
         bool LoadFromFile(const std::string& filepath, bool srgb = false, bool generateMips = true) override;
@@ -47,6 +48,7 @@ namespace Pyramid
 
         bool CreateTextureObject(
             const TextureSpecification& specification,
+            TextureFormat format,
             GLenum internalFormat,
             GLenum dataFormat,
             GLenum dataType,

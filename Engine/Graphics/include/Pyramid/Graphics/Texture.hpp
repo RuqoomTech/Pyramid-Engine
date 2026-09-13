@@ -25,11 +25,11 @@ enum class TextureFormat
     Depth32F,
     Depth24Stencil8,
     Depth32FStencil8,
-    // Compressed formats
+    // Compressed formats (driver-gated S3TC; BC7 pruned: BPTC needs OpenGL 4.2,
+    // unmappable on the locked 3.3 baseline — see docs/Architecture.md)
     BC1_RGB,     // DXT1
     BC1_RGBA,    // DXT1 with alpha
     BC3_RGBA,    // DXT5
-    BC7_RGBA,    // High quality
     // Single channel formats
     R8,
     R16F,
@@ -91,6 +91,9 @@ public:
 
     // Dynamic texture updates (optional - can have default implementations)
     virtual void SetData(const void*, u32) {}
+    // Rectangular sub-region update: (data, xOffset, yOffset, width, height).
+    // The region must lie inside the texture extents; implementations validate
+    // the expected byte size from the region and the per-format transfer size.
     virtual void SetSubData(const void*, u32, u32, u32, u32) {}
     
     // Texture parameters (optional - can have default implementations)
