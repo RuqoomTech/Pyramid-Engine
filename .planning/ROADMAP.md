@@ -38,13 +38,13 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Agent enabling occlusion culling gets a supported technique with observable effect, or the setting is gone with documented rationale (FRZ-03)
   4. Agent using any advertised texture format gets a working mapping — no unmapped enum value reaches agent-visible API (FRZ-04)
 
-**Plans**: 1/4 plans executed
+**Plans**: 2/4 plans executed
 
 Plans:
 **Wave 1**
 
 - [x] 01-01-PLAN.md — Remove compute-dispatch and occlusion-culling placeholders with linkage proof and rationale (FRZ-01, FRZ-03)
-- [ ] 01-02-PLAN.md — Map all 3.3-core texture formats with S3TC gate and BC7 decision (FRZ-04)
+- [x] 01-02-PLAN.md — Map all 3.3-core texture formats with S3TC gate and BC7 decision (FRZ-04)
 - [ ] 01-03-PLAN.md — Complete shadow-map-array binding with uploads and visual sign-off (FRZ-02)
 
 **Wave 2** *(blocked on Wave 1 completion)*
@@ -208,7 +208,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. P0 Core Freeze | 1/4 | In Progress|  |
+| 1. P0 Core Freeze | 2/4 | In Progress|  |
 | 2. Quality Baseline | 0/0 | Not started | - |
 | 3. Headless Validate/Run Loop | 0/0 | Not started | - |
 | 4. Scenario Runner + Render Regression | 0/0 | Not started | - |
