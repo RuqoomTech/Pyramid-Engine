@@ -1,0 +1,58 @@
+{
+  "contract": "1.0.0",
+  "flavor": "core",
+  "milestone": null,
+  "phases": [
+    {
+      "number": "1",
+      "name": "P0 Core Freeze",
+      "status": "in_progress"
+    },
+    {
+      "number": "2",
+      "name": "Quality Baseline",
+      "status": "pending"
+    },
+    {
+      "number": "3",
+      "name": "Headless Validate/Run Loop",
+      "status": "pending"
+    },
+    {
+      "number": "4",
+      "name": "Scenario Runner + Render Regression",
+      "status": "pending"
+    },
+    {
+      "number": "5",
+      "name": "Data-First Game Definition + Schemas",
+      "status": "pending"
+    },
+    {
+      "number": "6",
+      "name": "Agent SDK Facade + Game Template",
+      "status": "pending"
+    },
+    {
+      "number": "7",
+      "name": "Converters + Curated Asset Catalog",
+      "status": "pending"
+    },
+    {
+      "number": "8",
+      "name": "Machine-Readable Contracts Hardening",
+      "status": "pending"
+    },
+    {
+      "number": "9",
+      "name": "Proof — Agent-Built RTS Mini-Game",
+      "status": "pending"
+    }
+  ],
+  "next": {
+    "command": "/gsd:progress --next",
+    "label": "Advance to the next step",
+    "reason": "Phase 01 of 9 · 0% · executing"
+  },
+  "updated_at": "2026-09-25T19:52:54.188Z"
+}
