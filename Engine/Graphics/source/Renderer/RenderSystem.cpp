@@ -89,6 +89,7 @@ namespace Pyramid
                 return false;
             }
 
+            m_device = device;
             m_initialized = true;
             PYRAMID_LOG_INFO(
                 "Render target initialized: ", m_spec.width, "x", m_spec.height,
@@ -138,14 +139,21 @@ namespace Pyramid
                 PYRAMID_LOG_ERROR("Cannot bind an uninitialized render target");
                 return;
             }
-            m_framebuffer->Bind();
+            if (!m_device)
+            {
+                PYRAMID_LOG_ERROR("Cannot bind a render target without a graphics device");
+                return;
+            }
+            m_device->BindFramebuffer(m_framebuffer.get());
         }
 
         void RenderTarget::Unbind()
         {
-            if (m_framebuffer)
+            // An uninitialized target never bound anything, so there is nothing
+            // to restore; this stays a no-op exactly as before the migration.
+            if (m_framebuffer && m_device)
             {
-                m_framebuffer->Unbind();
+                m_device->BindFramebuffer(nullptr);
             }
         }
 
@@ -300,7 +308,7 @@ namespace Pyramid
                 // Render passes may bind off-screen targets and change the viewport.
                 // Re-establish the main render surface before the next pass and
                 // before direct overlays such as Pyramid::UI render after Render().
-                m_device->BindFramebufferHandle(0);
+                m_device->BindFramebuffer(nullptr);
                 m_device->SetViewport(0, 0, m_width, m_height);
 
                 // Prepare command buffer for next pass.

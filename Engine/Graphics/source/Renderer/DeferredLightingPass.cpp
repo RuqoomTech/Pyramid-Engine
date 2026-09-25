@@ -78,7 +78,7 @@ namespace Pyramid
         void DeferredLightingPass::Begin(CommandBuffer& cmd)
         {
             // Bind default framebuffer (render to screen)
-            m_device->BindFramebufferHandle(0);
+            m_device->BindFramebuffer(nullptr);
             
             // Clear screen
             m_device->SetClearColor(0.0f, 0.0f, 0.0f, 1.0f);

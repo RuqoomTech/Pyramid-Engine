@@ -58,10 +58,16 @@ namespace Pyramid
 
         void ShadowMapPass::DestroyShadowArray()
         {
-            if (m_shadowArrayFBO != 0)
+            if (m_shadowArrayTarget)
             {
-                glDeleteFramebuffers(1, &m_shadowArrayFBO);
-                m_shadowArrayFBO = 0;
+                GLuint arrayFBO = static_cast<GLuint>(m_shadowArrayTarget->GetNativeHandle());
+                // Drop the neutral view first so it can never outlive the
+                // framebuffer object it observes.
+                m_shadowArrayTarget.reset();
+                if (arrayFBO != 0)
+                {
+                    glDeleteFramebuffers(1, &arrayFBO);
+                }
             }
 
             if (m_shadowArrayTexture != 0)
@@ -148,13 +154,19 @@ namespace Pyramid
             // buffers are drawn or read.
             GLuint arrayFBO = 0;
             glGenFramebuffers(1, &arrayFBO);
-            m_device->BindFramebufferHandle(arrayFBO);
+            // Build the neutral view before binding it: the layered depth
+            // attachment attaches to the bound target, so the pass holds this
+            // as an IFramebuffer and never as a raw handle. The view is
+            // non-owning, so a failed attempt simply discards it.
+            auto replacementTarget = std::make_unique<OpenGLLayeredFramebuffer>(
+                static_cast<u32>(arrayFBO), resolution, resolution);
+            m_device->BindFramebuffer(replacementTarget.get());
             glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, arrayTexture, 0, 0);
             glDrawBuffer(GL_NONE);
             glReadBuffer(GL_NONE);
 
             const GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-            m_device->BindFramebufferHandle(0);
+            m_device->BindFramebuffer(nullptr);
 
             std::string glError;
             const bool glClean =
@@ -164,6 +176,7 @@ namespace Pyramid
                 PYRAMID_LOG_ERROR("Shadow array framebuffer is not complete (status ",
                                   static_cast<u32>(status), "): ", glError,
                                   "; keeping the previous array");
+                replacementTarget.reset();
                 if (arrayFBO != 0)
                 {
                     glDeleteFramebuffers(1, &arrayFBO);
@@ -172,7 +185,7 @@ namespace Pyramid
                 {
                     glDeleteTextures(1, &arrayTexture);
                 }
-                m_device->BindFramebufferHandle(0);
+                m_device->BindFramebuffer(nullptr);
                 return false;
             }
 
@@ -180,7 +193,7 @@ namespace Pyramid
             // array and swap the new one into service.
             DestroyShadowArray();
             m_shadowArrayTexture = arrayTexture;
-            m_shadowArrayFBO = arrayFBO;
+            m_shadowArrayTarget = std::move(replacementTarget);
             m_shadowArrayLayers = cascadeCount;
             m_shadowArrayResolution = resolution;
 
@@ -369,7 +382,7 @@ namespace Pyramid
             PYRAMID_LOG_DEBUG("Rendering shadows for ", shadowCasters.size(), " objects across ",
                             m_cascadeCount, " cascades");
 
-            if (m_shadowArrayTexture == 0 || m_shadowArrayFBO == 0)
+            if (m_shadowArrayTexture == 0 || !m_shadowArrayTarget)
             {
                 PYRAMID_LOG_DEBUG("ShadowMapPass::Execute skipped: no valid shadow array");
                 return;
@@ -384,7 +397,7 @@ namespace Pyramid
                 m_lightSpaceMatrices[i] = CalculateLightSpaceMatrix(camera, nearPlane, farPlane, lightDir);
 
                 // Attach layer i of the shadow array, then render into it
-                m_device->BindFramebufferHandle(m_shadowArrayFBO);
+                m_device->BindFramebuffer(m_shadowArrayTarget.get());
                 glFramebufferTextureLayer(GL_FRAMEBUFFER,
                                           GL_DEPTH_ATTACHMENT,
                                           m_shadowArrayTexture,
@@ -447,9 +460,9 @@ namespace Pyramid
 
             // Restore the default framebuffer after the pass. RenderSystem
             // re-establishes the main viewport after every pass; that restore
-            // convention is preserved and is not migrated to the neutral
-            // BindFramebuffer interface here (that migration belongs to 01-04).
-            m_device->BindFramebufferHandle(0);
+            // convention is preserved and is now routed through the neutral
+            // BindFramebuffer interface rather than a raw handle.
+            m_device->BindFramebuffer(nullptr);
         }
 
         void ShadowMapPass::End(CommandBuffer& cmd)

@@ -174,7 +174,7 @@ namespace Pyramid
             std::vector<f32> m_cascadeSplits;
             std::vector<Math::Mat4> m_lightSpaceMatrices;
             GLuint m_shadowArrayTexture = 0;
-            GLuint m_shadowArrayFBO = 0;
+            std::unique_ptr<OpenGLLayeredFramebuffer> m_shadowArrayTarget;
             u32 m_shadowArrayLayers = 0;
             u32 m_shadowArrayResolution = 0;
             f32 m_depthBias;

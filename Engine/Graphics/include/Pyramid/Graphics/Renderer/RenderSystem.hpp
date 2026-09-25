@@ -195,6 +195,14 @@ namespace Pyramid
 
             bool Initialize(IGraphicsDevice* device);
             bool Resize(u32 width, u32 height);
+
+            /**
+             * @brief Bind this target through the backend-neutral device method.
+             *
+             * Routing through IGraphicsDevice::BindFramebuffer keeps the
+             * render-target bind on the same contract every other pass uses;
+             * no caller ever sees the backend framebuffer object.
+             */
             void Bind();
             void Unbind();
             void Clear(f32 r = 0.0f, f32 g = 0.0f, f32 b = 0.0f, f32 a = 1.0f);
@@ -210,6 +218,7 @@ namespace Pyramid
         private:
             RenderTargetSpec m_spec;
             std::unique_ptr<OpenGLFramebuffer> m_framebuffer;
+            IGraphicsDevice* m_device = nullptr;
             bool m_initialized = false;
         };
 

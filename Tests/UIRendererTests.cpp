@@ -243,6 +243,10 @@ int main()
     {
         return Fail("UI renderer did not establish the physical surface viewport");
     }
+    if (device.lastNeutralFramebuffer != nullptr || device.neutralFramebufferBinds == 0)
+    {
+        return Fail("UI renderer did not establish its surface through the neutral framebuffer method");
+    }
     if (device.scissorX != 20 || device.scissorY != 8 ||
         device.scissorWidth != 140 || device.scissorHeight != 100)
     {

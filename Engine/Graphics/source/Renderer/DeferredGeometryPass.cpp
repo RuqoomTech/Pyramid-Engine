@@ -127,7 +127,7 @@ namespace Pyramid
             // Bind G-Buffer
             if (m_gBuffer && m_device)
             {
-                m_device->BindFramebufferHandle(m_gBuffer->GetFramebufferID());
+                m_device->BindFramebuffer(m_gBuffer.get());
                 m_device->SetViewport(0, 0, m_width, m_height);
                 m_device->SetClearColor(0.0f, 0.0f, 0.0f, 0.0f);
                 m_device->ClearBuffers(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
@@ -214,7 +214,7 @@ namespace Pyramid
             // Unbind G-Buffer
             if (m_gBuffer && m_device)
             {
-                m_device->BindFramebufferHandle(0);
+                m_device->BindFramebuffer(nullptr);
             }
 
             PYRAMID_LOG_DEBUG("DeferredGeometryPass::End");

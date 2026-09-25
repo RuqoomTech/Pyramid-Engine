@@ -284,7 +284,7 @@ void main()
         // UI is a final surface-space pass. Establish its physical viewport
         // explicitly because earlier passes may have rendered shadow maps or
         // other off-screen targets with different extents.
-        m_device->BindFramebufferHandle(0);
+        m_device->BindFramebuffer(nullptr);
         m_device->SetViewport(0, 0, surfaceWidth, surfaceHeight);
         m_device->EnableBlend(true);
         m_device->SetBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);

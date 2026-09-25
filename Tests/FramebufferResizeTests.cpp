@@ -1,11 +1,17 @@
+#include <Pyramid/Graphics/Camera.hpp>
 #include <Pyramid/Graphics/OpenGL/OpenGLDevice.hpp>
 #include <Pyramid/Graphics/OpenGL/OpenGLFramebuffer.hpp>
 #include <Pyramid/Graphics/OpenGL/OpenGLStateManager.hpp>
+#include <Pyramid/Graphics/Renderer/RenderPasses.hpp>
 #include <Pyramid/Graphics/Renderer/RenderSystem.hpp>
+#include <Pyramid/Graphics/Scene.hpp>
+
+#include "TestGraphicsDevice.hpp"
 
 #include <algorithm>
 #include <cstdlib>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -26,6 +32,11 @@ namespace
         return EXIT_FAILURE;
     }
 
+    GLenum APIENTRY FakeGetError()
+    {
+        return GL_NO_ERROR;
+    }
+
     void APIENTRY FakeGetIntegerv(GLenum name, GLint* values)
     {
         if (!values)
@@ -43,6 +54,9 @@ namespace
             break;
         case GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS:
             values[0] = 16;
+            break;
+        case GL_MAX_ARRAY_TEXTURE_LAYERS:
+            values[0] = 256;
             break;
         case GL_ACTIVE_TEXTURE:
             values[0] = GL_TEXTURE0;
@@ -150,6 +164,19 @@ namespace
     {
     }
 
+    void APIENTRY FakeTexImage3D(
+        GLenum, GLint, GLint, GLsizei, GLsizei, GLsizei, GLint, GLenum, GLenum, const void*)
+    {
+    }
+
+    void APIENTRY FakeFramebufferTextureLayer(GLenum, GLenum, GLuint, GLint, GLint)
+    {
+    }
+
+    void APIENTRY FakeObjectLabel(GLenum, GLuint, GLsizei, const GLchar*)
+    {
+    }
+
     void APIENTRY FakeTexImage2DMultisample(
         GLenum, GLsizei, GLenum, GLsizei, GLsizei, GLboolean)
     {
@@ -181,6 +208,7 @@ namespace
 
     void InstallFakeOpenGL()
     {
+        glad_glGetError = FakeGetError;
         glad_glGetIntegerv = FakeGetIntegerv;
         glad_glIsEnabled = FakeIsEnabled;
         glad_glGetBooleanv = FakeGetBooleanv;
@@ -194,9 +222,12 @@ namespace
         glad_glDeleteTextures = FakeDeleteTextures;
         glad_glBindTexture = FakeBindTexture;
         glad_glTexImage2D = FakeTexImage2D;
+        glad_glTexImage3D = FakeTexImage3D;
         glad_glTexImage2DMultisample = FakeTexImage2DMultisample;
         glad_glTexParameteri = FakeTexParameteri;
         glad_glFramebufferTexture2D = FakeFramebufferTexture2D;
+        glad_glFramebufferTextureLayer = FakeFramebufferTextureLayer;
+        glad_glObjectLabel = FakeObjectLabel;
         glad_glDrawBuffers = FakeDrawBuffers;
         glad_glDrawBuffer = FakeDrawBuffer;
         glad_glReadBuffer = FakeReadBuffer;
@@ -430,6 +461,106 @@ int main()
     {
         return Fail("null neutral bind did not make the default framebuffer current");
     }
+
+    // Every touched call site must route through the neutral method.
+    Pyramid::Tests::TestGraphicsDevice testDevice;
+    testDevice.shaderFactory = [] { return std::make_shared<Pyramid::Tests::TestShader>(); };
+
+    // RenderTarget::Bind and Unbind.
+    RenderTargetSpec neutralTargetSpec;
+    neutralTargetSpec.width = 320;
+    neutralTargetSpec.height = 240;
+    Renderer::RenderTarget routedTarget(neutralTargetSpec);
+    if (!routedTarget.Initialize(&testDevice))
+    {
+        return Fail("render target did not initialize against the fake graphics device");
+    }
+
+    u32 neutralBinds = testDevice.neutralFramebufferBinds;
+    routedTarget.Bind();
+    if (testDevice.neutralFramebufferBinds != neutralBinds + 1 ||
+        testDevice.lastNeutralFramebuffer == nullptr)
+    {
+        return Fail("render target bind did not route through the neutral device method");
+    }
+    if (testDevice.boundFramebufferHandle == 0)
+    {
+        return Fail("render target bind did not bind a real target");
+    }
+
+    routedTarget.Unbind();
+    if (testDevice.neutralFramebufferBinds != neutralBinds + 2 ||
+        testDevice.lastNeutralFramebuffer != nullptr || testDevice.boundFramebufferHandle != 0)
+    {
+        return Fail("render target unbind did not restore the default surface neutrally");
+    }
+
+    // A null render-target command restores the default surface neutrally.
+    Renderer::CommandBuffer targetCommand;
+    targetCommand.Begin();
+    targetCommand.SetRenderTarget(nullptr);
+    targetCommand.End();
+    neutralBinds = testDevice.neutralFramebufferBinds;
+    targetCommand.Execute(&testDevice);
+    if (testDevice.neutralFramebufferBinds != neutralBinds + 1 ||
+        testDevice.lastNeutralFramebuffer != nullptr || testDevice.boundFramebufferHandle != 0)
+    {
+        return Fail("null render-target command did not restore the default surface neutrally");
+    }
+
+    // DeferredGeometryPass binds its G-buffer and restores the default surface.
+    Renderer::DeferredGeometryPass geometryPass("DeferredGeometry", &testDevice, 128, 96);
+    if (!geometryPass.GetGBuffer())
+    {
+        return Fail("deferred geometry pass did not create its G-buffer");
+    }
+
+    Renderer::CommandBuffer geometryCommand;
+    geometryCommand.Begin();
+    neutralBinds = testDevice.neutralFramebufferBinds;
+    geometryPass.Begin(geometryCommand);
+    if (testDevice.neutralFramebufferBinds != neutralBinds + 1 ||
+        testDevice.lastNeutralFramebuffer != geometryPass.GetGBuffer().get())
+    {
+        return Fail("deferred geometry pass did not bind its G-buffer through the neutral method");
+    }
+    geometryCommand.End();
+    geometryPass.End(geometryCommand);
+    if (testDevice.lastNeutralFramebuffer != nullptr || testDevice.boundFramebufferHandle != 0)
+    {
+        return Fail("deferred geometry pass did not restore the default surface neutrally");
+    }
+
+    // RenderSystem restores the main surface through the neutral method after
+    // every pass, in framebuffer-then-viewport order.
+    Renderer::RenderSystem renderSystem;
+    if (!renderSystem.Initialize(&testDevice))
+    {
+        return Fail("render system did not initialize against the fake graphics device");
+    }
+    if (!renderSystem.Resize(320, 240))
+    {
+        return Fail("render system did not accept a valid resize");
+    }
+
+    Scene scene;
+    Camera camera;
+    renderSystem.BeginFrame();
+    neutralBinds = testDevice.neutralFramebufferBinds;
+    renderSystem.Render(scene, camera);
+    if (testDevice.neutralFramebufferBinds <= neutralBinds)
+    {
+        return Fail("render system did not restore the surface through the neutral method");
+    }
+    if (testDevice.lastNeutralFramebuffer != nullptr || testDevice.boundFramebufferHandle != 0)
+    {
+        return Fail("render system left a non-default framebuffer bound after its passes");
+    }
+    if (testDevice.viewportWidth != 320 || testDevice.viewportHeight != 240)
+    {
+        return Fail("render system did not restore the main viewport after its passes");
+    }
+    renderSystem.EndFrame();
 
     std::cout << "Framebuffer resize tests passed\n";
     return EXIT_SUCCESS;

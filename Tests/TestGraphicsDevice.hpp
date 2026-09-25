@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Pyramid/Graphics/Buffer/IndexBuffer.hpp>
+#include <Pyramid/Graphics/Buffer/UniformBuffer.hpp>
 #include <Pyramid/Graphics/Buffer/VertexArray.hpp>
 #include <Pyramid/Graphics/Buffer/VertexBuffer.hpp>
 #include <Pyramid/Graphics/Geometry/MeshBounds.hpp>
@@ -163,6 +164,108 @@ namespace Pyramid::Tests
         bool m_hasInstanceBuffer = false;
     };
 
+    /**
+     * @brief Minimal recording shader.
+     *
+     * Render passes compile their shaders in their constructors, so a harness
+     * that drives a pass needs a non-null IShader. Uniform locations are
+     * reported as found so presence-only assertions stay meaningful.
+     */
+    class TestShader final : public IShader
+    {
+    public:
+        void Bind() override { ++bindCalls; }
+        void Unbind() override { ++unbindCalls; }
+        bool Compile(const std::string&, const std::string&) override
+        {
+            ++compileCalls;
+            return true;
+        }
+        bool CompileWithGeometry(
+            const std::string&, const std::string&, const std::string&) override
+        {
+            ++compileCalls;
+            return true;
+        }
+        bool CompileWithTessellation(
+            const std::string&, const std::string&, const std::string&,
+            const std::string&) override
+        {
+            ++compileCalls;
+            return true;
+        }
+        bool CompileAdvanced(
+            const std::string&, const std::string&, const std::string&,
+            const std::string&, const std::string&) override
+        {
+            ++compileCalls;
+            return true;
+        }
+        void SetUniformInt(const std::string&, int) override {}
+        void SetUniformFloat(const std::string&, float) override {}
+        void SetUniformFloat2(const std::string&, float, float) override {}
+        void SetUniformFloat3(const std::string&, float, float, float) override {}
+        void SetUniformFloat4(const std::string&, float, float, float, float) override {}
+        void SetUniformMat3(const std::string&, const float*, bool, int) override {}
+        void SetUniformMat4(const std::string&, const float*, bool, int) override {}
+        void BindUniformBuffer(const std::string&, IUniformBuffer*, u32) override {}
+        void SetUniformBlockBinding(const std::string&, u32) override {}
+        void BindShaderStorageBuffer(const std::string&, IShaderStorageBuffer*, u32) override {}
+        void SetShaderStorageBlockBinding(const std::string&, u32) override {}
+
+        u32 bindCalls = 0;
+        u32 unbindCalls = 0;
+        u32 compileCalls = 0;
+    };
+
+    /**
+     * @brief CPU-only uniform buffer.
+     *
+     * RenderSystem::Initialize refuses to start without uniform buffers, so a
+     * harness that drives the render system needs a working IUniformBuffer.
+     */
+    class TestUniformBuffer final : public IUniformBuffer
+    {
+    public:
+        bool Initialize(size_t size, BufferUsage usage = BufferUsage::Dynamic) override
+        {
+            m_size = size;
+            m_usage = usage;
+            m_initialized = true;
+            return true;
+        }
+        void UpdateData(const void* data, size_t size, size_t offset = 0) override
+        {
+            ++updateCalls;
+            if (data && size > 0)
+            {
+                m_storage.resize(offset + size);
+                std::memcpy(m_storage.data() + offset, data, size);
+            }
+        }
+        void Bind(u32 bindingPoint) override { lastBindingPoint = bindingPoint; }
+        void Unbind() override { lastBindingPoint = 0xFFFFFFFFu; }
+        size_t GetSize() const override { return m_size; }
+        BufferUsage GetUsage() const override { return m_usage; }
+        void* Map(BufferAccess = BufferAccess::WriteOnly) override
+        {
+            m_mapped = true;
+            return m_storage.data();
+        }
+        void Unmap() override { m_mapped = false; }
+        bool IsMapped() const override { return m_mapped; }
+
+        u32 updateCalls = 0;
+        u32 lastBindingPoint = 0xFFFFFFFFu;
+
+    private:
+        std::vector<u8> m_storage;
+        size_t m_size = 0;
+        BufferUsage m_usage = BufferUsage::Dynamic;
+        bool m_initialized = false;
+        bool m_mapped = false;
+    };
+
     class TestGraphicsDevice final : public IGraphicsDevice
     {
     public:
@@ -259,9 +362,12 @@ namespace Pyramid::Tests
                 ? textureFileFactory(filepath, srgb, generateMips)
                 : nullptr;
         }
-        std::shared_ptr<IUniformBuffer> CreateUniformBuffer(size_t, BufferUsage) override
+        std::shared_ptr<IUniformBuffer> CreateUniformBuffer(size_t size, BufferUsage usage) override
         {
-            return nullptr;
+            ++uniformBufferCreations;
+            auto buffer = std::make_shared<TestUniformBuffer>();
+            buffer->Initialize(size, usage);
+            return buffer;
         }
         std::shared_ptr<IInstanceBuffer> CreateInstanceBuffer() override { return nullptr; }
         std::shared_ptr<IShaderStorageBuffer> CreateShaderStorageBuffer() override { return nullptr; }
@@ -290,7 +396,20 @@ namespace Pyramid::Tests
         std::string GetLastError() const override { return {}; }
         void SetWireframeMode(bool enable) override { wireframeEnabled = enable; }
         void SetPolygonMode(u32 mode) override { polygonMode = mode; }
-        void BindFramebuffer(IFramebuffer*) override {}
+        void BindFramebuffer(IFramebuffer* framebuffer) override
+        {
+            // The neutral bind is the only bind passes and the renderer may
+            // use, so it must be observable rather than a silent no-op. Record
+            // the same state BindFramebufferHandle produced so restore
+            // assertions stay meaningful after the migration.
+            ++neutralFramebufferBinds;
+            lastNeutralFramebuffer = framebuffer;
+            boundFramebufferHandle = framebuffer ? framebuffer->GetNativeHandle() : 0;
+            if (framebuffer)
+            {
+                framebuffer->Bind();
+            }
+        }
         void BindFramebufferHandle(u32 handle) override { boundFramebufferHandle = handle; }
         void BindShader(IShader* shader) override
         {
@@ -331,6 +450,8 @@ namespace Pyramid::Tests
         u32 viewportHeight = 0;
         u32 viewportChanges = 0;
         u32 boundFramebufferHandle = 0;
+        u32 neutralFramebufferBinds = 0;
+        IFramebuffer* lastNeutralFramebuffer = nullptr;
         u32 drawCalls = 0;
         bool lastDrawIndexed = false;
         u32 lastDrawCount = 0;
@@ -361,6 +482,7 @@ namespace Pyramid::Tests
         u32 shaderCreations = 0;
         u32 textureCreations = 0;
         u32 textureFileCreations = 0;
+        u32 uniformBufferCreations = 0;
         std::function<std::shared_ptr<IShader>()> shaderFactory;
         std::function<std::shared_ptr<ITexture2D>(const TextureSpecification&, const void*)>
             textureFactory;

@@ -2,6 +2,7 @@
 
 #include <Pyramid/Core/Prerequisites.hpp>
 #include <Pyramid/Graphics/Framebuffer.hpp>
+#include <Pyramid/Graphics/OpenGL/OpenGLStateManager.hpp>
 #include <glad/glad.h>
 #include <string>
 #include <vector>
@@ -170,9 +171,56 @@ namespace Pyramid
         bool m_initialized = false;
     };
 
-    namespace FramebufferUtils
+    /**
+     * @brief Non-owning IFramebuffer view over a framebuffer the OpenGL
+     *        backend created directly for a layered depth attachment.
+     *
+     * OpenGLFramebuffer describes attachments through a FramebufferSpec, which
+     * cannot express a GL_TEXTURE_2D_ARRAY layer attachment. This class exists
+     * only so such a target can join the neutral bind contract: it adds no
+     * attachment management and owns nothing. The creator keeps creating and
+     * destroying the framebuffer object, and the view is destroyed before the
+     * framebuffer it observes.
+     */
+    class OpenGLLayeredFramebuffer : public IFramebuffer
     {
-        FramebufferSpec CreateColorOnlySpec(u32 width, u32 height, GLenum format = GL_RGBA8);
+    public:
+        OpenGLLayeredFramebuffer(u32 framebufferId, u32 width, u32 height)
+            : m_framebufferId(framebufferId)
+            , m_width(width)
+            , m_height(height)
+        {
+        }
+
+        void Bind() const override
+        {
+            OpenGLStateManager::GetInstance().BindFramebuffer(GL_FRAMEBUFFER, m_framebufferId);
+            if (m_framebufferId != 0 && m_width != 0 && m_height != 0)
+            {
+                OpenGLStateManager::GetInstance().SetViewport(
+                    0, 0, static_cast<i32>(m_width), static_cast<i32>(m_height));
+            }
+        }
+
+        void Unbind() const override
+        {
+            OpenGLStateManager::GetInstance().BindFramebuffer(GL_FRAMEBUFFER, 0);
+        }
+
+        /** Complete once the observed framebuffer object exists. */
+        bool IsComplete() const override { return m_framebufferId != 0; }
+        u32 GetWidth() const override { return m_width; }
+        u32 GetHeight() const override { return m_height; }
+        u32 GetNativeHandle() const override { return m_framebufferId; }
+
+    private:
+        u32 m_framebufferId;
+        u32 m_width;
+        u32 m_height;
+    };
+
+    namespace FramebufferUtils
+    {        FramebufferSpec CreateColorOnlySpec(u32 width, u32 height, GLenum format = GL_RGBA8);
         FramebufferSpec CreateColorDepthSpec(u32 width, u32 height, GLenum colorFormat = GL_RGBA8);
         FramebufferSpec CreateGBufferSpec(u32 width, u32 height);
         FramebufferSpec CreateShadowMapSpec(u32 width, u32 height);

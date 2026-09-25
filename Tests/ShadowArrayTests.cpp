@@ -422,6 +422,14 @@ int main()
     {
         return Fail("shadow pass leaked its framebuffer instead of restoring handle 0");
     }
+    if (device.lastNeutralFramebuffer != nullptr)
+    {
+        return Fail("shadow pass restore did not go through the neutral framebuffer method");
+    }
+    if (device.neutralFramebufferBinds == 0)
+    {
+        return Fail("shadow pass made no neutral framebuffer binds at all");
+    }
 
     const FramebufferSpec gbufferSpec = FramebufferUtils::CreateColorDepthSpec(64, 64);
     auto gbuffer = std::make_shared<OpenGLFramebuffer>(gbufferSpec);
@@ -538,6 +546,10 @@ int main()
     if (multiDevice.boundFramebufferHandle != 0)
     {
         return Fail("multi-cascade shadow pass leaked its framebuffer");
+    }
+    if (multiDevice.lastNeutralFramebuffer != nullptr)
+    {
+        return Fail("multi-cascade shadow restore did not go through the neutral framebuffer method");
     }
     if (multiShadow.GetLightSpaceMatrices().size() != 4 ||
         multiShadow.GetCascadeSplits().size() != 5)
