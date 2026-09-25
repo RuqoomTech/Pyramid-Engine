@@ -1,4 +1,5 @@
 #include <Pyramid/Graphics/OpenGL/OpenGLTexture.hpp>
+#include <Pyramid/Graphics/Texture.hpp>
 
 #include "Fixtures/JPEGFixtures.hpp"
 
@@ -8,6 +9,7 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -25,6 +27,7 @@ namespace
     int g_compressedImageCalls = 0;
     int g_compressedSubImageCalls = 0;
     GLint g_lastMinFilter = 0;
+    GLint g_compareMode = -1;
     int g_generateMipmapCalls = 0;
     int g_subImageCalls = 0;
     std::vector<GLint> g_unpackAlignments;
@@ -142,6 +145,10 @@ namespace
         if (name == GL_TEXTURE_MIN_FILTER)
         {
             g_lastMinFilter = value;
+        }
+        if (name == GL_TEXTURE_COMPARE_MODE)
+        {
+            g_compareMode = value;
         }
     }
 
@@ -590,6 +597,113 @@ int main()
         if (texture.GetLastError().empty() || g_subImageCalls != subImageCallsBefore + 1)
         {
             return Fail("null SetSubData payload was not rejected");
+        }
+    }
+
+    // CreateDepthTarget through the texture interface (FRZ-05). Every mapped
+    // depth and packed depth-stencil format must produce a real sampled depth
+    // texture with the same verified triple the format table pins, and
+    // compare mode must be pinned to NONE rather than left to the driver.
+    {
+        struct DepthTargetExpectation
+        {
+            Pyramid::TextureFormat format;
+            GLenum internalFormat;
+            GLenum dataFormat;
+            GLenum dataType;
+        };
+        const DepthTargetExpectation kDepthTargets[] = {
+            { TextureFormat::Depth16, GL_DEPTH_COMPONENT16, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT },
+            { TextureFormat::Depth24, GL_DEPTH_COMPONENT24, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT },
+            { TextureFormat::Depth32F, GL_DEPTH_COMPONENT32F, GL_DEPTH_COMPONENT, GL_FLOAT },
+            { TextureFormat::Depth24Stencil8, GL_DEPTH24_STENCIL8, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8 },
+            { TextureFormat::Depth32FStencil8, GL_DEPTH32F_STENCIL8, GL_DEPTH_STENCIL, GL_FLOAT_32_UNSIGNED_INT_24_8_REV },
+        };
+
+        for (const DepthTargetExpectation& expected : kDepthTargets)
+        {
+            const std::string label =
+                "depth target " + std::to_string(static_cast<int>(expected.format));
+
+            g_compareMode = -1;
+            g_generateMipmapCalls = 0;
+            const std::shared_ptr<Pyramid::ITexture2D> target =
+                Pyramid::ITexture2D::CreateDepthTarget(64, 32, expected.format);
+            if (!target || !target->IsLoaded() || target->GetRendererID() == 0)
+            {
+                return Fail(("depth target did not create: " + label).c_str());
+            }
+            if (target->GetWidth() != 64 || target->GetHeight() != 32 ||
+                target->GetFormat() != expected.format)
+            {
+                return Fail(("depth target metadata is incorrect: " + label).c_str());
+            }
+            if (!target->GetLastError().empty())
+            {
+                return Fail(("depth target reported a diagnostic: " + label).c_str());
+            }
+            if (g_lastInternalFormat != expected.internalFormat ||
+                g_lastDataFormat != expected.dataFormat ||
+                g_lastDataType != expected.dataType)
+            {
+                return Fail(("depth target used an incorrect format triple: " + label).c_str());
+            }
+            if (g_compareMode != GL_NONE)
+            {
+                return Fail(("depth target did not pin compare mode to NONE: " + label).c_str());
+            }
+            if (g_generateMipmapCalls != 0)
+            {
+                return Fail(("depth target generated a mip pyramid: " + label).c_str());
+            }
+        }
+
+        // Non-depth formats are rejected with a corrective pointer instead of
+        // silently producing a color texture.
+        const Pyramid::TextureFormat kNonDepthFormats[] = {
+            TextureFormat::None,
+            TextureFormat::RGBA8,
+            TextureFormat::RGBA16F,
+            TextureFormat::R8,
+        };
+        for (Pyramid::TextureFormat format : kNonDepthFormats)
+        {
+            const std::string label =
+                "non-depth format " + std::to_string(static_cast<int>(format));
+            if (Pyramid::ITexture2D::CreateDepthTarget(8, 8, format))
+            {
+                return Fail(("depth target accepted a non-depth format: " + label).c_str());
+            }
+        }
+
+        // Explicit failure on hostile extents: nothing is created, nothing is
+        // uploaded, and no texture object leaks.
+        const std::size_t deletedBefore = g_deletedTextures.size();
+        const int imageCallsBefore = g_compressedImageCalls;
+        if (Pyramid::ITexture2D::CreateDepthTarget(0, 8, TextureFormat::Depth24))
+        {
+            return Fail("zero-width depth target was created");
+        }
+        if (Pyramid::ITexture2D::CreateDepthTarget(8, 0, TextureFormat::Depth24))
+        {
+            return Fail("zero-height depth target was created");
+        }
+        const Pyramid::u32 oversized =
+            static_cast<Pyramid::u32>(std::numeric_limits<GLsizei>::max()) + 1U;
+        if (Pyramid::ITexture2D::CreateDepthTarget(oversized, 8, TextureFormat::Depth24))
+        {
+            return Fail("oversized depth target was created");
+        }
+        if (g_compressedImageCalls != imageCallsBefore)
+        {
+            return Fail("a rejected depth target reached an upload");
+        }
+        for (std::size_t index = deletedBefore; index < g_deletedTextures.size(); ++index)
+        {
+            if (g_deletedTextures[index] == 0)
+            {
+                return Fail("a rejected depth target left a zero texture object behind");
+            }
         }
     }
 

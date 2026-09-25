@@ -600,6 +600,21 @@ namespace Pyramid
         }
     }
 
+    bool OpenGLTexture2D::IsDepthStencilFormat(TextureFormat format)
+    {
+        switch (format)
+        {
+        case TextureFormat::Depth16:
+        case TextureFormat::Depth24:
+        case TextureFormat::Depth32F:
+        case TextureFormat::Depth24Stencil8:
+        case TextureFormat::Depth32FStencil8:
+            return true;
+        default:
+            return false;
+        }
+    }
+
     GLenum OpenGLTexture2D::ToGLMinFilter(TextureFilter filter, bool hasMipmaps)
     {
         if (!hasMipmaps && HasMipmapFilter(filter))
@@ -773,6 +788,15 @@ namespace Pyramid
             GL_TEXTURE_2D,
             GL_TEXTURE_WRAP_T,
             static_cast<GLint>(ToGLWrap(specification.WrapT)));
+
+        // Depth and packed depth-stencil textures sample as ordinary sampled
+        // textures: compare mode is pinned to NONE explicitly rather than left
+        // to the driver default. Shadow comparison is a sampler choice an
+        // owner opts into, never something creation turns on by surprise.
+        if (IsDepthStencilFormat(specification.Format))
+        {
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_NONE);
+        }
 
         if (specification.WrapS == TextureWrap::ClampToBorder ||
             specification.WrapT == TextureWrap::ClampToBorder)

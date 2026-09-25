@@ -33,6 +33,15 @@ namespace Pyramid
         u32 GetMipLevels() const override;
         bool LoadFromFile(const std::string& filepath, bool srgb = false, bool generateMips = true) override;
 
+        /**
+         * @brief Whether a format is a mapped depth or packed depth-stencil format.
+         *
+         * This is the exact set ITexture2D::CreateDepthTarget accepts and the
+         * set the sampler leaves in GL_TEXTURE_COMPARE_MODE NONE. Color,
+         * single-channel, and driver-gated compressed formats are not depth.
+         */
+        static bool IsDepthStencilFormat(TextureFormat format);
+
     private:
         static bool ResolveFormats(
             TextureFormat format,

@@ -37,11 +37,48 @@ namespace Pyramid
 
     std::shared_ptr<ITexture2D> ITexture2D::CreateDepthTarget(u32 width, u32 height, TextureFormat format)
     {
-        (void)width;
-        (void)height;
-        (void)format;
-        PYRAMID_LOG_ERROR("Depth texture creation is not implemented by OpenGLTexture2D; use OpenGLFramebuffer");
-        return nullptr;
+        // Only the mapped depth and packed depth-stencil formats are sampled
+        // depth textures. Anything else is rejected with a corrective pointer
+        // rather than silently created as a color texture.
+        if (!OpenGLTexture2D::IsDepthStencilFormat(format))
+        {
+            PYRAMID_LOG_ERROR(
+                "CreateDepthTarget requires a mapped depth or packed depth-stencil format, got format ",
+                static_cast<int>(format), " at ", width, "x", height,
+                "; use OpenGLFramebuffer attachments for render-target depth");
+            return nullptr;
+        }
+
+        TextureSpecification specification;
+        specification.Width = width;
+        specification.Height = height;
+        specification.Format = format;
+        // A depth pyramid is never generated: filtering between depth levels
+        // changes depth and shadow semantics, so only the base level exists.
+        specification.GenerateMips = false;
+        specification.MinFilter = TextureFilter::Linear;
+        specification.MagFilter = TextureFilter::Linear;
+        specification.WrapS = TextureWrap::ClampToEdge;
+        specification.WrapT = TextureWrap::ClampToEdge;
+
+        // Transactional creation: OpenGLTexture2D validates the extent before
+        // allocating, uploads the level, and deletes the texture object and
+        // clears the handle if any step fails, so a rejected request leaves
+        // nothing half-made.
+        std::shared_ptr<OpenGLTexture2D> texture =
+            std::make_shared<OpenGLTexture2D>(specification, nullptr);
+        if (!texture->IsLoaded() || texture->GetRendererID() == 0)
+        {
+            PYRAMID_LOG_ERROR(
+                "Failed to create ", width, "x", height, " depth target with format ",
+                static_cast<int>(format), ": ", texture->GetLastError());
+            return nullptr;
+        }
+
+        // Ownership: the caller owns this sampled depth texture. Sharing goes
+        // through ResourceRegistry::Textures(), which never mutates a cached
+        // TextureResource in place.
+        return texture;
     }
 
     std::shared_ptr<ITexture2D> ITexture2D::CreateFromColor(u32 width, u32 height, const Color& color)

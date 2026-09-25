@@ -9,6 +9,73 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 - Removed compute dispatch from the command model: deleted `RenderCommandType::Dispatch`, `CommandBuffer::Dispatch`, `IShader::CompileCompute`/`DispatchCompute` and the `OpenGLShader` implementations, plus the `ShaderProgram` compute path (`computeSource`, `ShaderProgramType::Compute`, `IsCompute`). Compute shaders require OpenGL 4.3-plus while the baseline is 3.3 core; re-add only with a higher-baseline backend decision.
 - Removed the occlusion-culling placeholder: deleted `SceneManager::SetOcclusionCullingEnabled`, `OcclusionCull`, and `m_occlusionCullingEnabled`. Visibility is frustum plus octree; occlusion deferred until a device-side query technique earns its own phase.
 
+### Added (FRZ-04)
+
+- Full 3.3-core texture format mapping in `OpenGLTexture2D::ResolveFormats` with a
+  lockstep `TextureResource::ResolveBaseFormat` mirror: `RGB16F`, `RGB32F`,
+  `RGBA16F`, `RGBA32F` (`GL_FLOAT` uploads), `Depth16`, `Depth24`, `Depth32F`,
+  `Depth24Stencil8`, `Depth32FStencil8` (matching depth/stencil types), `R8`,
+  `R16F`, `R32F` (`GL_RED` uploads; sampled as `(R, 0, 0, 1)`).
+- Driver-gated S3TC upload path: `BC1_RGB`, `BC1_RGBA`, `BC3_RGBA` upload
+  pre-compressed blocks via `glCompressedTexImage2D` only when the driver reports
+  `EXT_texture_compression_s3tc`; without it creation fails explicitly naming the
+  missing extension.
+- Type-aware `OpenGLTexture2D::SetSubData(data, xOffset, yOffset, width, height)`
+  with region-bounds, overflow, and 4x4 block-alignment validation.
+
+### Removed (one-way contract break, FRZ-04)
+
+- `Pyramid::TextureFormat::BC7_RGBA`: BPTC/BC7 compression requires OpenGL 4.2
+  (ARB_texture_compression_bptc) and is unmappable on the locked OpenGL 3.3 core
+  baseline. The enumerator is deleted; any reference is now a compile-time error.
+  Re-adding BC7 later is a contract migration gated on a higher-baseline backend
+  decision.
+
+### Added (FRZ-02)
+
+- Cascaded shadows now render into one `GL_TEXTURE_2D_ARRAY` depth texture
+  (2048x2048, one layer per cascade) through a single shared framebuffer using
+  `glFramebufferTextureLayer`. `DeferredLightingPass` binds the array exactly
+  once with target `GL_TEXTURE_2D_ARRAY` to match the shaders'
+  `sampler2DArray`, and uploads the previously missing `u_LightSpaceMatrices`
+  and `u_CascadeSplits` alongside `u_CascadeCount`. The array is recreated
+  transactionally on cascade-count or resolution change, counts above the
+  4-cascade shader bound fail explicitly, and an empty set skips the bind with
+  lighting continuing unshadowed. Shadow resolution stays fixed at 2048,
+  independent of window size. The forward pipeline renders unshadowed by
+  design: its `u_CascadeCount` default of 0 guards the array sampler.
+
+### Added (FRZ-05)
+
+- `Pyramid::IFramebuffer`, the previously undefined framebuffer contract
+  `IGraphicsDevice::BindFramebuffer` forward-declared, is now defined in
+  `Pyramid/Graphics/Framebuffer.hpp` with a backend-neutral surface (`Bind`,
+  `Unbind`, `IsComplete`, `GetWidth`, `GetHeight`, and an opaque `u32`
+  `GetNativeHandle`). The header includes no GLAD and no Win32 types.
+- `OpenGLDevice::BindFramebuffer` performs real binding instead of failing with
+  `"Framebuffer binding not yet implemented"`: a non-null target binds through
+  the interface and clears the last-error state, and `nullptr` restores the
+  default surface. `OpenGLFramebuffer` implements the interface.
+- Every render pass and system call site now binds through the neutral
+  `IGraphicsDevice::BindFramebuffer`: the `RenderSystem` per-pass restore,
+  `RenderTarget` bind and unbind, the `ShadowMapPass` array target and restores,
+  the `DeferredGeometryPass` G-buffer, the `DeferredLightingPass` restore, the
+  command buffer's null render-target command, and the UI surface pass.
+  `BindFramebufferHandle(u32)` remains only as the device-internal workhorse; no
+  pass holds a raw backend handle across the boundary any more. The after-pass
+  framebuffer-then-viewport restore order and its explanatory comment are
+  unchanged.
+- `ITexture2D::CreateDepthTarget(width, height, format)` now creates a real
+  sampled depth texture through `OpenGLTexture2D` for `Depth16`, `Depth24`,
+  `Depth32F`, `Depth24Stencil8`, and `Depth32FStencil8`, replacing the
+  explicit-failure stub. Creation is transactional: the extent is validated
+  before allocation and any failure deletes the texture object and returns
+  `nullptr` with the dimensions in the diagnostic. Depth targets are never
+  mipmapped and pin `GL_TEXTURE_COMPARE_MODE` to `GL_NONE` explicitly.
+  Non-depth formats are rejected with a pointer at `OpenGLFramebuffer`
+  attachments. Sampled depth textures and framebuffer depth attachments are
+  distinct facilities and now coexist; see `docs/Architecture.md`.
+
 ### Ecosystem boundary documentation
 
 - Registered Pyramid Engine as an independent Eco runtime consumer and defined
