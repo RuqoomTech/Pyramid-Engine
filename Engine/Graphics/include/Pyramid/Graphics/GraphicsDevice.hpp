@@ -1,5 +1,6 @@
 #pragma once
 #include <Pyramid/Core/Prerequisites.hpp>
+#include <Pyramid/Graphics/Framebuffer.hpp>
 #include <Pyramid/Graphics/PrimitiveTopology.hpp>
 #include <memory>
 #include <string> // Added for std::string
@@ -265,13 +266,22 @@ namespace Pyramid
         virtual void SetPolygonMode(u32 mode) = 0;
 
         /**
-         * @brief Bind a framebuffer for rendering
+         * @brief Bind a framebuffer for rendering through the neutral interface
          * @param framebuffer Framebuffer to bind (nullptr for default)
+         *
+         * This is the only framebuffer bind render passes and the renderer
+         * may use. A non-null target is bound through the interface itself
+         * (which also establishes its viewport); nullptr restores the default
+         * surface. BindFramebufferHandle is the device-internal workhorse for
+         * this method and for backend code, not a call-site API.
          */
-        virtual void BindFramebuffer(class IFramebuffer *framebuffer) = 0;
+        virtual void BindFramebuffer(IFramebuffer *framebuffer) = 0;
         /**
          * @brief Bind a native framebuffer handle
          * @param framebufferId OpenGL framebuffer ID (0 for default)
+         *
+         * Device-internal workhorse behind BindFramebuffer. Backend code may
+         * use it directly; render passes and the renderer must not.
          */
         virtual void BindFramebufferHandle(u32 framebufferId) = 0;
 

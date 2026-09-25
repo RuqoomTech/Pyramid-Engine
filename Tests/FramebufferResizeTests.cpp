@@ -1,9 +1,12 @@
+#include <Pyramid/Graphics/OpenGL/OpenGLDevice.hpp>
 #include <Pyramid/Graphics/OpenGL/OpenGLFramebuffer.hpp>
+#include <Pyramid/Graphics/OpenGL/OpenGLStateManager.hpp>
 #include <Pyramid/Graphics/Renderer/RenderSystem.hpp>
 
 #include <algorithm>
 #include <cstdlib>
 #include <iostream>
+#include <string>
 #include <vector>
 
 namespace
@@ -13,6 +16,9 @@ namespace
     GLuint g_nextTexture = 100;
     std::vector<GLuint> g_deletedFramebuffers;
     std::vector<GLuint> g_deletedTextures;
+    GLenum g_lastBindTarget = 0;
+    GLuint g_lastBoundFramebuffer = 0;
+    int g_bindFramebufferCalls = 0;
 
     int Fail(const char* message)
     {
@@ -40,6 +46,12 @@ namespace
             break;
         case GL_ACTIVE_TEXTURE:
             values[0] = GL_TEXTURE0;
+            break;
+        case GL_DRAW_FRAMEBUFFER_BINDING:
+        case GL_READ_FRAMEBUFFER_BINDING:
+            // Report what was last bound so the state-manager cache stays
+            // coherent with the fake driver's own binding history.
+            values[0] = static_cast<GLint>(g_lastBoundFramebuffer);
             break;
         case GL_VIEWPORT:
         case GL_SCISSOR_BOX:
@@ -104,8 +116,11 @@ namespace
             g_deletedFramebuffers.end(), framebuffers, framebuffers + count);
     }
 
-    void APIENTRY FakeBindFramebuffer(GLenum, GLuint)
+    void APIENTRY FakeBindFramebuffer(GLenum target, GLuint framebuffer)
     {
+        g_lastBindTarget = target;
+        g_lastBoundFramebuffer = framebuffer;
+        ++g_bindFramebufferCalls;
     }
 
     GLenum APIENTRY FakeCheckFramebufferStatus(GLenum)
@@ -340,6 +355,80 @@ int main()
         initializedFramebuffer.GetDepthAttachmentTexture() != stableDepth)
     {
         return Fail("failed framebuffer resize did not preserve the previous valid state");
+    }
+
+    // Backend-neutral binding (FRZ-05). A framebuffer object must bind for
+    // real through IGraphicsDevice::BindFramebuffer, the null branch must
+    // restore the default surface, and a successful bind must not leave a
+    // stale device error behind.
+    IFramebuffer* neutralTarget = &initializedFramebuffer;
+    if (neutralTarget->GetWidth() != 800 || neutralTarget->GetHeight() != 600)
+    {
+        return Fail("neutral framebuffer size did not match the backend specification");
+    }
+    if (neutralTarget->GetNativeHandle() != static_cast<u32>(stableFramebuffer))
+    {
+        return Fail("neutral framebuffer handle did not expose the backend identity");
+    }
+    if (!neutralTarget->IsComplete())
+    {
+        return Fail("neutral framebuffer reported incomplete against the fake backend");
+    }
+
+    OpenGLDevice device(nullptr);
+
+    // The state manager caches framebuffer bindings, so start untracked to
+    // guarantee the bind reaches the driver.
+    OpenGLStateManager::GetInstance().InvalidateState();
+    g_lastBindTarget = 0;
+    g_lastBoundFramebuffer = 0xFFFFFFFFu;
+    g_bindFramebufferCalls = 0;
+
+    device.BindFramebuffer(neutralTarget);
+    if (g_lastBoundFramebuffer != stableFramebuffer)
+    {
+        return Fail("neutral bind of a real framebuffer object did not bind that framebuffer");
+    }
+    if (g_lastBindTarget != GL_FRAMEBUFFER)
+    {
+        return Fail("neutral bind did not target GL_FRAMEBUFFER");
+    }
+    if (g_bindFramebufferCalls != 1)
+    {
+        return Fail("neutral bind of a real object issued an unexpected number of framebuffer binds");
+    }
+    if (OpenGLStateManager::GetInstance().GetBoundFramebuffer(GL_DRAW_FRAMEBUFFER) !=
+        stableFramebuffer)
+    {
+        return Fail("neutral bind of a real object did not become the draw framebuffer");
+    }
+
+    // Error-state symmetry: a failure recorded by an earlier call must be
+    // cleared by a successful neutral bind.
+    device.BindTexture(nullptr, 9999);
+    if (device.GetLastError().empty())
+    {
+        return Fail("out-of-range texture slot did not record a device error");
+    }
+    device.BindFramebuffer(neutralTarget);
+    if (!device.GetLastError().empty())
+    {
+        const std::string stale = "successful neutral bind left a stale device error: " +
+                                  device.GetLastError();
+        return Fail(stale.c_str());
+    }
+
+    // Null binds the default surface.
+    OpenGLStateManager::GetInstance().InvalidateState();
+    g_lastBoundFramebuffer = 0xFFFFFFFFu;
+    device.BindFramebuffer(nullptr);
+    if (g_lastBoundFramebuffer != 0)
+    {
+        return Fail("null neutral bind did not restore the default framebuffer");
+    }
+    if (OpenGLStateManager::GetInstance().GetBoundFramebuffer(GL_DRAW_FRAMEBUFFER) != 0)
+    {
+        return Fail("null neutral bind did not make the default framebuffer current");
     }
 
     std::cout << "Framebuffer resize tests passed\n";

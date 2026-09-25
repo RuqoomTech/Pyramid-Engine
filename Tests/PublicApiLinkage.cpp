@@ -11,6 +11,7 @@
 #include <Pyramid/Graphics/Scene.hpp>
 #include <Pyramid/Graphics/Camera.hpp>
 #include <Pyramid/Graphics/CameraController.hpp>
+#include <Pyramid/Graphics/Framebuffer.hpp>
 #include <Pyramid/Graphics/OpenGL/OpenGLFramebuffer.hpp>
 #include <Pyramid/Graphics/Geometry/MeshBounds.hpp>
 #include <Pyramid/Graphics/Geometry/Mesh.hpp>
@@ -198,6 +199,19 @@ namespace
     using Pyramid::TextureFormat;
     using Pyramid::TextureSpecification;
     using Pyramid::SceneManagement::SceneManager;
+    using Pyramid::IFramebuffer;
+
+    // Backend-neutral framebuffer contract (FRZ-05). These pins keep the
+    // public surface callable from outside the engine translation units that
+    // define it; the neutral bind is the only framebuffer bind render passes
+    // and the renderer may use.
+    volatile decltype(&IFramebuffer::Bind) g_bindFramebufferObject = &IFramebuffer::Bind;
+    volatile decltype(&IFramebuffer::Unbind) g_unbindFramebufferObject = &IFramebuffer::Unbind;
+    volatile decltype(&IFramebuffer::IsComplete) g_isFramebufferComplete = &IFramebuffer::IsComplete;
+    volatile decltype(&IFramebuffer::GetWidth) g_getFramebufferWidth = &IFramebuffer::GetWidth;
+    volatile decltype(&IFramebuffer::GetHeight) g_getFramebufferHeight = &IFramebuffer::GetHeight;
+    volatile decltype(&IFramebuffer::GetNativeHandle) g_getFramebufferNativeHandle =
+        &IFramebuffer::GetNativeHandle;
 
     using CreateTextureFromSpec = std::shared_ptr<ITexture2D> (*)(const TextureSpecification&, const void*);
     using CreateTextureFromFile = std::shared_ptr<ITexture2D> (*)(const std::string&, bool, bool);

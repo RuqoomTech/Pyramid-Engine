@@ -369,8 +369,12 @@ namespace Pyramid
     {
         if (framebuffer)
         {
-            // TODO: Implement when IFramebuffer interface is available
-            m_lastError = "Framebuffer binding not yet implemented";
+            // Real binding: the target binds itself through
+            // OpenGLStateManager and also establishes its own viewport.
+            framebuffer->Bind();
+            // A successful bind must not leave a stale failure visible to
+            // the next caller that inspects GetLastError().
+            m_lastError.clear();
         }
         else
         {

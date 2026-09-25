@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Pyramid/Core/Prerequisites.hpp>
+#include <Pyramid/Graphics/Framebuffer.hpp>
 #include <glad/glad.h>
 #include <string>
 #include <vector>
@@ -55,12 +56,15 @@ namespace Pyramid
 
     /**
      * @brief OpenGL framebuffer object with resize-safe attachment recreation.
+     *
+     * Implements the neutral IFramebuffer contract so render passes bind it
+     * through IGraphicsDevice::BindFramebuffer without ever holding a GLuint.
      */
-    class OpenGLFramebuffer
+    class OpenGLFramebuffer : public IFramebuffer
     {
     public:
         explicit OpenGLFramebuffer(const FramebufferSpec& spec);
-        ~OpenGLFramebuffer();
+        ~OpenGLFramebuffer() override;
 
         OpenGLFramebuffer(const OpenGLFramebuffer&) = delete;
         OpenGLFramebuffer& operator=(const OpenGLFramebuffer&) = delete;
@@ -68,8 +72,8 @@ namespace Pyramid
         OpenGLFramebuffer& operator=(OpenGLFramebuffer&&) = delete;
 
         bool Initialize();
-        void Bind() const;
-        void Unbind() const;
+        void Bind() const override;
+        void Unbind() const override;
         void Clear(f32 r = 0.0f, f32 g = 0.0f, f32 b = 0.0f, f32 a = 1.0f) const;
         void ClearAttachment(u32 attachmentIndex, const void* value) const;
 
@@ -110,15 +114,16 @@ namespace Pyramid
                          u32 srcX0, u32 srcY0, u32 srcX1, u32 srcY1,
                          u32 dstX0, u32 dstY0, u32 dstX1, u32 dstY1) const;
 
-        bool IsComplete() const;
+        bool IsComplete() const override;
         bool IsInitialized() const { return m_initialized; }
         bool IsMultisampled() const { return m_spec.samples > 1; }
         u32 GetColorAttachmentCount() const;
 
         const FramebufferSpec& GetSpecification() const { return m_spec; }
-        u32 GetWidth() const { return m_spec.width; }
-        u32 GetHeight() const { return m_spec.height; }
+        u32 GetWidth() const override { return m_spec.width; }
+        u32 GetHeight() const override { return m_spec.height; }
         GLuint GetFramebufferID() const { return m_framebufferID; }
+        u32 GetNativeHandle() const override { return static_cast<u32>(m_framebufferID); }
 
         void SaveColorAttachmentToFile(u32 attachmentIndex, const std::string& filepath) const;
         std::vector<u8> ReadColorAttachmentPixels(u32 attachmentIndex) const;
