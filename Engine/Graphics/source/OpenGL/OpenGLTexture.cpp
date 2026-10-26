@@ -1,6 +1,7 @@
 #include "Pyramid/Graphics/OpenGL/OpenGLTexture.hpp"
 #include <Pyramid/Graphics/OpenGL/OpenGLStateManager.hpp>
 #include "../Texture/TextureFormatInfo.hpp"
+#include "../Texture/TextureSamplerValidation.hpp"
 
 #include "OpenGLDiagnostics.hpp"
 
@@ -64,6 +65,11 @@ namespace Pyramid
             return;
         }
 
+        if (!Detail::IsTextureSamplerStateValid(specification))
+        {
+            SetError("Texture sampler requires known filter/wrap values, finite border color, and anisotropy >= 1");
+            return;
+        }
         const auto formatInfo = Detail::GetTextureFormatInfo(specification.Format);
         if (formatInfo.bytesPerPixel != 0 && specification.SRGB && !formatInfo.srgbCapable)
         {
@@ -85,21 +91,15 @@ namespace Pyramid
             return;
         }
 
-        TextureSpecification normalized = specification;
-        if (!normalized.GenerateMips && HasMipmapFilter(normalized.MinFilter))
-        {
-            normalized.MinFilter = TextureFilter::Linear;
-        }
-
         GLuint texture = 0;
         std::string error;
-        if (!CreateTextureObject(normalized, m_InternalFormat, m_DataFormat, m_DataType, data, texture, error))
+        if (!CreateTextureObject(specification, m_InternalFormat, m_DataFormat, m_DataType, data, texture, error))
         {
             SetError(error);
             return;
         }
 
-        m_Specification = normalized;
+        m_Specification = specification;
         m_RendererID = texture;
         m_IsLoaded = true;
     }
@@ -271,29 +271,97 @@ namespace Pyramid
         m_LastError.clear();
     }
 
+    void OpenGLTexture2D::SetFilter(TextureFilter minFilter, TextureFilter magFilter)
+    {
+        auto specification = m_Specification;
+        specification.MinFilter = minFilter;
+        specification.MagFilter = magFilter;
+        UpdateSampler(specification, "OpenGLTexture2D::SetFilter");
+    }
+
+    void OpenGLTexture2D::SetWrap(TextureWrap wrapS, TextureWrap wrapT)
+    {
+        auto specification = m_Specification;
+        specification.WrapS = wrapS;
+        specification.WrapT = wrapT;
+        UpdateSampler(specification, "OpenGLTexture2D::SetWrap");
+    }
+
+    void OpenGLTexture2D::SetBorderColor(f32 r, f32 g, f32 b, f32 a)
+    {
+        auto specification = m_Specification;
+        specification.BorderColor[0] = r;
+        specification.BorderColor[1] = g;
+        specification.BorderColor[2] = b;
+        specification.BorderColor[3] = a;
+        UpdateSampler(specification, "OpenGLTexture2D::SetBorderColor");
+    }
+
+    void OpenGLTexture2D::SetMaxAnisotropy(f32 anisotropy)
+    {
+        auto specification = m_Specification;
+        specification.MaxAnisotropy = anisotropy;
+        UpdateSampler(specification, "OpenGLTexture2D::SetMaxAnisotropy");
+    }
+
     void OpenGLTexture2D::GenerateMipmaps()
+    {
+        auto specification = m_Specification;
+        specification.GenerateMips = true;
+        UpdateSampler(specification, "OpenGLTexture2D::GenerateMipmaps", true);
+    }
+
+    bool OpenGLTexture2D::UpdateSampler(
+        const TextureSpecification& specification, const char* operation, bool generateMipmaps)
     {
         if (!m_IsLoaded || !m_RendererID)
         {
-            SetError("Cannot generate mipmaps for an unloaded texture");
-            return;
+            SetError(std::string(operation) + ": cannot change an unloaded texture");
+            return false;
+        }
+        if (!Detail::IsTextureSamplerStateValid(specification))
+        {
+            SetError(std::string(operation) +
+                     ": requires known filter/wrap values, finite border color, and anisotropy >= 1");
+            return false;
         }
 
         OpenGLDiagnostics::ClearErrors();
         auto& state = OpenGLStateManager::GetInstance();
         state.BindTexture(GL_TEXTURE_2D, m_RendererID);
-        glGenerateMipmap(GL_TEXTURE_2D);
-        state.BindTexture(GL_TEXTURE_2D, 0);
-
-        std::string error;
-        if (!OpenGLDiagnostics::CheckError("OpenGLTexture2D::GenerateMipmaps", &error, false))
+        if (generateMipmaps)
         {
-            SetError(error);
-            return;
+            glGenerateMipmap(GL_TEXTURE_2D);
         }
-
-        m_Specification.GenerateMips = true;
+        std::string error;
+        const bool applied = ApplyParameters(specification, error);
+        state.BindTexture(GL_TEXTURE_2D, 0);
+        std::string glError;
+        const bool nativeSuccess = OpenGLDiagnostics::CheckError(operation, &glError, false);
+        if (!applied || !nativeSuccess)
+        {
+            if (!error.empty() && !glError.empty())
+            {
+                error += "; ";
+            }
+            error += glError;
+            state.BindTexture(GL_TEXTURE_2D, m_RendererID);
+            std::string restoreError;
+            const bool restored = ApplyParameters(m_Specification, restoreError);
+            state.BindTexture(GL_TEXTURE_2D, 0);
+            std::string restoreGlError;
+            const bool restoreSuccess = OpenGLDiagnostics::CheckError(
+                "OpenGLTexture2D sampler restoration", &restoreGlError, false);
+            if (!restored || !restoreSuccess)
+            {
+                error += "; sampler restoration failed: " + restoreError + restoreGlError;
+            }
+            SetError(error);
+            return false;
+        }
+        m_Specification = specification;
         m_LastError.clear();
+        return true;
     }
 
     u32 OpenGLTexture2D::GetMipLevels() const
@@ -523,7 +591,7 @@ namespace Pyramid
             dataType,
             data);
 
-        ApplyParameters(specification);
+        const bool parametersApplied = ApplyParameters(specification, error);
 
         if (specification.GenerateMips)
         {
@@ -533,8 +601,16 @@ namespace Pyramid
         glPixelStorei(GL_UNPACK_ALIGNMENT, previousAlignment);
         state.BindTexture(GL_TEXTURE_2D, 0);
 
-        if (!OpenGLDiagnostics::CheckError("OpenGLTexture2D::CreateTextureObject", &error, false))
+        std::string glError;
+        const bool nativeSuccess = OpenGLDiagnostics::CheckError(
+            "OpenGLTexture2D::CreateTextureObject", &glError, false);
+        if (!parametersApplied || !nativeSuccess)
         {
+            if (!error.empty() && !glError.empty())
+            {
+                error += "; ";
+            }
+            error += glError;
             glDeleteTextures(1, &texture);
             state.ForgetTexture(texture);
             texture = 0;
@@ -544,8 +620,28 @@ namespace Pyramid
         return true;
     }
 
-    void OpenGLTexture2D::ApplyParameters(const TextureSpecification& specification) const
+    bool OpenGLTexture2D::ApplyParameters(const TextureSpecification& specification, std::string& error) const
     {
+        const bool anisotropySupported = GLVersion.major > 4 ||
+            (GLVersion.major == 4 && GLVersion.minor >= 6) ||
+            GLAD_GL_ARB_texture_filter_anisotropic || GLAD_GL_EXT_texture_filter_anisotropic;
+        f32 effectiveAnisotropy = 1.0f;
+        if (anisotropySupported)
+        {
+            GLfloat maximum = 0.0f;
+            glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &maximum);
+            if (!std::isfinite(maximum) || maximum < 1.0f)
+            {
+                error = "Driver reported an invalid maximum texture anisotropy";
+                return false;
+            }
+            effectiveAnisotropy = std::min(specification.MaxAnisotropy, maximum);
+        }
+        else if (specification.MaxAnisotropy > 1.0f)
+        {
+            PYRAMID_LOG_WARN("Texture anisotropy is unavailable; using 1x for requested ",
+                             specification.MaxAnisotropy);
+        }
         glTexParameteri(
             GL_TEXTURE_2D,
             GL_TEXTURE_MIN_FILTER,
@@ -563,11 +659,12 @@ namespace Pyramid
             GL_TEXTURE_WRAP_T,
             static_cast<GLint>(ToGLWrap(specification.WrapT)));
 
-        if (specification.WrapS == TextureWrap::ClampToBorder ||
-            specification.WrapT == TextureWrap::ClampToBorder)
+        glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, specification.BorderColor);
+        if (anisotropySupported)
         {
-            glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, specification.BorderColor);
+            glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, effectiveAnisotropy);
         }
+        return true;
     }
 
     void OpenGLTexture2D::SetError(const std::string& error)

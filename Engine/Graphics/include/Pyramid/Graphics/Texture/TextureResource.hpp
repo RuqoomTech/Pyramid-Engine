@@ -134,7 +134,8 @@ namespace Pyramid
         const std::string& GetName() const { return m_name; }
         u64 GetBaseLevelBytes() const { return m_baseLevelBytes; }
         u64 GetEstimatedResidentBytes() const { return m_estimatedResidentBytes; }
-        const std::shared_ptr<ITexture2D>& GetTexture() const { return m_texture; }
+        /** Read-only native access; bind the wrapper through the graphics device. */
+        const std::shared_ptr<const ITexture2D>& GetTexture() const { return m_texture; }
 
     private:
         friend class TextureCache;
@@ -179,7 +180,7 @@ namespace Pyramid
 
         void RejectMutation(const char* operation);
 
-        std::shared_ptr<ITexture2D> m_texture;
+        std::shared_ptr<const ITexture2D> m_texture;
         TextureSpecification m_specification;
         TextureAssetId m_assetId;
         TextureAssetId m_contentId;

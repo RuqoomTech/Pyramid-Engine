@@ -351,7 +351,7 @@ void main()
     {
         if (id == UI::DebugFontTextureId)
         {
-            return m_fontTexture ? m_fontTexture->GetTexture() : nullptr;
+            return m_fontTexture;
         }
         const auto found = m_textures.find(id);
         return found == m_textures.end() ? nullptr : found->second.lock();

@@ -71,7 +71,7 @@ struct TextureSpecification
     bool GenerateMips = true; // Allocate the full chain, also for null initial data.
     bool SRGB = false; // Direct textures: 8-bit RGB/RGBA family only. Caches use their colorSpace field.
     f32 BorderColor[4] = {0.0f, 0.0f, 0.0f, 1.0f}; // For ClampToBorder
-    f32 MaxAnisotropy = 1.0f; // Anisotropic filtering level
+    f32 MaxAnisotropy = 1.0f; // Finite request >= 1; clamped to native support, or 1x if unavailable.
     bool FlipY = false; // For texture coordinate system differences
 };
 
@@ -97,7 +97,7 @@ public:
     virtual void SetData(const void*, u32) {}
     virtual void SetSubData(const void*, u32, u32, u32, u32) {}
     
-    // Texture parameters (optional - can have default implementations)
+    // Mutable OpenGL textures validate and apply these settings; cached resources reject them.
     virtual void SetFilter(TextureFilter, TextureFilter) {}
     virtual void SetWrap(TextureWrap, TextureWrap) {}
     virtual void SetBorderColor(f32, f32, f32, f32) {}

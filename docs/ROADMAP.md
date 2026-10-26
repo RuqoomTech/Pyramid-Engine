@@ -67,7 +67,11 @@ The current `0.6.0-pre-alpha` baseline includes:
 - Revisit BC compression when representative assets justify it, with capability checks and a defined block-upload contract before advertising support.
 - [x] Apply sRGB intent, border color, mip filters, and safe RGB unpack alignment.
 - [x] Extract `Pyramid::Image` and replace libjpeg-turbo with an owned bounded baseline/progressive Huffman JPEG decoder supporting grayscale, common chroma subsampling, and restart markers.
-- Apply anisotropy consistently across direct and cached texture paths; cached file resources now apply `flipY` before upload.
+- Sampler correctness execution plan:
+  1. [x] Commit verified texture binding/format work (`d52fe2e`); GCC Debug/Release 57/57 and installed consumer already passed.
+  2. [x] Implement mutable filter, wrap, border-color, and anisotropy setters in the existing OpenGL adapter. Validate before native calls; retain legacy known aliases; preserve binding-cache coherence and attempt sampler restoration after driver errors.
+  3. [x] Apply requested anisotropy consistently during direct/cache creation with current-context core/ARB/EXT support checks, supported maximum clamping, and explicit 1x fallback. Keep cache identities based on requests and expose cached native textures read-only.
+  4. [x] Add fake-GL and cache regressions, public-symbol linkage checks, then run GCC Debug/Release and installed-package validation. Commit after checks pass. Visual/native-driver acceptance stays deferred.
 - Expand parser fuzzing, very-large allocation-limit fixtures, and PNG interlace coverage; JPEG now has malformed/truncated, progressive-color, grayscale, sampling, odd-size, and restart-marker corpus tests.
 - Add parser fuzzing and sanitizer coverage.
 

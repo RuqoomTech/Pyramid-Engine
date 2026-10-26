@@ -28,6 +28,10 @@ namespace Pyramid
         std::string GetLastError() const override { return m_LastError; }
 
         void SetData(const void* data, u32 size) override;
+        void SetFilter(TextureFilter minFilter, TextureFilter magFilter) override;
+        void SetWrap(TextureWrap wrapS, TextureWrap wrapT) override;
+        void SetBorderColor(f32 r, f32 g, f32 b, f32 a) override;
+        void SetMaxAnisotropy(f32 anisotropy) override;
         void GenerateMipmaps() override;
         u32 GetMipLevels() const override;
         bool LoadFromFile(const std::string& filepath, bool srgb = false, bool generateMips = true) override;
@@ -53,7 +57,9 @@ namespace Pyramid
             const void* data,
             GLuint& texture,
             std::string& error) const;
-        void ApplyParameters(const TextureSpecification& specification) const;
+        bool ApplyParameters(const TextureSpecification& specification, std::string& error) const;
+        bool UpdateSampler(const TextureSpecification& specification, const char* operation,
+                           bool generateMipmaps = false);
         void SetError(const std::string& error);
 
         TextureSpecification m_Specification;

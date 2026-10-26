@@ -26,6 +26,7 @@ target_sources(PyramidEngine
         source/OpenGL/Shader/OpenGLShader.cpp
         source/Texture.cpp
         source/Texture/TextureFormatInfo.hpp
+        source/Texture/TextureSamplerValidation.hpp
         source/Texture/TextureResource.cpp
         source/Texture/TextureCache.cpp
         source/OpenGL/OpenGLTexture.cpp

@@ -4,6 +4,13 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 
 ## [Unreleased]
 
+### Texture sampler correctness
+
+- Implemented mutable OpenGL texture filter, wrap, border-color, and anisotropy setters with shared CPU/native validation, tracked binding updates, native error diagnostics, and attempted sampler restoration after failure.
+- Applied capability-aware anisotropy through direct and cached creation using current core/ARB/EXT support, maximum clamping, and an explicit unsupported 1x fallback without changing requested cache identities.
+- Preserved direct mip-filter requests for activation after mipmap generation, retained known legacy aliases and cache normalization, and rejected unknown enums and non-finite sampler values.
+- Made cached native texture access read-only, routed debug-font binding through its immutable wrapper, and added sampler, immutability, capability, error-recovery, and public-linkage regressions. Visual/native-driver acceptance remains deferred.
+
 ### Uncompressed texture format coverage
 
 - Implemented red-channel, half/full-float RGB/RGBA, depth, and packed depth-stencil uploads and whole-level updates through the existing OpenGL texture adapter, with explicit canonical CPU layouts and shared cache byte-size validation, and a 512 MiB limit per cached source texture.

@@ -9,7 +9,11 @@
 #include <exception>
 #include <fstream>
 #include <iostream>
+#include <iterator>
+#include <limits>
 #include <string>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace
@@ -23,8 +27,9 @@ namespace
     class TestTexture final : public Pyramid::ITexture2D
     {
     public:
-        TestTexture(Pyramid::TextureSpecification specification, Pyramid::u32 rendererId)
-            : m_specification(specification), m_rendererId(rendererId)
+        TestTexture(Pyramid::TextureSpecification specification, Pyramid::u32 rendererId,
+            std::vector<Pyramid::u8> pixels = {})
+            : m_specification(specification), m_rendererId(rendererId), m_pixels(std::move(pixels))
         {
         }
 
@@ -41,11 +46,86 @@ namespace
             return m_specification.GenerateMips ? 2U : 1U;
         }
 
+        void SetData(const void* data, Pyramid::u32 size) override
+        {
+            ++mutationCalls;
+            const auto* bytes = static_cast<const Pyramid::u8*>(data);
+            m_pixels.assign(bytes, bytes + size);
+        }
+        void SetSubData(const void* data, Pyramid::u32, Pyramid::u32,
+            Pyramid::u32, Pyramid::u32) override
+        {
+            ++mutationCalls;
+            if (data && !m_pixels.empty())
+            {
+                m_pixels[0] = *static_cast<const Pyramid::u8*>(data);
+            }
+        }
+        void SetFilter(Pyramid::TextureFilter minFilter, Pyramid::TextureFilter magFilter) override
+        {
+            ++mutationCalls;
+            m_specification.MinFilter = minFilter;
+            m_specification.MagFilter = magFilter;
+        }
+        void SetWrap(Pyramid::TextureWrap wrapS, Pyramid::TextureWrap wrapT) override
+        {
+            ++mutationCalls;
+            m_specification.WrapS = wrapS;
+            m_specification.WrapT = wrapT;
+        }
+        void SetBorderColor(Pyramid::f32 red, Pyramid::f32 green,
+            Pyramid::f32 blue, Pyramid::f32 alpha) override
+        {
+            ++mutationCalls;
+            m_specification.BorderColor[0] = red;
+            m_specification.BorderColor[1] = green;
+            m_specification.BorderColor[2] = blue;
+            m_specification.BorderColor[3] = alpha;
+        }
+        void SetMaxAnisotropy(Pyramid::f32 value) override
+        {
+            ++mutationCalls;
+            m_specification.MaxAnisotropy = value;
+        }
+        void GenerateMipmaps() override
+        {
+            ++mutationCalls;
+            m_specification.GenerateMips = true;
+        }
+        bool LoadFromFile(const std::string& path, bool, bool) override
+        {
+            ++mutationCalls;
+            m_path = path;
+            return true;
+        }
+        const Pyramid::TextureSpecification& GetSpecification() const { return m_specification; }
+        const std::vector<Pyramid::u8>& GetPixels() const { return m_pixels; }
+        Pyramid::u32 mutationCalls = 0;
+
     private:
         Pyramid::TextureSpecification m_specification;
         Pyramid::u32 m_rendererId = 0;
+        std::vector<Pyramid::u8> m_pixels;
         std::string m_path;
     };
+
+    static_assert(std::is_same<
+        decltype(std::declval<const Pyramid::TextureResource&>().GetTexture()),
+        const std::shared_ptr<const Pyramid::ITexture2D>&>::value,
+        "Cached textures must expose a const pointee so native setters cannot bypass immutability");
+
+    bool SameSpecification(const Pyramid::TextureSpecification& left,
+        const Pyramid::TextureSpecification& right)
+    {
+        return left.Width == right.Width && left.Height == right.Height &&
+            left.Format == right.Format && left.MinFilter == right.MinFilter &&
+            left.MagFilter == right.MagFilter && left.WrapS == right.WrapS &&
+            left.WrapT == right.WrapT && left.GenerateMips == right.GenerateMips &&
+            left.SRGB == right.SRGB && left.FlipY == right.FlipY &&
+            left.MaxAnisotropy == right.MaxAnisotropy &&
+            std::equal(std::begin(left.BorderColor), std::end(left.BorderColor),
+                std::begin(right.BorderColor));
+    }
 
 #pragma pack(push, 1)
     struct TgaHeader
@@ -237,6 +317,178 @@ namespace
         return EXIT_SUCCESS;
     }
 
+    int TestSamplerImmutabilityAndIdentity()
+    {
+        using namespace Pyramid;
+        const std::vector<u8> pixels{255, 0, 0, 255, 0, 255, 0, 255};
+        Tests::TestGraphicsDevice device;
+        std::shared_ptr<TestTexture> native;
+        device.textureFactory = [&](const TextureSpecification& specification, const void* data)
+        {
+            const auto* bytes = static_cast<const u8*>(data);
+            native = std::make_shared<TestTexture>(specification, device.textureCreations,
+                std::vector<u8>(bytes, bytes + pixels.size()));
+            return native;
+        };
+        TextureCache cache(device);
+        TextureResourceSpecification request;
+        request.texture.Width = 2;
+        request.texture.Height = 1;
+        request.texture.GenerateMips = false;
+        request.texture.MinFilter = TextureFilter::Linear;
+        request.texture.WrapS = TextureWrap::ClampToBorder;
+        request.texture.BorderColor[0] = 0.25f;
+        request.texture.MaxAnisotropy = 4.0f;
+        request.pixelData = pixels.data();
+        request.pixelDataSize = pixels.size();
+        auto resource = cache.GetOrCreate(request);
+        if (!resource || !native)
+        {
+            return Fail("could not create immutable sampler fixture");
+        }
+        const TextureSpecification initialSpecification = resource->GetSpecification();
+        const TextureAssetId initialContent = resource->GetContentId();
+        const TextureAssetId initialAsset = resource->GetAssetId();
+        const u32 initialRendererId = resource->GetRendererID();
+        const auto unchanged = [&](const char* operation)
+        {
+            const bool matches = resource->GetLastError().find(operation) != std::string::npos &&
+                resource->IsLoaded() && resource->GetContentId() == initialContent &&
+                resource->GetAssetId() == initialAsset && resource->GetRendererID() == initialRendererId &&
+                resource->GetWidth() == 2 && resource->GetHeight() == 1 &&
+                resource->GetMipLevels() == 1 && resource->GetPath().empty() &&
+                SameSpecification(resource->GetSpecification(), initialSpecification) &&
+                SameSpecification(native->GetSpecification(), initialSpecification) &&
+                native->GetPixels() == pixels && native->GetPath().empty() &&
+                native->mutationCalls == 0 && cache.GetOrCreate(request) == resource &&
+                device.textureCreations == 1;
+            if (!matches)
+            {
+                std::cerr << "Immutable operation: " << operation << '\n';
+            }
+            return matches;
+        };
+        ITexture2D& inherited = *resource;
+        const std::array<u8, 8> replacement{1, 2, 3, 4, 5, 6, 7, 8};
+        inherited.SetData(replacement.data(), static_cast<u32>(replacement.size()));
+        if (!unchanged("SetData"))
+        {
+            return Fail("cached pixel replacement changed native state or identity");
+        }
+        inherited.SetSubData(replacement.data(), 0, 0, 1, 1);
+        if (!unchanged("SetSubData"))
+        {
+            return Fail("cached subimage mutation reached the native texture");
+        }
+        inherited.SetFilter(TextureFilter::Nearest, TextureFilter::Nearest);
+        if (!unchanged("SetFilter"))
+        {
+            return Fail("cached filter mutation changed native state or identity");
+        }
+        inherited.SetWrap(TextureWrap::ClampToEdge, TextureWrap::MirroredRepeat);
+        if (!unchanged("SetWrap"))
+        {
+            return Fail("cached wrap mutation changed native state or identity");
+        }
+        inherited.SetBorderColor(0.8f, 0.7f, 0.6f, 0.5f);
+        if (!unchanged("SetBorderColor"))
+        {
+            return Fail("cached border mutation changed native state or identity");
+        }
+        inherited.SetMaxAnisotropy(16.0f);
+        if (!unchanged("SetMaxAnisotropy"))
+        {
+            return Fail("cached anisotropy mutation changed native state or identity");
+        }
+        inherited.GenerateMipmaps();
+        if (!unchanged("GenerateMipmaps"))
+        {
+            return Fail("cached mip generation changed native state or identity");
+        }
+        if (inherited.LoadFromFile("must-not-load.tga", true, true) || !unchanged("LoadFromFile"))
+        {
+            return Fail("cached file replacement was accepted or changed native state");
+        }
+        if (inherited.SaveToFile("must-not-save.tga") || !unchanged("LoadFromFile"))
+        {
+            return Fail("unsupported cached save succeeded or changed native state");
+        }
+
+        // Identity describes requested immutable state, independently of device capability.
+        TextureAssetId clampIdentity8;
+        TextureAssetId clampIdentity16;
+        for (f32 deviceLimit : {4.0f, 1.0f})
+        {
+            Tests::TestGraphicsDevice limitedDevice;
+            limitedDevice.textureFactory = [&](const TextureSpecification& specification, const void*)
+            {
+                TextureSpecification effective = specification;
+                effective.MaxAnisotropy = std::min(effective.MaxAnisotropy, deviceLimit);
+                return std::make_shared<TestTexture>(effective, limitedDevice.textureCreations);
+            };
+            TextureCache limitedCache(limitedDevice);
+            request.texture.MaxAnisotropy = 8.0f;
+            auto eight = limitedCache.GetOrCreate(request);
+            request.texture.MaxAnisotropy = 16.0f;
+            auto sixteen = limitedCache.GetOrCreate(request);
+            if (!eight || !sixteen || eight == sixteen ||
+                eight->GetContentId() == sixteen->GetContentId() ||
+                eight->GetSpecification().MaxAnisotropy != 8.0f ||
+                sixteen->GetSpecification().MaxAnisotropy != 16.0f ||
+                static_cast<const TestTexture&>(*eight->GetTexture()).GetSpecification().MaxAnisotropy != deviceLimit ||
+                static_cast<const TestTexture&>(*sixteen->GetTexture()).GetSpecification().MaxAnisotropy != deviceLimit ||
+                limitedCache.GetOrCreate(request) != sixteen || limitedDevice.textureCreations != 2)
+            {
+                return Fail("anisotropy request identity depended on device clamp or fallback");
+            }
+            request.texture.MaxAnisotropy = 8.0f;
+            if (limitedCache.GetOrCreate(request) != eight || limitedDevice.textureCreations != 2)
+            {
+                return Fail("clamped anisotropy request did not deduplicate");
+            }
+            if (deviceLimit == 4.0f)
+            {
+                clampIdentity8 = eight->GetContentId();
+                clampIdentity16 = sixteen->GetContentId();
+            }
+            else if (clampIdentity8 != eight->GetContentId() || clampIdentity16 != sixteen->GetContentId())
+            {
+                return Fail("anisotropy content identifiers changed across device capabilities");
+            }
+        }
+
+        request.texture.GenerateMips = true;
+        request.texture.MaxAnisotropy = 4.0f;
+        const TextureAssetId baseline = TextureResource::CalculateContentId(request);
+        std::vector<TextureResourceSpecification> variants;
+        auto variant = request;
+        variant.texture.MinFilter = TextureFilter::NearestMipmapNearest;
+        variants.push_back(variant);
+        variant = request;
+        variant.texture.MagFilter = TextureFilter::Nearest;
+        variants.push_back(variant);
+        variant = request;
+        variant.texture.WrapS = TextureWrap::ClampToEdge;
+        variants.push_back(variant);
+        variant = request;
+        variant.texture.WrapT = TextureWrap::MirroredRepeat;
+        variants.push_back(variant);
+        for (u32 channel = 0; channel < 4; ++channel)
+        {
+            variant = request;
+            variant.texture.BorderColor[channel] += 0.125f;
+            variants.push_back(variant);
+        }
+        for (const auto& sampler : variants)
+        {
+            const TextureAssetId identifier = TextureResource::CalculateContentId(sampler);
+            if (!identifier.IsValid() || identifier == baseline)
+            {
+                return Fail("filter, wrap, or border channel was omitted from sampler identity");
+            }
+        }
+        return EXIT_SUCCESS;
+    }
     bool WriteTga(const std::string& path, const std::array<unsigned char, 6>& rgb)
     {
         std::ofstream file(path, std::ios::binary | std::ios::trunc);
@@ -254,13 +506,162 @@ namespace
         }
         return static_cast<bool>(file);
     }
+    int TestSamplerValidationAndLegacyAliases()
+    {
+        using namespace Pyramid;
+        const std::array<u8, 8> pixels{255, 0, 0, 255, 0, 255, 0, 255};
+        const std::string path = "pyramid_texture_cache_sampler_test.tga";
+        if (!WriteTga(path, {255, 0, 0, 0, 255, 0}))
+        {
+            return Fail("could not write sampler-validation image fixture");
+        }
+        struct FixtureCleanup
+        {
+            const std::string& path;
+            ~FixtureCleanup() { std::remove(path.c_str()); }
+        } cleanup{path};
+        Tests::TestGraphicsDevice device;
+        device.textureFactory = [&](const TextureSpecification& specification, const void*)
+        {
+            return std::make_shared<TestTexture>(specification, device.textureCreations);
+        };
+        TextureCache cache(device);
+        TextureResourceSpecification request;
+        request.texture.Width = 2;
+        request.texture.Height = 1;
+        request.pixelData = pixels.data();
+        request.pixelDataSize = pixels.size();
+        const auto fromFile = [&](const TextureSpecification& sampler)
+        {
+            TextureFileSpecification file;
+            file.filepath = path;
+            file.generateMips = sampler.GenerateMips;
+            file.minFilter = sampler.MinFilter;
+            file.magFilter = sampler.MagFilter;
+            file.wrapS = sampler.WrapS;
+            file.wrapT = sampler.WrapT;
+            file.maxAnisotropy = sampler.MaxAnisotropy;
+            std::copy(std::begin(sampler.BorderColor), std::end(sampler.BorderColor), file.borderColor);
+            return file;
+        };
+        std::vector<TextureSpecification> invalid;
+        for (int unknown : {-1, 999})
+        {
+            auto sampler = request.texture;
+            sampler.MinFilter = static_cast<TextureFilter>(unknown);
+            invalid.push_back(sampler);
+            sampler = request.texture;
+            sampler.MagFilter = static_cast<TextureFilter>(unknown);
+            invalid.push_back(sampler);
+            sampler = request.texture;
+            sampler.WrapS = static_cast<TextureWrap>(unknown);
+            invalid.push_back(sampler);
+            sampler = request.texture;
+            sampler.WrapT = static_cast<TextureWrap>(unknown);
+            invalid.push_back(sampler);
+        }
+        const f32 nan = std::numeric_limits<f32>::quiet_NaN();
+        const f32 infinity = std::numeric_limits<f32>::infinity();
+        for (f32 value : {0.0f, 0.5f, -1.0f, nan, infinity, -infinity})
+        {
+            auto sampler = request.texture;
+            sampler.MaxAnisotropy = value;
+            invalid.push_back(sampler);
+        }
+        for (u32 channel = 0; channel < 4; ++channel)
+        {
+            for (f32 value : {nan, infinity, -infinity})
+            {
+                auto sampler = request.texture;
+                sampler.BorderColor[channel] = value;
+                invalid.push_back(sampler);
+            }
+        }
+        for (std::size_t index = 0; index < invalid.size(); ++index)
+        {
+            request.texture = invalid[index];
+            const auto file = fromFile(request.texture);
+            if (TextureResource::CalculateContentId(request).IsValid() ||
+                TextureResource::CalculateContentId(file).IsValid() || cache.GetOrCreate(request) ||
+                cache.GetOrCreate(file) || device.textureCreations != 0 || device.textureFileCreations != 0)
+            {
+                std::cerr << "Invalid sampler profile: " << index << '\n';
+                return Fail("unknown or nonfinite sampler state was hashed or reached the graphics device");
+            }
+        }
+
+        // Preserve defined legacy aliases; only unknown enum values are invalid.
+        request.texture = {};
+        request.texture.Width = 2;
+        request.texture.Height = 1;
+        const TextureFilter filters[] = {TextureFilter::None, TextureFilter::Linear,
+            TextureFilter::Nearest, TextureFilter::LinearMipmapLinear,
+            TextureFilter::LinearMipmapNearest, TextureFilter::NearestMipmapLinear,
+            TextureFilter::NearestMipmapNearest};
+        for (TextureFilter filter : filters)
+        {
+            request.texture.MinFilter = filter;
+            request.texture.MagFilter = filter;
+            auto memory = cache.GetOrCreate(request);
+            auto file = cache.GetOrCreate(fromFile(request.texture));
+            if (!memory || !file || memory->GetSpecification().MinFilter != filter ||
+                memory->GetSpecification().MagFilter != filter ||
+                file->GetSpecification().MinFilter != filter || file->GetSpecification().MagFilter != filter ||
+                cache.GetOrCreate(request) != memory)
+            {
+                return Fail("defined legacy filter aliases were rejected or renormalized");
+            }
+        }
+        request.texture.MinFilter = TextureFilter::Linear;
+        request.texture.MagFilter = TextureFilter::Linear;
+        const TextureWrap wraps[] = {TextureWrap::None, TextureWrap::Repeat,
+            TextureWrap::MirroredRepeat, TextureWrap::ClampToEdge, TextureWrap::ClampToBorder};
+        for (TextureWrap wrap : wraps)
+        {
+            request.texture.WrapS = wrap;
+            request.texture.WrapT = wrap;
+            auto memory = cache.GetOrCreate(request);
+            auto file = cache.GetOrCreate(fromFile(request.texture));
+            if (!memory || !file || memory->GetSpecification().WrapS != wrap ||
+                memory->GetSpecification().WrapT != wrap ||
+                file->GetSpecification().WrapS != wrap || file->GetSpecification().WrapT != wrap)
+            {
+                return Fail("defined legacy wrap aliases were rejected or renormalized");
+            }
+        }
+        request.texture.GenerateMips = false;
+        request.texture.MinFilter = TextureFilter::Linear;
+        const TextureAssetId noMips = TextureResource::CalculateContentId(request);
+        for (TextureFilter filter : {TextureFilter::LinearMipmapLinear, TextureFilter::LinearMipmapNearest,
+                TextureFilter::NearestMipmapLinear, TextureFilter::NearestMipmapNearest})
+        {
+            request.texture.MinFilter = filter;
+            auto memory = cache.GetOrCreate(request);
+            if (!memory || memory->GetContentId() != noMips ||
+                memory->GetSpecification().MinFilter != TextureFilter::Linear)
+            {
+                return Fail("legacy no-mips cache normalization changed content identity");
+            }
+        }
+        request.texture.MinFilter = TextureFilter::Linear;
+        request.texture.MaxAnisotropy = std::numeric_limits<f32>::max();
+        request.texture.BorderColor[0] = -4.0f;
+        request.texture.BorderColor[1] = 8.0f;
+        if (!cache.GetOrCreate(request) || !cache.GetOrCreate(fromFile(request.texture)))
+        {
+            return Fail("finite border values or device-clamped finite anisotropy were rejected");
+        }
+        return EXIT_SUCCESS;
+    }
 }
 
 int main()
 {
     using namespace Pyramid;
 
-    if (TestUncompressedFormats() != EXIT_SUCCESS)
+    if (TestUncompressedFormats() != EXIT_SUCCESS ||
+        TestSamplerImmutabilityAndIdentity() != EXIT_SUCCESS ||
+        TestSamplerValidationAndLegacyAliases() != EXIT_SUCCESS)
     {
         return EXIT_FAILURE;
     }

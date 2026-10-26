@@ -14,13 +14,35 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <limits>
 #include <string>
+#include <type_traits>
+#include <unordered_map>
 #include <vector>
 
 namespace
 {
+    struct SamplerState
+    {
+        GLint minFilter = GL_NEAREST_MIPMAP_LINEAR;
+        GLint magFilter = GL_LINEAR;
+        GLint wrapS = GL_REPEAT;
+        GLint wrapT = GL_REPEAT;
+        std::array<GLfloat, 4> border{};
+        GLfloat anisotropy = 1.0f;
+    };
+    std::unordered_map<GLuint, SamplerState> g_samplerStates;
+    int g_samplerWrites = 0;
+    int g_failSamplerWrite = -1;
+    bool g_failEverySamplerWrite = false;
+    bool g_failNextMipmap = false;
+    int g_anisotropyWrites = 0;
+    int g_anisotropyQueries = 0;
+    GLint g_driverMajor = 3;
+    GLint g_driverMinor = 3;
+    GLfloat g_driverMaxAnisotropy = 8.0f;
     GLuint g_nextTexture = 10;
     GLuint g_forcedNextTexture = 0;
     GLenum g_pendingError = GL_NO_ERROR;
@@ -74,6 +96,8 @@ namespace
         switch (name)
         {
         case GL_UNPACK_ALIGNMENT: *value = g_unpackAlignment; break;
+        case GL_MAJOR_VERSION: *value = g_driverMajor; break;
+        case GL_MINOR_VERSION: *value = g_driverMinor; break;
         case GL_ACTIVE_TEXTURE: *value = static_cast<GLint>(g_activeTexture); break;
         case GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS: *value = 32; break;
         case GL_DEPTH_FUNC: *value = GL_LESS; break;
@@ -101,8 +125,21 @@ namespace
         *value = GL_TRUE;
     }
 
-    void APIENTRY FakeGetFloatv(GLenum, GLfloat* values)
+    bool DriverSupportsAnisotropy()
     {
+        return g_driverMajor > 4 || (g_driverMajor == 4 && g_driverMinor >= 6) ||
+            GLAD_GL_ARB_texture_filter_anisotropic || GLAD_GL_EXT_texture_filter_anisotropic;
+    }
+
+    void APIENTRY FakeGetFloatv(GLenum name, GLfloat* values)
+    {
+        if (name == GL_MAX_TEXTURE_MAX_ANISOTROPY)
+        {
+            ++g_anisotropyQueries;
+            values[0] = DriverSupportsAnisotropy() ? g_driverMaxAnisotropy : 0.0f;
+            if (!DriverSupportsAnisotropy()) g_pendingError = GL_INVALID_ENUM;
+            return;
+        }
         values[0] = values[1] = values[2] = 0.0f;
         values[3] = 1.0f;
     }
@@ -119,12 +156,14 @@ namespace
         {
             textures[index] = g_forcedNextTexture ? g_forcedNextTexture : g_nextTexture++;
             g_forcedNextTexture = 0;
+            g_samplerStates[textures[index]] = SamplerState{};
         }
     }
 
     void APIENTRY FakeDeleteTextures(GLsizei count, const GLuint* textures)
     {
         g_deletedTextures.insert(g_deletedTextures.end(), textures, textures + count);
+        for (GLsizei index = 0; index < count; ++index) g_samplerStates.erase(textures[index]);
         for (auto& boundTexture : g_boundTextures)
         {
             if (std::find(textures, textures + count, boundTexture) != textures + count)
@@ -197,26 +236,61 @@ namespace
         g_lastSubImageTexture = g_boundTextures[g_activeTexture - GL_TEXTURE0];
     }
 
+    bool FailSamplerWrite()
+    {
+        ++g_samplerWrites;
+        if (g_failEverySamplerWrite || g_samplerWrites == g_failSamplerWrite)
+        {
+            g_pendingError = GL_INVALID_OPERATION;
+            return true;
+        }
+        return false;
+    }
+
+    SamplerState& CurrentSampler()
+    {
+        return g_samplerStates[g_boundTextures[g_activeTexture - GL_TEXTURE0]];
+    }
+
     void APIENTRY FakeTexParameteri(GLenum, GLenum name, GLint value)
     {
+        if (FailSamplerWrite()) return;
+        auto& sampler = CurrentSampler();
         switch (name)
         {
-        case GL_TEXTURE_MIN_FILTER: g_lastMinFilter = value; break;
-        case GL_TEXTURE_MAG_FILTER: g_lastMagFilter = value; break;
-        case GL_TEXTURE_WRAP_S: g_lastWrapS = value; break;
-        case GL_TEXTURE_WRAP_T: g_lastWrapT = value; break;
+        case GL_TEXTURE_MIN_FILTER: g_lastMinFilter = sampler.minFilter = value; break;
+        case GL_TEXTURE_MAG_FILTER: g_lastMagFilter = sampler.magFilter = value; break;
+        case GL_TEXTURE_WRAP_S: g_lastWrapS = sampler.wrapS = value; break;
+        case GL_TEXTURE_WRAP_T: g_lastWrapT = sampler.wrapT = value; break;
         default: break;
         }
     }
 
-    void APIENTRY FakeTexParameterfv(GLenum, GLenum, const GLfloat*)
+    void APIENTRY FakeTexParameterfv(GLenum, GLenum name, const GLfloat* values)
     {
+        if (FailSamplerWrite()) return;
+        if (name == GL_TEXTURE_BORDER_COLOR) std::copy_n(values, 4, CurrentSampler().border.begin());
+    }
+
+    void APIENTRY FakeTexParameterf(GLenum, GLenum name, GLfloat value)
+    {
+        if (name == GL_TEXTURE_MAX_ANISOTROPY) ++g_anisotropyWrites;
+        if (FailSamplerWrite()) return;
+        if (name == GL_TEXTURE_MAX_ANISOTROPY && DriverSupportsAnisotropy())
+            CurrentSampler().anisotropy = value;
+        else
+            g_pendingError = GL_INVALID_ENUM;
     }
 
     void APIENTRY FakeGenerateMipmap(GLenum)
     {
         ++g_generateMipmapCalls;
         g_lastMipmapTexture = g_boundTextures[g_activeTexture - GL_TEXTURE0];
+        if (g_failNextMipmap)
+        {
+            g_failNextMipmap = false;
+            g_pendingError = GL_INVALID_OPERATION;
+        }
     }
 
     void APIENTRY FakeActiveTexture(GLenum texture)
@@ -240,6 +314,7 @@ namespace
         glad_glTexSubImage2D = FakeTexSubImage2D;
         glad_glTexParameteri = FakeTexParameteri;
         glad_glTexParameterfv = FakeTexParameterfv;
+        glad_glTexParameterf = FakeTexParameterf;
         glad_glGenerateMipmap = FakeGenerateMipmap;
         glad_glActiveTexture = FakeActiveTexture;
     }
@@ -347,7 +422,7 @@ namespace
             return Fail("OpenGLDevice rejected or failed to bind a cached TextureResource");
         }
         device.BindTexture(cached.get(), 3);
-        device.BindTexture(cached->GetTexture().get(), 3);
+        cached->GetTexture()->Bind(3);
         if (g_textureBinds.size() != 2)
         {
             return Fail("cached wrapper and its OpenGL texture did not share binding state");
@@ -820,6 +895,369 @@ namespace
         }
         return EXIT_SUCCESS;
     }
+    bool SameSampler(const SamplerState& left, const SamplerState& right)
+    {
+        return left.minFilter == right.minFilter && left.magFilter == right.magFilter &&
+            left.wrapS == right.wrapS && left.wrapT == right.wrapT &&
+            left.border == right.border && left.anisotropy == right.anisotropy;
+    }
+
+    struct SamplerDriverScope
+    {
+        GLint major = g_driverMajor;
+        GLint minor = g_driverMinor;
+        GLfloat maximum = g_driverMaxAnisotropy;
+        int arb = GLAD_GL_ARB_texture_filter_anisotropic;
+        int ext = GLAD_GL_EXT_texture_filter_anisotropic;
+        int loadedMajor = GLVersion.major;
+        int loadedMinor = GLVersion.minor;
+        SamplerDriverScope()
+        {
+            GLVersion.major = g_driverMajor;
+            GLVersion.minor = g_driverMinor;
+        }
+        ~SamplerDriverScope()
+        {
+            g_driverMajor = major;
+            g_driverMinor = minor;
+            g_driverMaxAnisotropy = maximum;
+            GLAD_GL_ARB_texture_filter_anisotropic = arb;
+            GLAD_GL_EXT_texture_filter_anisotropic = ext;
+            GLVersion.major = loadedMajor;
+            GLVersion.minor = loadedMinor;
+            g_failSamplerWrite = -1;
+            g_failEverySamplerWrite = false;
+            g_failNextMipmap = false;
+        }
+    };
+
+    int TestMutableSamplerRegression()
+    {
+        using namespace Pyramid;
+        SamplerDriverScope driverScope;
+        g_driverMajor = 3;
+        g_driverMinor = 3;
+        GLAD_GL_ARB_texture_filter_anisotropic = 0;
+        GLAD_GL_EXT_texture_filter_anisotropic = 0;
+        OpenGLDevice device(nullptr);
+        TextureSpecification specification;
+        specification.Width = specification.Height = 4;
+        specification.GenerateMips = false;
+        specification.MinFilter = TextureFilter::NearestMipmapNearest;
+        specification.MagFilter = TextureFilter::None;
+        OpenGLTexture2D texture(specification, nullptr);
+        auto anchor = device.CreateTexture2D(specification, nullptr);
+        if (!texture.IsLoaded() || !anchor || !anchor->IsLoaded() ||
+            g_samplerStates[texture.GetRendererID()].minFilter != GL_NEAREST)
+        {
+            return Fail("mutable sampler fixture lost its requested mip-filter base fallback");
+        }
+        const GLuint id = texture.GetRendererID();
+        const SamplerState anchorSampler = g_samplerStates[anchor->GetRendererID()];
+        device.BindTexture(anchor.get(), 5);
+        device.BindTexture(anchor.get(), 2);
+        const auto coherentBinding = [&]()
+        {
+            if (g_activeTexture != GL_TEXTURE2 || g_boundTextures[2] != 0 ||
+                g_boundTextures[5] != anchor->GetRendererID() ||
+                !SameSampler(anchorSampler, g_samplerStates[anchor->GetRendererID()])) return false;
+            const auto binds = g_textureBinds.size();
+            device.BindTexture(anchor.get(), 2);
+            device.BindTexture(anchor.get(), 5);
+            device.BindTexture(anchor.get(), 2);
+            return g_boundTextures[2] == anchor->GetRendererID() &&
+                g_textureBinds.size() == binds + 1 && g_activeTexture == GL_TEXTURE2;
+        };
+        texture.SetWrap(TextureWrap::ClampToEdge, TextureWrap::MirroredRepeat);
+        if (!texture.GetLastError().empty() || g_samplerStates[id].wrapS != GL_CLAMP_TO_EDGE ||
+            g_samplerStates[id].wrapT != GL_MIRRORED_REPEAT || !coherentBinding())
+        {
+            return Fail("mutable SetWrap did not publish only its texture's sampler coherently");
+        }
+        texture.SetFilter(TextureFilter::None, TextureFilter::None);
+        if (!texture.GetLastError().empty() || g_samplerStates[id].minFilter != GL_LINEAR ||
+            g_samplerStates[id].magFilter != GL_LINEAR || !coherentBinding())
+        {
+            return Fail("None filter aliases no longer map to linear filtering");
+        }
+        texture.SetWrap(TextureWrap::None, TextureWrap::None);
+        if (!texture.GetLastError().empty() || g_samplerStates[id].wrapS != GL_REPEAT ||
+            g_samplerStates[id].wrapT != GL_REPEAT || !coherentBinding())
+        {
+            return Fail("None wrap aliases no longer map to repeating");
+        }
+        texture.SetWrap(TextureWrap::ClampToBorder, TextureWrap::ClampToBorder);
+        if (!coherentBinding()) return Fail("border wrap setup desynchronized bindings");
+        texture.SetBorderColor(-0.25f, 0.25f, 2.0f, 1.0f);
+        if (!texture.GetLastError().empty() ||
+            g_samplerStates[id].border != std::array<GLfloat, 4>{-0.25f, 0.25f, 2.0f, 1.0f} ||
+            !coherentBinding())
+        {
+            return Fail("SetBorderColor lost finite components or wrote another texture");
+        }
+        const auto nan = (std::numeric_limits<f32>::quiet_NaN)();
+        const auto infinity = (std::numeric_limits<f32>::infinity)();
+        const std::function<void()> invalidRequests[] = {
+            [&]() { texture.SetFilter(static_cast<TextureFilter>(999), TextureFilter::Linear); },
+            [&]() { texture.SetFilter(TextureFilter::Linear, static_cast<TextureFilter>(999)); },
+            [&]() { texture.SetWrap(static_cast<TextureWrap>(999), TextureWrap::Repeat); },
+            [&]() { texture.SetWrap(TextureWrap::Repeat, static_cast<TextureWrap>(999)); },
+            [&]() { texture.SetBorderColor(nan, 0.0f, 0.0f, 1.0f); },
+            [&]() { texture.SetBorderColor(0.0f, 0.0f, infinity, 1.0f); },
+            [&]() { texture.SetMaxAnisotropy(0.0f); },
+            [&]() { texture.SetMaxAnisotropy(-1.0f); },
+            [&]() { texture.SetMaxAnisotropy(nan); },
+            [&]() { texture.SetMaxAnisotropy(infinity); }
+        };
+        for (const auto& invalid : invalidRequests)
+        {
+            const SamplerState before = g_samplerStates[id];
+            const auto bindings = g_boundTextures;
+            const auto active = g_activeTexture;
+            const auto writes = g_samplerWrites;
+            const auto binds = g_textureBinds.size();
+            invalid();
+            if (texture.GetLastError().empty() || !SameSampler(before, g_samplerStates[id]) ||
+                g_samplerWrites != writes || g_textureBinds.size() != binds ||
+                g_boundTextures != bindings || g_activeTexture != active)
+            {
+                return Fail("invalid sampler request mutated GL state or lacked a diagnostic");
+            }
+        }
+        std::array<TextureSpecification, 7> invalidSpecifications;
+        invalidSpecifications.fill(specification);
+        invalidSpecifications[0].MinFilter = static_cast<TextureFilter>(999);
+        invalidSpecifications[1].MagFilter = static_cast<TextureFilter>(999);
+        invalidSpecifications[2].WrapS = static_cast<TextureWrap>(999);
+        invalidSpecifications[3].WrapT = static_cast<TextureWrap>(999);
+        invalidSpecifications[4].BorderColor[1] = nan;
+        invalidSpecifications[5].MaxAnisotropy = infinity;
+        invalidSpecifications[6].MaxAnisotropy = 0.5f;
+        for (const auto& invalid : invalidSpecifications)
+        {
+            const auto generated = g_generatedTextureCount;
+            OpenGLTexture2D rejected(invalid, nullptr);
+            if (rejected.IsLoaded() || rejected.GetLastError().empty() ||
+                g_generatedTextureCount != generated)
+            {
+                return Fail("invalid creation sampler reached GL allocation");
+            }
+        }
+        texture.SetFilter(TextureFilter::NearestMipmapNearest, TextureFilter::Linear);
+        if (!coherentBinding()) return Fail("rollback setup desynchronized bindings");
+        const SamplerState committed = g_samplerStates[id];
+        g_failSamplerWrite = g_samplerWrites + 3;
+        texture.SetFilter(TextureFilter::LinearMipmapLinear, TextureFilter::Nearest);
+        g_failSamplerWrite = -1;
+        if (texture.GetLastError().empty() || !SameSampler(committed, g_samplerStates[id]) || !coherentBinding())
+        {
+            return Fail("partial sampler failure did not restore its previous complete profile");
+        }
+        texture.GenerateMipmaps();
+        if (!texture.GetLastError().empty() || texture.GetMipLevels() != 3 ||
+            g_samplerStates[id].minFilter != GL_NEAREST_MIPMAP_NEAREST || !coherentBinding())
+        {
+            return Fail("mipmap generation did not retain the pre-failure requested minification filter");
+        }
+        struct FilterCase { TextureFilter filter; GLint min; GLint mag; };
+        const FilterCase filters[] = {
+            {TextureFilter::None, GL_LINEAR, GL_LINEAR},
+            {TextureFilter::Linear, GL_LINEAR, GL_LINEAR},
+            {TextureFilter::Nearest, GL_NEAREST, GL_NEAREST},
+            {TextureFilter::LinearMipmapLinear, GL_LINEAR_MIPMAP_LINEAR, GL_LINEAR},
+            {TextureFilter::LinearMipmapNearest, GL_LINEAR_MIPMAP_NEAREST, GL_LINEAR},
+            {TextureFilter::NearestMipmapLinear, GL_NEAREST_MIPMAP_LINEAR, GL_NEAREST},
+            {TextureFilter::NearestMipmapNearest, GL_NEAREST_MIPMAP_NEAREST, GL_NEAREST}
+        };
+        for (const auto& filter : filters)
+        {
+            texture.SetFilter(filter.filter, filter.filter);
+            if (!texture.GetLastError().empty() || g_samplerStates[id].minFilter != filter.min ||
+                g_samplerStates[id].magFilter != filter.mag || !coherentBinding())
+            {
+                return Fail("known filter or magnification alias mapped to the wrong GL filter");
+            }
+        }
+        g_failEverySamplerWrite = true;
+        texture.SetWrap(TextureWrap::Repeat, TextureWrap::Repeat);
+        g_failEverySamplerWrite = false;
+        if (texture.GetLastError().find("restor") == std::string::npos)
+        {
+            return Fail("failed sampler restoration did not report its recovery failure");
+        }
+        if (!coherentBinding()) return Fail("failed sampler restoration leaked active binding state");
+        OpenGLTexture2D pendingMipmaps(specification, nullptr);
+        if (!pendingMipmaps.IsLoaded()) return Fail("pending mipmap fixture did not load");
+        g_failNextMipmap = true;
+        pendingMipmaps.GenerateMipmaps();
+        if (pendingMipmaps.GetLastError().empty() || pendingMipmaps.GetMipLevels() != 1 ||
+            g_samplerStates[pendingMipmaps.GetRendererID()].minFilter != GL_NEAREST)
+        {
+            return Fail("failed mipmap generation committed a mip-dependent sampler or level count");
+        }
+        pendingMipmaps.GenerateMipmaps();
+        if (!pendingMipmaps.GetLastError().empty() || pendingMipmaps.GetMipLevels() != 3 ||
+            g_samplerStates[pendingMipmaps.GetRendererID()].minFilter != GL_NEAREST_MIPMAP_NEAREST)
+        {
+            return Fail("successful mipmap retry did not activate its retained requested filter");
+        }
+        return EXIT_SUCCESS;
+    }
+    int TestAnisotropyCapabilities()
+    {
+        using namespace Pyramid;
+        SamplerDriverScope driverScope;
+        struct CapabilityCase { GLint major; GLint minor; int arb; int ext; GLfloat maximum; bool supported; };
+        const CapabilityCase capabilities[] = {
+            {3, 3, 0, 0, 8.0f, false},
+            {3, 3, 0, 1, 8.0f, true},
+            {3, 3, 1, 0, 4.0f, true},
+            {4, 6, 0, 0, 16.0f, true}
+        };
+        for (const auto& capability : capabilities)
+        {
+            g_driverMajor = capability.major;
+            g_driverMinor = capability.minor;
+            GLVersion.major = capability.major;
+            GLVersion.minor = capability.minor;
+            g_driverMaxAnisotropy = capability.maximum;
+            GLAD_GL_ARB_texture_filter_anisotropic = capability.arb;
+            GLAD_GL_EXT_texture_filter_anisotropic = capability.ext;
+            TextureSpecification specification;
+            specification.GenerateMips = false;
+            specification.MaxAnisotropy = 64.0f;
+            const auto beforeQueries = g_anisotropyQueries;
+            const auto beforeWrites = g_anisotropyWrites;
+            auto texture = ITexture2D::Create(specification, nullptr);
+            if (!texture || !texture->IsLoaded() ||
+                g_samplerStates[texture->GetRendererID()].anisotropy !=
+                    (capability.supported ? capability.maximum : 1.0f))
+            {
+                return Fail("anisotropy creation did not honor core/ARB/EXT support and maximum clamping");
+            }
+            texture->SetMaxAnisotropy(2.0f);
+            if (!texture->GetLastError().empty() || g_samplerStates[texture->GetRendererID()].anisotropy !=
+                (capability.supported ? 2.0f : 1.0f))
+            {
+                return Fail("mutable anisotropy did not publish its supported value or fallback");
+            }
+            texture->SetMaxAnisotropy((std::numeric_limits<f32>::max)());
+            if (!texture->GetLastError().empty() || g_samplerStates[texture->GetRendererID()].anisotropy !=
+                (capability.supported ? capability.maximum : 1.0f))
+            {
+                return Fail("finite high anisotropy request did not clamp to the driver's maximum");
+            }
+            texture->SetMaxAnisotropy(1.0f);
+            if (!texture->GetLastError().empty() || g_samplerStates[texture->GetRendererID()].anisotropy != 1.0f)
+            {
+                return Fail("anisotropy reset did not restore ordinary filtering");
+            }
+            if (capability.supported)
+            {
+                if (g_anisotropyQueries == beforeQueries || g_anisotropyWrites == beforeWrites)
+                    return Fail("advertised anisotropy path never queried or set its supported GL state");
+            }
+            else if (g_anisotropyQueries != beforeQueries || g_anisotropyWrites != beforeWrites)
+            {
+                return Fail("unsupported anisotropy fallback issued extension-only GL queries or writes");
+            }
+        }
+        return EXIT_SUCCESS;
+    }
+
+    int TestCachedSamplerImmutability()
+    {
+        using namespace Pyramid;
+        SamplerDriverScope driverScope;
+        g_driverMajor = 3;
+        g_driverMinor = 3;
+        g_driverMaxAnisotropy = 4.0f;
+        GLAD_GL_ARB_texture_filter_anisotropic = 0;
+        GLAD_GL_EXT_texture_filter_anisotropic = 1;
+        OpenGLDevice device(nullptr);
+        TextureSpecification specification;
+        specification.Width = specification.Height = 2;
+        specification.MinFilter = TextureFilter::NearestMipmapLinear;
+        specification.MagFilter = TextureFilter::NearestMipmapNearest;
+        specification.WrapS = TextureWrap::ClampToBorder;
+        specification.WrapT = TextureWrap::MirroredRepeat;
+        specification.BorderColor[0] = -0.25f;
+        specification.BorderColor[1] = 0.25f;
+        specification.BorderColor[2] = 2.0f;
+        specification.BorderColor[3] = 1.0f;
+        specification.MaxAnisotropy = 8.0f;
+        const std::array<u8, 16> pixels{};
+        auto direct = device.CreateTexture2D(specification, pixels.data());
+        TextureResourceSpecification resourceSpecification;
+        resourceSpecification.texture = specification;
+        resourceSpecification.pixelData = pixels.data();
+        resourceSpecification.pixelDataSize = pixels.size();
+        TextureCache cache(device);
+        auto cached = cache.GetOrCreate(resourceSpecification);
+        if (!direct || !direct->IsLoaded() || !cached || !cached->IsLoaded() ||
+            !SameSampler(g_samplerStates[direct->GetRendererID()], g_samplerStates[cached->GetRendererID()]) ||
+            cached->GetSpecification().MaxAnisotropy != 8.0f ||
+            g_samplerStates[cached->GetRendererID()].anisotropy != 4.0f)
+        {
+            return Fail("direct and cached creation used different native sampler contracts or mutated requested identity");
+        }
+        using CachedBackendPointer = std::remove_cv_t<std::remove_reference_t<decltype(cached->GetTexture())>>;
+        static_assert(std::is_const_v<typename CachedBackendPointer::element_type>,
+            "cached textures must expose read-only native backing resources");
+        const auto content = cached->GetContentId();
+        const auto asset = cached->GetAssetId();
+        const auto id = cached->GetRendererID();
+        const auto cachedSpecification = cached->GetSpecification();
+        const SamplerState before = g_samplerStates[id];
+        const auto writes = g_samplerWrites;
+        const auto binds = g_textureBinds.size();
+        const auto active = g_activeTexture;
+        const std::function<void()> mutations[] = {
+            [&]() { cached->SetFilter(TextureFilter::Nearest, TextureFilter::Linear); },
+            [&]() { cached->SetWrap(TextureWrap::Repeat, TextureWrap::Repeat); },
+            [&]() { cached->SetBorderColor(1.0f, 0.0f, 0.0f, 1.0f); },
+            [&]() { cached->SetMaxAnisotropy(2.0f); },
+            [&]() { cached->GenerateMipmaps(); }
+        };
+        for (const auto& mutate : mutations)
+        {
+            mutate();
+            if (cached->GetLastError().empty() || cached->GetContentId() != content ||
+                cached->GetAssetId() != asset || cached->GetRendererID() != id ||
+                cached->GetSpecification().MinFilter != cachedSpecification.MinFilter ||
+                cached->GetSpecification().MagFilter != cachedSpecification.MagFilter ||
+                cached->GetSpecification().WrapS != cachedSpecification.WrapS ||
+                cached->GetSpecification().WrapT != cachedSpecification.WrapT ||
+                cached->GetSpecification().MaxAnisotropy != cachedSpecification.MaxAnisotropy ||
+                !std::equal(std::begin(cachedSpecification.BorderColor), std::end(cachedSpecification.BorderColor),
+                    std::begin(cached->GetSpecification().BorderColor)) ||
+                !SameSampler(before, g_samplerStates[id]) || g_samplerWrites != writes ||
+                g_textureBinds.size() != binds || g_activeTexture != active)
+            {
+                return Fail("cached immutable sampler mutated its identity, profile, native state or bindings");
+            }
+        }
+        resourceSpecification.texture.MaxAnisotropy = 16.0f;
+        auto differentRequest = cache.GetOrCreate(resourceSpecification);
+        if (!differentRequest || differentRequest == cached || differentRequest->GetContentId() == content ||
+            differentRequest->GetSpecification().MaxAnisotropy != 16.0f ||
+            g_samplerStates[differentRequest->GetRendererID()].anisotropy != 4.0f)
+        {
+            return Fail("hardware clamping incorrectly merged distinct requested sampler identities");
+        }
+        resourceSpecification.texture.GenerateMips = false;
+        resourceSpecification.texture.MinFilter = TextureFilter::NearestMipmapNearest;
+        auto normalizedCache = cache.GetOrCreate(resourceSpecification);
+        auto pendingDirect = device.CreateTexture2D(resourceSpecification.texture, pixels.data());
+        if (!normalizedCache || !pendingDirect || !pendingDirect->IsLoaded() ||
+            normalizedCache->GetSpecification().MinFilter != TextureFilter::Linear ||
+            g_samplerStates[normalizedCache->GetRendererID()].minFilter != GL_LINEAR ||
+            g_samplerStates[pendingDirect->GetRendererID()].minFilter != GL_NEAREST)
+        {
+            return Fail("cache ID normalization or direct pending mip-filter behavior changed");
+        }
+        return EXIT_SUCCESS;
+    }
 }
 
 int main()
@@ -903,7 +1341,8 @@ int main()
     }
 
     if (TestDeviceTextureBinding() != EXIT_SUCCESS || TestTextureStateCoherence() != EXIT_SUCCESS ||
-        TestAdvertisedTextureFormats() != EXIT_SUCCESS || TestReloadTransferLayout() != EXIT_SUCCESS)
+        TestAdvertisedTextureFormats() != EXIT_SUCCESS || TestReloadTransferLayout() != EXIT_SUCCESS || TestMutableSamplerRegression() != EXIT_SUCCESS ||
+        TestAnisotropyCapabilities() != EXIT_SUCCESS || TestCachedSamplerImmutability() != EXIT_SUCCESS)
     {
         return EXIT_FAILURE;
     }

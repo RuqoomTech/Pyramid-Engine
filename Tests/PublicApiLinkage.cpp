@@ -13,6 +13,7 @@
 #include <Pyramid/Graphics/CameraController.hpp>
 #include <Pyramid/Graphics/OpenGL/OpenGLFramebuffer.hpp>
 #include <Pyramid/Graphics/OpenGL/OpenGLStateManager.hpp>
+#include <Pyramid/Graphics/OpenGL/OpenGLTexture.hpp>
 #include <Pyramid/Graphics/Geometry/MeshBounds.hpp>
 #include <Pyramid/Graphics/Geometry/Mesh.hpp>
 #include <Pyramid/Graphics/Geometry/MeshCache.hpp>
@@ -216,6 +217,15 @@ namespace
     volatile decltype(&ITexture2D::CreateRenderTarget) g_createRenderTarget = &ITexture2D::CreateRenderTarget;
     volatile decltype(&ITexture2D::CreateDepthTarget) g_createDepthTarget = &ITexture2D::CreateDepthTarget;
     volatile decltype(&ITexture2D::CreateFromColor) g_createFromColor = &ITexture2D::CreateFromColor;
+
+    volatile decltype(&Pyramid::OpenGLTexture2D::SetFilter) g_setNativeTextureFilter =
+        &Pyramid::OpenGLTexture2D::SetFilter;
+    volatile decltype(&Pyramid::OpenGLTexture2D::SetWrap) g_setNativeTextureWrap =
+        &Pyramid::OpenGLTexture2D::SetWrap;
+    volatile decltype(&Pyramid::OpenGLTexture2D::SetBorderColor) g_setNativeTextureBorder =
+        &Pyramid::OpenGLTexture2D::SetBorderColor;
+    volatile decltype(&Pyramid::OpenGLTexture2D::SetMaxAnisotropy) g_setNativeTextureAnisotropy =
+        &Pyramid::OpenGLTexture2D::SetMaxAnisotropy;
 
     using TextureAssetIdFromString = Pyramid::TextureAssetId (*)(std::string_view);
     volatile TextureAssetIdFromString g_textureAssetIdFromString =
@@ -636,6 +646,10 @@ int main()
                    g_createRenderTarget &&
                    g_createDepthTarget &&
                    g_createFromColor &&
+                   g_setNativeTextureFilter &&
+                   g_setNativeTextureWrap &&
+                   g_setNativeTextureBorder &&
+                   g_setNativeTextureAnisotropy &&
                    g_textureAssetIdFromString &&
                    g_textureAssetIdToString &&
                    g_calculateMemoryTextureId &&

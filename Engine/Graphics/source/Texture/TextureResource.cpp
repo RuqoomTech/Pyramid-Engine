@@ -1,5 +1,6 @@
 #include <Pyramid/Graphics/Texture/TextureResource.hpp>
 #include "TextureFormatInfo.hpp"
+#include "TextureSamplerValidation.hpp"
 
 #include <Pyramid/Graphics/GraphicsDevice.hpp>
 #include <Pyramid/Util/Image.hpp>
@@ -154,24 +155,6 @@ namespace Pyramid
             return total;
         }
 
-        bool IsSamplerStateValid(
-            const f32 borderColor[4],
-            f32 maxAnisotropy)
-        {
-            if (!std::isfinite(maxAnisotropy) || maxAnisotropy < 1.0f)
-            {
-                return false;
-            }
-            for (u32 index = 0; index < 4; ++index)
-            {
-                if (!std::isfinite(borderColor[index]))
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
-
         TextureSpecification NormalizeSpecification(
             const TextureSpecification& input,
             TextureColorSpace colorSpace,
@@ -292,9 +275,7 @@ namespace Pyramid
             error = "sRGB texture resources require RGB8/RGBA8 pixel formats";
             return false;
         }
-        if (!IsSamplerStateValid(
-                specification.texture.BorderColor,
-                specification.texture.MaxAnisotropy))
+        if (!Detail::IsTextureSamplerStateValid(specification.texture))
         {
             error = "Texture resource sampler state is invalid";
             return false;
@@ -380,7 +361,10 @@ namespace Pyramid
             error = "Texture file color space is invalid";
             return false;
         }
-        if (!IsSamplerStateValid(specification.borderColor, specification.maxAnisotropy))
+        if (!Detail::IsTextureSamplerStateValid(
+                specification.minFilter, specification.magFilter,
+                specification.wrapS, specification.wrapT,
+                specification.borderColor, specification.maxAnisotropy))
         {
             error = "Texture file sampler state is invalid";
             return false;

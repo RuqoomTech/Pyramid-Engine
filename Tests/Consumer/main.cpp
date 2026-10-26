@@ -16,6 +16,13 @@
 
 #include <array>
 #include <iostream>
+#include <type_traits>
+#include <utility>
+
+static_assert(std::is_same_v<
+    decltype(std::declval<const Pyramid::TextureResource&>().GetTexture()),
+    const std::shared_ptr<const Pyramid::ITexture2D>&>,
+    "Installed cached texture access must preserve a const native pointee");
 
 int main()
 {
