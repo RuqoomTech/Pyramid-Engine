@@ -60,9 +60,11 @@ The current `0.6.0-pre-alpha` baseline includes:
 ### Texture and image correctness
 
 - [x] Bind immutable cached textures through the OpenGL device without rejecting their wrappers; verify material/command-buffer paths and visible imported textures.
-- Invalidate or update cached texture bindings when direct texture upload, reload, or mutable texture operations issue native GL binds; add a regression before claiming reload-state coherence.
-- Map all advertised texture formats or remove unsupported enum values.
-- Implement depth texture creation through the texture interface.
+- [x] Synchronize cached texture bindings for upload, reload, mutation, framebuffer attachments, deletion, and reused native names, with focused regressions and native-driver binding checks.
+- [x] Implement all uncompressed texture formats with explicit CPU upload layouts, typed updates, immutable-cache validation, and stable enum codes; compressed BC codes remain explicitly unsupported.
+- [x] Implement depth/depth-stencil texture creation through the texture interface.
+- Validate the expanded formats with native-driver sampling/readback and example visual checks; visual checks are deferred at the user's request. Fake-GL, cache, public-linkage, and installed-package checks cover the implemented contracts.
+- Revisit BC compression when representative assets justify it, with capability checks and a defined block-upload contract before advertising support.
 - [x] Apply sRGB intent, border color, mip filters, and safe RGB unpack alignment.
 - [x] Extract `Pyramid::Image` and replace libjpeg-turbo with an owned bounded baseline/progressive Huffman JPEG decoder supporting grayscale, common chroma subsampling, and restart markers.
 - Apply anisotropy consistently across direct and cached texture paths; cached file resources now apply `flipY` before upload.

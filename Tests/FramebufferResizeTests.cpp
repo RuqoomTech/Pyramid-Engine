@@ -1,9 +1,12 @@
 #include <Pyramid/Graphics/OpenGL/OpenGLFramebuffer.hpp>
+#include <Pyramid/Graphics/OpenGL/OpenGLStateManager.hpp>
 #include <Pyramid/Graphics/Renderer/RenderSystem.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cstdlib>
 #include <iostream>
+#include <unordered_map>
 #include <vector>
 
 namespace
@@ -13,6 +16,10 @@ namespace
     GLuint g_nextTexture = 100;
     std::vector<GLuint> g_deletedFramebuffers;
     std::vector<GLuint> g_deletedTextures;
+    GLenum g_activeTexture = GL_TEXTURE0;
+    std::array<std::unordered_map<GLenum, GLuint>, 16> g_boundTextures;
+    std::vector<GLuint> g_allocatedTextures;
+    std::vector<GLuint> g_mipmappedTextures;
 
     int Fail(const char* message)
     {
@@ -39,7 +46,7 @@ namespace
             values[0] = 16;
             break;
         case GL_ACTIVE_TEXTURE:
-            values[0] = GL_TEXTURE0;
+            values[0] = static_cast<GLint>(g_activeTexture);
             break;
         case GL_VIEWPORT:
         case GL_SCISSOR_BOX:
@@ -124,20 +131,44 @@ namespace
     void APIENTRY FakeDeleteTextures(GLsizei count, const GLuint* textures)
     {
         g_deletedTextures.insert(g_deletedTextures.end(), textures, textures + count);
+        for (auto& unitBindings : g_boundTextures)
+        {
+            for (auto& binding : unitBindings)
+            {
+                if (binding.second != 0 &&
+                    std::find(textures, textures + count, binding.second) != textures + count)
+                {
+                    binding.second = 0;
+                }
+            }
+        }
     }
 
-    void APIENTRY FakeBindTexture(GLenum, GLuint)
+    void APIENTRY FakeActiveTexture(GLenum texture)
     {
+        g_activeTexture = texture;
+    }
+
+    void APIENTRY FakeBindTexture(GLenum target, GLuint texture)
+    {
+        g_boundTextures[g_activeTexture - GL_TEXTURE0][target] = texture;
     }
 
     void APIENTRY FakeTexImage2D(
-        GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum, const void*)
+        GLenum target, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum, const void*)
     {
+        g_allocatedTextures.push_back(g_boundTextures[g_activeTexture - GL_TEXTURE0][target]);
     }
 
     void APIENTRY FakeTexImage2DMultisample(
-        GLenum, GLsizei, GLenum, GLsizei, GLsizei, GLboolean)
+        GLenum target, GLsizei, GLenum, GLsizei, GLsizei, GLboolean)
     {
+        g_allocatedTextures.push_back(g_boundTextures[g_activeTexture - GL_TEXTURE0][target]);
+    }
+
+    void APIENTRY FakeGenerateMipmap(GLenum target)
+    {
+        g_mipmappedTextures.push_back(g_boundTextures[g_activeTexture - GL_TEXTURE0][target]);
     }
 
     void APIENTRY FakeTexParameteri(GLenum, GLenum, GLint)
@@ -177,9 +208,11 @@ namespace
         glad_glCheckFramebufferStatus = FakeCheckFramebufferStatus;
         glad_glGenTextures = FakeGenTextures;
         glad_glDeleteTextures = FakeDeleteTextures;
+        glad_glActiveTexture = FakeActiveTexture;
         glad_glBindTexture = FakeBindTexture;
         glad_glTexImage2D = FakeTexImage2D;
         glad_glTexImage2DMultisample = FakeTexImage2DMultisample;
+        glad_glGenerateMipmap = FakeGenerateMipmap;
         glad_glTexParameteri = FakeTexParameteri;
         glad_glFramebufferTexture2D = FakeFramebufferTexture2D;
         glad_glDrawBuffers = FakeDrawBuffers;
@@ -290,10 +323,22 @@ int main()
 
     InstallFakeOpenGL();
 
+    auto& stateManager = OpenGLStateManager::GetInstance();
+    constexpr GLuint sampledTexture = 71;
+    stateManager.BindTextureUnit(0, GL_TEXTURE_2D, sampledTexture);
+    stateManager.BindTextureUnit(3, GL_TEXTURE_2D, sampledTexture);
+
     OpenGLFramebuffer initializedFramebuffer(colorDepth);
     if (!initializedFramebuffer.Initialize())
     {
         return Fail("framebuffer did not initialize against the fake OpenGL backend");
+    }
+    stateManager.BindTextureUnit(3, GL_TEXTURE_2D, sampledTexture);
+    if (g_activeTexture != GL_TEXTURE3 ||
+        g_boundTextures[3][GL_TEXTURE_2D] != sampledTexture ||
+        g_boundTextures[0][GL_TEXTURE_2D] != sampledTexture)
+    {
+        return Fail("attachment creation left sampled texture bindings inconsistent with the cache");
     }
 
     const GLuint initialFramebuffer = initializedFramebuffer.GetFramebufferID();
@@ -303,6 +348,13 @@ int main()
     if (!initializedFramebuffer.Resize(800, 600))
     {
         return Fail("valid initialized framebuffer resize failed");
+    }
+    stateManager.BindTextureUnit(3, GL_TEXTURE_2D, sampledTexture);
+    if (g_activeTexture != GL_TEXTURE3 ||
+        g_boundTextures[3][GL_TEXTURE_2D] != sampledTexture ||
+        g_boundTextures[0][GL_TEXTURE_2D] != sampledTexture)
+    {
+        return Fail("attachment resize left sampled texture bindings inconsistent with the cache");
     }
     if (initializedFramebuffer.GetWidth() != 800 ||
         initializedFramebuffer.GetHeight() != 600)
@@ -326,12 +378,32 @@ int main()
     const GLuint stableColor = initializedFramebuffer.GetColorAttachmentTexture();
     const GLuint stableDepth = initializedFramebuffer.GetDepthAttachmentTexture();
 
+    initializedFramebuffer.GenerateMipmaps();
+    stateManager.BindTextureUnit(3, GL_TEXTURE_2D, sampledTexture);
+    if (g_mipmappedTextures.size() != 1 || g_mipmappedTextures.back() != stableColor ||
+        g_activeTexture != GL_TEXTURE3 ||
+        g_boundTextures[3][GL_TEXTURE_2D] != sampledTexture ||
+        g_boundTextures[0][GL_TEXTURE_2D] != sampledTexture)
+    {
+        return Fail("attachment mipmap generation used the wrong texture or left a stale sampled binding");
+    }
+
+    const std::size_t deletedBeforeFailure = g_deletedTextures.size();
     g_framebufferStatus = GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT;
     if (initializedFramebuffer.Resize(1024, 768))
     {
         return Fail("incomplete replacement framebuffer was accepted");
     }
     g_framebufferStatus = GL_FRAMEBUFFER_COMPLETE;
+    stateManager.BindTextureUnit(3, GL_TEXTURE_2D, sampledTexture);
+    if (g_deletedTextures.size() != deletedBeforeFailure + 2 ||
+        Contains(g_deletedTextures, stableColor) || Contains(g_deletedTextures, stableDepth) ||
+        g_activeTexture != GL_TEXTURE3 ||
+        g_boundTextures[3][GL_TEXTURE_2D] != sampledTexture ||
+        g_boundTextures[0][GL_TEXTURE_2D] != sampledTexture)
+    {
+        return Fail("failed resize did not release temporary textures or corrupted surviving sampled bindings");
+    }
 
     if (initializedFramebuffer.GetWidth() != 800 ||
         initializedFramebuffer.GetHeight() != 600 ||
@@ -340,6 +412,59 @@ int main()
         initializedFramebuffer.GetDepthAttachmentTexture() != stableDepth)
     {
         return Fail("failed framebuffer resize did not preserve the previous valid state");
+    }
+
+    {
+        const FramebufferSpec colorOnly = FramebufferUtils::CreateColorOnlySpec(32, 32);
+        OpenGLFramebuffer deletedFramebuffer(colorOnly);
+        if (!deletedFramebuffer.Initialize())
+        {
+            return Fail("deletion regression framebuffer did not initialize");
+        }
+        const GLuint deletedColor = deletedFramebuffer.GetColorAttachmentTexture();
+        stateManager.BindTextureUnit(1, GL_TEXTURE_2D, deletedColor);
+        stateManager.BindTextureUnit(5, GL_TEXTURE_2D, deletedColor);
+        deletedFramebuffer.Invalidate();
+
+        const GLuint nextTexture = g_nextTexture;
+        const std::size_t allocationsBeforeReuse = g_allocatedTextures.size();
+        g_nextTexture = deletedColor;
+        OpenGLFramebuffer reusedFramebuffer(colorOnly);
+        if (!reusedFramebuffer.Initialize() ||
+            g_allocatedTextures.size() != allocationsBeforeReuse + 1 ||
+            g_allocatedTextures.back() != deletedColor)
+        {
+            return Fail("a reused attachment texture name skipped its allocation binding after deletion");
+        }
+        g_nextTexture = nextTexture;
+        stateManager.BindTextureUnit(1, GL_TEXTURE_2D, deletedColor);
+        stateManager.BindTextureUnit(5, GL_TEXTURE_2D, deletedColor);
+        if (g_boundTextures[1][GL_TEXTURE_2D] != deletedColor ||
+            g_boundTextures[5][GL_TEXTURE_2D] != deletedColor ||
+            g_boundTextures[0][GL_TEXTURE_2D] != sampledTexture)
+        {
+            return Fail("attachment deletion left its reused name cached on another texture unit");
+        }
+    }
+
+    stateManager.BindTextureUnit(3, GL_TEXTURE_2D, sampledTexture);
+    constexpr GLuint sampledMultisampleTexture = 72;
+    stateManager.BindTextureUnit(3, GL_TEXTURE_2D_MULTISAMPLE, sampledMultisampleTexture);
+    OpenGLFramebuffer multisampledFramebuffer(
+        FramebufferUtils::CreateMultisampledSpec(32, 32, 4));
+    if (!multisampledFramebuffer.Initialize())
+    {
+        return Fail("multisampled framebuffer did not initialize");
+    }
+    stateManager.BindTextureUnit(3, GL_TEXTURE_2D_MULTISAMPLE, sampledMultisampleTexture);
+    const std::size_t mipmapsBeforeMultisample = g_mipmappedTextures.size();
+    multisampledFramebuffer.GenerateMipmaps();
+    if (g_mipmappedTextures.size() != mipmapsBeforeMultisample ||
+        g_activeTexture != GL_TEXTURE3 ||
+        g_boundTextures[3][GL_TEXTURE_2D] != sampledTexture ||
+        g_boundTextures[3][GL_TEXTURE_2D_MULTISAMPLE] != sampledMultisampleTexture)
+    {
+        return Fail("multisampled attachments corrupted a sampled target binding or attempted invalid mipmaps");
     }
 
     std::cout << "Framebuffer resize tests passed\n";

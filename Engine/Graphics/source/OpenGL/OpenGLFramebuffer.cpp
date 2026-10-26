@@ -262,6 +262,10 @@ namespace Pyramid
             glDeleteTextures(
                 static_cast<GLsizei>(m_colorAttachmentTextures.size()),
                 m_colorAttachmentTextures.data());
+            for (GLuint texture : m_colorAttachmentTextures)
+            {
+                OpenGLStateManager::GetInstance().ForgetTexture(texture);
+            }
             m_colorAttachmentTextures.clear();
         }
 
@@ -276,6 +280,7 @@ namespace Pyramid
         if (m_depthAttachmentTexture != 0)
         {
             glDeleteTextures(1, &m_depthAttachmentTexture);
+            OpenGLStateManager::GetInstance().ForgetTexture(m_depthAttachmentTexture);
             m_depthAttachmentTexture = 0;
         }
         if (m_depthAttachmentRenderbuffer != 0)
@@ -286,6 +291,7 @@ namespace Pyramid
         if (m_stencilAttachmentTexture != 0)
         {
             glDeleteTextures(1, &m_stencilAttachmentTexture);
+            OpenGLStateManager::GetInstance().ForgetTexture(m_stencilAttachmentTexture);
             m_stencilAttachmentTexture = 0;
         }
         if (m_stencilAttachmentRenderbuffer != 0)
@@ -296,6 +302,7 @@ namespace Pyramid
         if (m_depthStencilAttachmentTexture != 0)
         {
             glDeleteTextures(1, &m_depthStencilAttachmentTexture);
+            OpenGLStateManager::GetInstance().ForgetTexture(m_depthStencilAttachmentTexture);
             m_depthStencilAttachmentTexture = 0;
         }
         if (m_depthStencilAttachmentRenderbuffer != 0)
@@ -655,7 +662,8 @@ namespace Pyramid
 
         const bool multisampled = spec.multisampled && spec.samples > 1;
         const GLenum target = multisampled ? GL_TEXTURE_2D_MULTISAMPLE : GL_TEXTURE_2D;
-        glBindTexture(target, texture);
+        auto& stateManager = OpenGLStateManager::GetInstance();
+        stateManager.BindTexture(target, texture);
 
         if (multisampled)
         {
@@ -686,7 +694,7 @@ namespace Pyramid
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, static_cast<GLint>(spec.wrapT));
         }
 
-        glBindTexture(target, 0);
+        stateManager.BindTexture(target, 0);
         return texture;
     }
 
@@ -1184,10 +1192,17 @@ namespace Pyramid
             return;
         }
 
+        if (IsMultisampled())
+        {
+            PYRAMID_LOG_ERROR("Cannot generate mipmaps for a multisampled color attachment");
+            return;
+        }
+
         GLuint texture = m_colorAttachmentTextures[colorAttachment];
-        glBindTexture(GL_TEXTURE_2D, texture);
+        auto& stateManager = OpenGLStateManager::GetInstance();
+        stateManager.BindTexture(GL_TEXTURE_2D, texture);
         glGenerateMipmap(GL_TEXTURE_2D);
-        glBindTexture(GL_TEXTURE_2D, 0);
+        stateManager.BindTexture(GL_TEXTURE_2D, 0);
 
         PYRAMID_LOG_DEBUG("Generated mipmaps for color attachment ", colorAttachment);
     }

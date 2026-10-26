@@ -4,6 +4,19 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 
 ## [Unreleased]
 
+### Uncompressed texture format coverage
+
+- Implemented red-channel, half/full-float RGB/RGBA, depth, and packed depth-stencil uploads and whole-level updates through the existing OpenGL texture adapter, with explicit canonical CPU layouts and shared cache byte-size validation, and a 512 MiB limit per cached source texture.
+- Enabled the depth-target convenience factory, retained existing enum codes and RGB/RGBA cache identities, and extended immutable caching and residency estimates to every uncompressed format.
+- Added rejection of incompatible sRGB requests and reserved compressed/invalid formats before graphics allocation, checked transfer-size arithmetic, and allocated requested mip chains for initially empty textures.
+- Kept native format sampling/readback and visual acceptance pending; visual checks are deferred at the user's request.
+
+### Texture binding state coherence
+
+- Routed native texture upload, mutation, direct binding, and framebuffer attachment allocation through the shared OpenGL state cache so subsequent material bindings restore the intended texture on nonzero units.
+- Invalidated deleted texture IDs across cached units and targets, including reload replacement and failed attachment creation, while preserving unrelated bindings.
+- Resynchronized texture selection and default-state restoration after invalidation, including retained state-manager references; added regressions for upload, mipmaps, reload rollback, destruction, reused names, and framebuffer resizing.
+
 ### Runtime rendering and packaged assets
 
 - Fixed cached texture binding through materials and command buffers by resolving immutable texture wrappers at the OpenGL adapter while retaining native texture validation and state caching.

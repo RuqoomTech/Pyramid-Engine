@@ -1,4 +1,5 @@
 #include <Pyramid/Graphics/Texture/TextureResource.hpp>
+#include "TextureFormatInfo.hpp"
 
 #include <Pyramid/Graphics/GraphicsDevice.hpp>
 #include <Pyramid/Util/Image.hpp>
@@ -17,6 +18,7 @@ namespace Pyramid
 {
     namespace
     {
+        constexpr u64 kMaximumTextureSourceBytes = 512ULL * 1024ULL * 1024ULL;
         constexpr u64 kFnvPrime = 1099511628211ull;
         constexpr u64 kPrimaryOffset = 14695981039346656037ull;
         constexpr u64 kSecondaryOffset = 7809847782465536322ull;
@@ -97,21 +99,15 @@ namespace Pyramid
 
         bool ResolveBaseFormat(TextureFormat input, TextureFormat& output, u32& bytesPerPixel)
         {
-            switch (input)
+            const Detail::TextureFormatInfo info = Detail::GetTextureFormatInfo(input);
+            if (info.bytesPerPixel == 0)
             {
-            case TextureFormat::RGB8:
-            case TextureFormat::SRGB8:
-                output = TextureFormat::RGB8;
-                bytesPerPixel = 3;
-                return true;
-            case TextureFormat::RGBA8:
-            case TextureFormat::SRGBA8:
-                output = TextureFormat::RGBA8;
-                bytesPerPixel = 4;
-                return true;
-            default:
                 return false;
             }
+            output = input == TextureFormat::SRGB8 ? TextureFormat::RGB8
+                : input == TextureFormat::SRGBA8 ? TextureFormat::RGBA8 : input;
+            bytesPerPixel = info.bytesPerPixel;
+            return true;
         }
 
         bool CalculateByteSize(u32 width, u32 height, u32 bytesPerPixel, u64& result)
@@ -225,14 +221,11 @@ namespace Pyramid
                 return;
             }
             const std::size_t rowBytes = static_cast<std::size_t>(width) * channels;
-            std::vector<u8> row(rowBytes);
             for (u32 y = 0; y < height / 2; ++y)
             {
                 u8* top = pixels.data() + static_cast<std::size_t>(y) * rowBytes;
                 u8* bottom = pixels.data() + static_cast<std::size_t>(height - 1U - y) * rowBytes;
-                std::memcpy(row.data(), top, rowBytes);
-                std::memcpy(top, bottom, rowBytes);
-                std::memcpy(bottom, row.data(), rowBytes);
+                std::swap_ranges(top, top + rowBytes, bottom);
             }
         }
     }
@@ -282,7 +275,21 @@ namespace Pyramid
         u32 bytesPerPixel = 0;
         if (!ResolveBaseFormat(specification.texture.Format, baseFormat, bytesPerPixel))
         {
-            error = "Texture resource supports only RGB8/RGBA8 source pixels";
+            error = "Unsupported texture resource format " +
+                std::to_string(static_cast<u32>(specification.texture.Format)) +
+                ": None, compressed, and unknown formats cannot be cached";
+            return false;
+        }
+        if (specification.colorSpace != TextureColorSpace::Linear &&
+            specification.colorSpace != TextureColorSpace::SRGB)
+        {
+            error = "Texture resource color space is invalid";
+            return false;
+        }
+        if (specification.colorSpace == TextureColorSpace::SRGB &&
+            !Detail::GetTextureFormatInfo(baseFormat).srgbCapable)
+        {
+            error = "sRGB texture resources require RGB8/RGBA8 pixel formats";
             return false;
         }
         if (!IsSamplerStateValid(
@@ -308,9 +315,10 @@ namespace Pyramid
             error = "Texture resource requires complete tightly packed pixel data";
             return false;
         }
-        if (expectedSize > static_cast<u64>(std::numeric_limits<std::size_t>::max()))
+        if (expectedSize > kMaximumTextureSourceBytes ||
+            expectedSize > static_cast<u64>(prepared.pixels.max_size()))
         {
-            error = "Texture resource pixel data exceeds addressable memory";
+            error = "Texture resource pixel data exceeds the 512 MiB source limit or buffer capacity";
             return false;
         }
 
@@ -366,6 +374,12 @@ namespace Pyramid
             error = "Texture file path is empty";
             return false;
         }
+        if (specification.colorSpace != TextureColorSpace::Linear &&
+            specification.colorSpace != TextureColorSpace::SRGB)
+        {
+            error = "Texture file color space is invalid";
+            return false;
+        }
         if (!IsSamplerStateValid(specification.borderColor, specification.maxAnisotropy))
         {
             error = "Texture file sampler state is invalid";
@@ -399,10 +413,11 @@ namespace Pyramid
         const u32 channels = static_cast<u32>(image.Channels);
         u64 byteSize = 0;
         if (!CalculateByteSize(width, height, channels, byteSize) ||
-            byteSize > static_cast<u64>(std::numeric_limits<std::size_t>::max()))
+            byteSize > kMaximumTextureSourceBytes ||
+            byteSize > static_cast<u64>(prepared.pixels.max_size()))
         {
             freeImage();
-            error = "Decoded texture byte size is invalid: " + specification.filepath;
+            error = "Decoded texture byte size is invalid or exceeds the 512 MiB source limit: " + specification.filepath;
             return false;
         }
 

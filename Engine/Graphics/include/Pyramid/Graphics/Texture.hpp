@@ -9,31 +9,34 @@ namespace Pyramid {
 enum class TextureFormat
 {
     None = 0,
-    // Standard 8-bit formats
-    RGB8,
-    RGBA8,
-    SRGB8,
-    SRGBA8,
-    // High dynamic range formats
-    RGB16F,
-    RGBA16F,
-    RGB32F,
-    RGBA32F,
-    // Depth/stencil formats
-    Depth16,
-    Depth24,
-    Depth32F,
-    Depth24Stencil8,
-    Depth32FStencil8,
-    // Compressed formats
-    BC1_RGB,     // DXT1
-    BC1_RGBA,    // DXT1 with alpha
-    BC3_RGBA,    // DXT5
-    BC7_RGBA,    // High quality
-    // Single channel formats
-    R8,
-    R16F,
-    R32F
+    // Values participate in resource content identity; keep existing codes stable.
+    // RGB/RGBA component order, tightly packed unsigned-byte input.
+    RGB8 = 1,
+    RGBA8 = 2,
+    SRGB8 = 3,
+    SRGBA8 = 4,
+    // Tightly packed IEEE binary16 bit patterns (u16) or binary32 (f32) input.
+    RGB16F = 5,
+    RGBA16F = 6,
+    RGB32F = 7,
+    RGBA32F = 8,
+    // Depth16: normalized u16; Depth24: normalized u32; Depth32F: f32.
+    Depth16 = 9,
+    Depth24 = 10,
+    Depth32F = 11,
+    // Packed u32: high 24 bits depth, low 8 bits stencil.
+    Depth24Stencil8 = 12,
+    // Per pixel: f32 depth followed by u32 (low 8 bits stencil, high 24 ignored).
+    Depth32FStencil8 = 13,
+    // Reserved, explicitly unsupported by the current 2D texture upload API.
+    BC1_RGB = 14,
+    BC1_RGBA = 15,
+    BC3_RGBA = 16,
+    BC7_RGBA = 17,
+    // Red-channel sampling; the engine does not add grayscale swizzling.
+    R8 = 18,
+    R16F = 19,
+    R32F = 20
 };
 
 enum class TextureFilter
@@ -65,8 +68,8 @@ struct TextureSpecification
     TextureFilter MagFilter = TextureFilter::Linear;
     TextureWrap WrapS = TextureWrap::Repeat;
     TextureWrap WrapT = TextureWrap::Repeat;
-    bool GenerateMips = true;
-    bool SRGB = false;
+    bool GenerateMips = true; // Allocate the full chain, also for null initial data.
+    bool SRGB = false; // Direct textures: 8-bit RGB/RGBA family only. Caches use their colorSpace field.
     f32 BorderColor[4] = {0.0f, 0.0f, 0.0f, 1.0f}; // For ClampToBorder
     f32 MaxAnisotropy = 1.0f; // Anisotropic filtering level
     bool FlipY = false; // For texture coordinate system differences
@@ -89,7 +92,8 @@ public:
     virtual bool IsLoaded() const { return true; }
     virtual std::string GetLastError() const { return ""; }
 
-    // Dynamic texture updates (optional - can have default implementations)
+    // Whole-level updates use the TextureFormat encoding and require an exact byte count.
+    // Other dynamic operations remain optional.
     virtual void SetData(const void*, u32) {}
     virtual void SetSubData(const void*, u32, u32, u32, u32) {}
     
@@ -103,13 +107,16 @@ public:
 class ITexture2D : public ITexture
 {
 public:
-    // Factory methods
+    // Creation failures return an unloaded object with GetLastError(). Data is
+    // tightly packed in the TextureFormat encoding; raw pointers carry no length.
+    // The caller must supply Width * Height complete pixels when data is non-null.
     static std::shared_ptr<ITexture2D> Create(const TextureSpecification& specification, const void* data = nullptr);
     static std::shared_ptr<ITexture2D> Create(const std::string& filepath, bool srgb = false, bool generateMips = true);
     static std::shared_ptr<ITexture2D> Create(u32 width, u32 height, TextureFormat format = TextureFormat::RGBA8);
     
-    // Utility methods for common formats
+    // Allocate storage only; renderability is validated when attached to a framebuffer.
     static std::shared_ptr<ITexture2D> CreateRenderTarget(u32 width, u32 height, TextureFormat format = TextureFormat::RGBA8);
+    // Depth/depth-stencil only, single level with nearest filtering; invalid formats return nullptr.
     static std::shared_ptr<ITexture2D> CreateDepthTarget(u32 width, u32 height, TextureFormat format = TextureFormat::Depth24Stencil8);
     static std::shared_ptr<ITexture2D> CreateFromColor(u32 width, u32 height, const Color& color);
     

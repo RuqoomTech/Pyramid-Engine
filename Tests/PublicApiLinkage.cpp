@@ -12,6 +12,7 @@
 #include <Pyramid/Graphics/Camera.hpp>
 #include <Pyramid/Graphics/CameraController.hpp>
 #include <Pyramid/Graphics/OpenGL/OpenGLFramebuffer.hpp>
+#include <Pyramid/Graphics/OpenGL/OpenGLStateManager.hpp>
 #include <Pyramid/Graphics/Geometry/MeshBounds.hpp>
 #include <Pyramid/Graphics/Geometry/Mesh.hpp>
 #include <Pyramid/Graphics/Geometry/MeshCache.hpp>
@@ -57,6 +58,8 @@ namespace
         g_getExecutableDirectory = &Pyramid::Platform::GetExecutableDirectory;
     volatile decltype(&Pyramid::Platform::ResolveRuntimePath)
         g_resolveRuntimePath = &Pyramid::Platform::ResolveRuntimePath;
+    volatile decltype(&Pyramid::OpenGLStateManager::ForgetTexture) g_forgetTexture =
+        &Pyramid::OpenGLStateManager::ForgetTexture;
 
     volatile decltype(&Pyramid::InputActionSystem::CreateContext) g_createInputContext =
         &Pyramid::InputActionSystem::CreateContext;
@@ -781,6 +784,7 @@ int main()
                    g_setCommandUniformMat4 &&
                    g_drawMesh &&
                    g_getDrawStats &&
+                   g_forgetTexture &&
                    g_resizeFramebuffer &&
                    g_resizeRenderTarget &&
                    g_resizeRenderSystem &&

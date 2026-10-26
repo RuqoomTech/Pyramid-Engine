@@ -516,6 +516,8 @@ spec.GenerateMips = false;
 auto texture = Pyramid::ITexture2D::Create(spec, pixels);
 auto blank = Pyramid::ITexture2D::Create(512, 512);
 auto target = Pyramid::ITexture2D::CreateRenderTarget(1280, 720);
+auto depth = Pyramid::ITexture2D::CreateDepthTarget(
+    1280, 720, Pyramid::TextureFormat::Depth24Stencil8);
 auto white = Pyramid::ITexture2D::CreateFromColor(1, 1, Pyramid::Color::White);
 ```
 
@@ -534,7 +536,25 @@ auto albedo = textureCache.GetOrCreate(fileSpec);
 
 `TextureCache` fingerprints exact decoded pixels plus dimensions, format, mip policy, sampler state, border color, anisotropy request, and explicit linear/sRGB intent. Identical memory or file requests share one GPU upload across aliases. Reusing one stable ID for different resident content fails. `Reload()` is transactional for caller-defined file aliases: a replacement is decoded and uploaded before the alias changes; failure preserves the previous resource. `Evict()`, `CollectUnused()`, `Clear()`, and `GetStats()` provide explicit residency control. Cached `TextureResource` objects are immutable; reacquire the stable alias after a successful reload. Destroy the cache before the graphics device/context.
 
-The direct `ITexture2D` path remains available for intentionally uncached or mutable textures. RGB8/RGBA8 files support JPEG/PNG/TGA/BMP. `IsLoaded()` and `GetLastError()` expose state, RGB rows use safe unpack alignment, sRGB uploads select sRGB internal formats, and mipmapped filters are mapped completely. Cached file specifications can flip decoded rows before upload; direct `TextureSpecification::FlipY` and anisotropic filtering are not yet applied consistently by every path. `CreateDepthTarget` returns `nullptr`; use `OpenGLFramebuffer` for depth attachments.
+The direct `ITexture2D` path remains available for intentionally uncached or mutable textures. Direct and cached memory textures support all uncompressed `TextureFormat` values. The source buffer is tightly packed in native byte order, with no row padding:
+
+| Formats | CPU representation per pixel | Bytes per pixel |
+| --- | --- | --- |
+| `RGB8`, `SRGB8`; `RGBA8`, `SRGBA8` | RGB or RGBA unsigned bytes | 3; 4 |
+| `R8` | One unsigned byte; sampled as red without grayscale swizzling | 1 |
+| `R16F`; `RGB16F`; `RGBA16F` | 1, 3, or 4 IEEE binary16 bit patterns in `u16` values | 2; 6; 8 |
+| `R32F`; `RGB32F`; `RGBA32F` | 1, 3, or 4 `f32` values | 4; 12; 16 |
+| `Depth16`; `Depth24`; `Depth32F` | Normalized `u16`; normalized `u32`; `f32` | 2; 4; 4 |
+| `Depth24Stencil8` | Packed `u32`: depth in the high 24 bits, stencil in the low 8 | 4 |
+| `Depth32FStencil8` | `f32` depth followed by `u32` whose low 8 bits hold stencil; high 24 bits ignored | 8 |
+
+In particular, `16F` inputs are half-float bits, not `f32` buffers, and `Depth24` requires four transfer bytes, not three. The raw-pointer constructor cannot verify buffer length: callers must supply `Width * Height` complete pixels. `SetData()` requires exactly that byte count; cached memory creation additionally checks its explicit `pixelDataSize`, addressability, and a 512 MiB base-level source limit before copying or uploading. The same limit applies to the cache copy of decoded files; individual file decoders have separate validation limits. Content identity covers the exact input bytes, without floating-point canonicalization. Existing numeric format codes and valid RGB/RGBA content identities are preserved. Residency statistics are estimates, using four bytes per `Depth24` pixel; driver allocation can differ.
+
+For direct textures, `SRGB=true` or an explicit `SRGB8`/`SRGBA8` format selects sRGB storage. Other formats reject the sRGB flag. Cached resources preserve their existing contract: `TextureResourceSpecification::colorSpace` is authoritative, normalizing the embedded `texture.SRGB` flag and sRGB enum aliases; request `TextureColorSpace::SRGB` explicitly. Cached sRGB is accepted only for RGB/RGBA 8-bit formats. `BC1_RGB`, `BC1_RGBA`, `BC3_RGBA`, and `BC7_RGBA` retain their numeric codes as reserved, unsupported formats. They, `None`, and unknown enum values fail with diagnostics before graphics allocation.
+
+`ITexture2D::Create()` failures produce an unloaded object with `GetLastError()`. `CreateDepthTarget()` accepts only depth/depth-stencil formats and defaults to one mip level, nearest filtering, and clamp-to-edge; non-depth formats return `nullptr`. General specifications may generate mipmaps for any supported format. Requested mip storage is also created for null initial data, whose pixels remain undefined until written. Depth/stencil sampling exposes depth in the OpenGL 3.3 baseline; stencil sampling is not implemented, and generated mip values do not promise a min/max depth hierarchy or stencil preservation. `CreateRenderTarget()` allocates texture storage; framebuffer attachment compatibility and completeness remain separate checks.
+
+File decoding still produces RGB8/RGBA8 pixels from JPEG/PNG/TGA/BMP; the new memory formats do not add HDR/depth file codecs. `IsLoaded()` and `GetLastError()` expose state, uploads restore unpack alignment, and mipmapped filters are mapped completely. Cached file specifications can flip decoded rows before upload; direct `TextureSpecification::FlipY` and anisotropic filtering are not yet applied consistently by every path.
 
 ### Materials
 

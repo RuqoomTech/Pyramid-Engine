@@ -154,6 +154,10 @@ namespace Pyramid
 
     void OpenGLStateManager::ActiveTexture(GLenum texture)
     {
+        if (!m_initialized)
+        {
+            InitializeState();
+        }
         if (m_activeTexture != texture)
         {
             glActiveTexture(texture);
@@ -164,6 +168,10 @@ namespace Pyramid
 
     void OpenGLStateManager::BindTexture(GLenum target, GLuint texture)
     {
+        if (!m_initialized)
+        {
+            InitializeState();
+        }
         u32 unit = m_activeTexture - GL_TEXTURE0;
         if (unit < m_runtimeTextureUnitCount && unit < MAX_TEXTURE_UNITS)
         {
@@ -186,6 +194,10 @@ namespace Pyramid
 
     void OpenGLStateManager::BindTextureUnit(u32 unit, GLenum target, GLuint texture)
     {
+        if (!m_initialized)
+        {
+            InitializeState();
+        }
         if (unit < m_runtimeTextureUnitCount && unit < MAX_TEXTURE_UNITS)
         {
             ActiveTexture(GL_TEXTURE0 + unit);
@@ -195,6 +207,28 @@ namespace Pyramid
 
         PYRAMID_LOG_WARN("OpenGLStateManager::BindTextureUnit ignored invalid unit ", unit,
                          " (max cached units: ", m_runtimeTextureUnitCount, ")");
+    }
+
+    void OpenGLStateManager::ForgetTexture(GLuint texture)
+    {
+        if (!texture)
+        {
+            return;
+        }
+        for (auto& unitBindings : m_boundTextures)
+        {
+            for (auto binding = unitBindings.begin(); binding != unitBindings.end();)
+            {
+                if (binding->second == texture)
+                {
+                    binding = unitBindings.erase(binding);
+                }
+                else
+                {
+                    ++binding;
+                }
+            }
+        }
     }
 
     void OpenGLStateManager::BindFramebuffer(GLenum target, GLuint framebuffer)
@@ -519,6 +553,10 @@ namespace Pyramid
 
     void OpenGLStateManager::ResetToDefaults()
     {
+        if (!m_initialized)
+        {
+            InitializeState();
+        }
         // Reset to OpenGL default state
         UseProgram(0);
         BindVertexArray(0);

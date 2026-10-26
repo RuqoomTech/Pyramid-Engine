@@ -1,4 +1,6 @@
 #include "Pyramid/Graphics/OpenGL/OpenGLTexture.hpp"
+#include <Pyramid/Graphics/OpenGL/OpenGLStateManager.hpp>
+#include "../Texture/TextureFormatInfo.hpp"
 
 #include "OpenGLDiagnostics.hpp"
 
@@ -14,6 +16,19 @@ namespace Pyramid
 {
     namespace
     {
+        std::string UnsupportedFormatLabel(TextureFormat format)
+        {
+            switch (format)
+            {
+            case TextureFormat::None: return "None";
+            case TextureFormat::BC1_RGB: return "BC1_RGB";
+            case TextureFormat::BC1_RGBA: return "BC1_RGBA";
+            case TextureFormat::BC3_RGBA: return "BC3_RGBA";
+            case TextureFormat::BC7_RGBA: return "BC7_RGBA";
+            default: return std::to_string(static_cast<u32>(format));
+            }
+        }
+
         bool IsValidExtent(u32 width, u32 height)
         {
             return width > 0 && height > 0 &&
@@ -49,14 +64,24 @@ namespace Pyramid
             return;
         }
 
+        const auto formatInfo = Detail::GetTextureFormatInfo(specification.Format);
+        if (formatInfo.bytesPerPixel != 0 && specification.SRGB && !formatInfo.srgbCapable)
+        {
+            SetError("sRGB requires an 8-bit RGB/RGBA texture format; got " +
+                     std::to_string(static_cast<u32>(specification.Format)));
+            return;
+        }
+
         if (!ResolveFormats(
                 specification.Format,
                 specification.SRGB,
                 m_InternalFormat,
                 m_DataFormat,
+                m_DataType,
                 m_BytesPerPixel))
         {
-            SetError("Unsupported OpenGLTexture2D format");
+            SetError("Unsupported OpenGLTexture2D format " + UnsupportedFormatLabel(specification.Format) +
+                     "; None, compressed BC, and unknown formats are not implemented");
             return;
         }
 
@@ -68,7 +93,7 @@ namespace Pyramid
 
         GLuint texture = 0;
         std::string error;
-        if (!CreateTextureObject(normalized, m_InternalFormat, m_DataFormat, data, texture, error))
+        if (!CreateTextureObject(normalized, m_InternalFormat, m_DataFormat, m_DataType, data, texture, error))
         {
             SetError(error);
             return;
@@ -89,6 +114,7 @@ namespace Pyramid
         if (m_RendererID)
         {
             glDeleteTextures(1, &m_RendererID);
+            OpenGLStateManager::GetInstance().ForgetTexture(m_RendererID);
         }
     }
 
@@ -132,8 +158,9 @@ namespace Pyramid
 
         GLenum internalFormat = GL_RGBA8;
         GLenum dataFormat = GL_RGBA;
+        GLenum dataType = GL_UNSIGNED_BYTE;
         u32 bytesPerPixel = 0;
-        if (!ResolveFormats(specification.Format, srgb, internalFormat, dataFormat, bytesPerPixel))
+        if (!ResolveFormats(specification.Format, srgb, internalFormat, dataFormat, dataType, bytesPerPixel))
         {
             Util::Image::Free(image.Data);
             SetError("Unsupported decoded texture format for " + filepath);
@@ -146,6 +173,7 @@ namespace Pyramid
             specification,
             internalFormat,
             dataFormat,
+            dataType,
             image.Data,
             replacement,
             error);
@@ -163,6 +191,7 @@ namespace Pyramid
         m_Filepath = filepath;
         m_InternalFormat = internalFormat;
         m_DataFormat = dataFormat;
+        m_DataType = dataType;
         m_BytesPerPixel = bytesPerPixel;
         m_IsLoaded = true;
         m_LastError.clear();
@@ -170,6 +199,7 @@ namespace Pyramid
         if (previous)
         {
             glDeleteTextures(1, &previous);
+            OpenGLStateManager::GetInstance().ForgetTexture(previous);
         }
 
         PYRAMID_LOG_INFO(
@@ -209,7 +239,8 @@ namespace Pyramid
         glGetIntegerv(GL_UNPACK_ALIGNMENT, &previousAlignment);
         OpenGLDiagnostics::ClearErrors();
 
-        glBindTexture(GL_TEXTURE_2D, m_RendererID);
+        auto& state = OpenGLStateManager::GetInstance();
+        state.BindTexture(GL_TEXTURE_2D, m_RendererID);
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
         glTexSubImage2D(
             GL_TEXTURE_2D,
@@ -219,7 +250,7 @@ namespace Pyramid
             static_cast<GLsizei>(m_Specification.Width),
             static_cast<GLsizei>(m_Specification.Height),
             m_DataFormat,
-            GL_UNSIGNED_BYTE,
+            m_DataType,
             data);
 
         if (m_Specification.GenerateMips)
@@ -228,7 +259,7 @@ namespace Pyramid
         }
 
         glPixelStorei(GL_UNPACK_ALIGNMENT, previousAlignment);
-        glBindTexture(GL_TEXTURE_2D, 0);
+        state.BindTexture(GL_TEXTURE_2D, 0);
 
         std::string error;
         if (!OpenGLDiagnostics::CheckError("OpenGLTexture2D::SetData", &error, false))
@@ -249,9 +280,10 @@ namespace Pyramid
         }
 
         OpenGLDiagnostics::ClearErrors();
-        glBindTexture(GL_TEXTURE_2D, m_RendererID);
+        auto& state = OpenGLStateManager::GetInstance();
+        state.BindTexture(GL_TEXTURE_2D, m_RendererID);
         glGenerateMipmap(GL_TEXTURE_2D);
-        glBindTexture(GL_TEXTURE_2D, 0);
+        state.BindTexture(GL_TEXTURE_2D, 0);
 
         std::string error;
         if (!OpenGLDiagnostics::CheckError("OpenGLTexture2D::GenerateMipmaps", &error, false))
@@ -277,14 +309,12 @@ namespace Pyramid
 
     void OpenGLTexture2D::Bind(u32 slot) const
     {
-        glActiveTexture(GL_TEXTURE0 + slot);
-        glBindTexture(GL_TEXTURE_2D, m_RendererID);
+        OpenGLStateManager::GetInstance().BindTextureUnit(slot, GL_TEXTURE_2D, m_RendererID);
     }
 
     void OpenGLTexture2D::Unbind(u32 slot) const
     {
-        glActiveTexture(GL_TEXTURE0 + slot);
-        glBindTexture(GL_TEXTURE_2D, 0);
+        OpenGLStateManager::GetInstance().BindTextureUnit(slot, GL_TEXTURE_2D, 0);
     }
 
     bool OpenGLTexture2D::ResolveFormats(
@@ -292,25 +322,91 @@ namespace Pyramid
         bool srgb,
         GLenum& internalFormat,
         GLenum& dataFormat,
+        GLenum& dataType,
         u32& bytesPerPixel)
     {
+        const auto info = Detail::GetTextureFormatInfo(format);
+        bytesPerPixel = info.bytesPerPixel;
+        if (bytesPerPixel == 0 || (srgb && !info.srgbCapable))
+        {
+            return false;
+        }
+        dataType = GL_UNSIGNED_BYTE;
         switch (format)
         {
         case TextureFormat::RGB8:
         case TextureFormat::SRGB8:
             internalFormat = (srgb || format == TextureFormat::SRGB8) ? GL_SRGB8 : GL_RGB8;
             dataFormat = GL_RGB;
-            bytesPerPixel = 3;
-            return true;
+            break;
         case TextureFormat::RGBA8:
         case TextureFormat::SRGBA8:
             internalFormat = (srgb || format == TextureFormat::SRGBA8) ? GL_SRGB8_ALPHA8 : GL_RGBA8;
             dataFormat = GL_RGBA;
-            bytesPerPixel = 4;
-            return true;
+            break;
+        case TextureFormat::R8:
+            internalFormat = GL_R8;
+            dataFormat = GL_RED;
+            break;
+        case TextureFormat::R16F:
+            internalFormat = GL_R16F;
+            dataFormat = GL_RED;
+            dataType = GL_HALF_FLOAT;
+            break;
+        case TextureFormat::RGB16F:
+            internalFormat = GL_RGB16F;
+            dataFormat = GL_RGB;
+            dataType = GL_HALF_FLOAT;
+            break;
+        case TextureFormat::RGBA16F:
+            internalFormat = GL_RGBA16F;
+            dataFormat = GL_RGBA;
+            dataType = GL_HALF_FLOAT;
+            break;
+        case TextureFormat::R32F:
+            internalFormat = GL_R32F;
+            dataFormat = GL_RED;
+            dataType = GL_FLOAT;
+            break;
+        case TextureFormat::RGB32F:
+            internalFormat = GL_RGB32F;
+            dataFormat = GL_RGB;
+            dataType = GL_FLOAT;
+            break;
+        case TextureFormat::RGBA32F:
+            internalFormat = GL_RGBA32F;
+            dataFormat = GL_RGBA;
+            dataType = GL_FLOAT;
+            break;
+        case TextureFormat::Depth16:
+            internalFormat = GL_DEPTH_COMPONENT16;
+            dataFormat = GL_DEPTH_COMPONENT;
+            dataType = GL_UNSIGNED_SHORT;
+            break;
+        case TextureFormat::Depth24:
+            internalFormat = GL_DEPTH_COMPONENT24;
+            dataFormat = GL_DEPTH_COMPONENT;
+            dataType = GL_UNSIGNED_INT;
+            break;
+        case TextureFormat::Depth32F:
+            internalFormat = GL_DEPTH_COMPONENT32F;
+            dataFormat = GL_DEPTH_COMPONENT;
+            dataType = GL_FLOAT;
+            break;
+        case TextureFormat::Depth24Stencil8:
+            internalFormat = GL_DEPTH24_STENCIL8;
+            dataFormat = GL_DEPTH_STENCIL;
+            dataType = GL_UNSIGNED_INT_24_8;
+            break;
+        case TextureFormat::Depth32FStencil8:
+            internalFormat = GL_DEPTH32F_STENCIL8;
+            dataFormat = GL_DEPTH_STENCIL;
+            dataType = GL_FLOAT_32_UNSIGNED_INT_24_8_REV;
+            break;
         default:
             return false;
         }
+        return true;
     }
 
     GLenum OpenGLTexture2D::ToGLMinFilter(TextureFilter filter, bool hasMipmaps)
@@ -385,6 +481,7 @@ namespace Pyramid
         const TextureSpecification& specification,
         GLenum internalFormat,
         GLenum dataFormat,
+        GLenum dataType,
         const void* data,
         GLuint& texture,
         std::string& error) const
@@ -392,9 +489,12 @@ namespace Pyramid
         texture = 0;
         error.clear();
 
-        if (!IsValidExtent(specification.Width, specification.Height))
+        std::size_t byteSize = 0;
+        if (!CalculateByteSize(specification.Width, specification.Height,
+                               Detail::GetTextureFormatInfo(specification.Format).bytesPerPixel,
+                               byteSize))
         {
-            error = "Texture dimensions are invalid";
+            error = "Texture dimensions or transfer byte size are invalid or overflow addressable memory";
             return false;
         }
 
@@ -409,7 +509,8 @@ namespace Pyramid
             return false;
         }
 
-        glBindTexture(GL_TEXTURE_2D, texture);
+        auto& state = OpenGLStateManager::GetInstance();
+        state.BindTexture(GL_TEXTURE_2D, texture);
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
         glTexImage2D(
             GL_TEXTURE_2D,
@@ -419,22 +520,23 @@ namespace Pyramid
             static_cast<GLsizei>(specification.Height),
             0,
             dataFormat,
-            GL_UNSIGNED_BYTE,
+            dataType,
             data);
 
         ApplyParameters(specification);
 
-        if (specification.GenerateMips && data)
+        if (specification.GenerateMips)
         {
             glGenerateMipmap(GL_TEXTURE_2D);
         }
 
         glPixelStorei(GL_UNPACK_ALIGNMENT, previousAlignment);
-        glBindTexture(GL_TEXTURE_2D, 0);
+        state.BindTexture(GL_TEXTURE_2D, 0);
 
         if (!OpenGLDiagnostics::CheckError("OpenGLTexture2D::CreateTextureObject", &error, false))
         {
             glDeleteTextures(1, &texture);
+            state.ForgetTexture(texture);
             texture = 0;
             return false;
         }

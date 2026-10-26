@@ -15,14 +15,33 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <vector>
 
 namespace
 {
     GLuint g_nextTexture = 10;
+    GLuint g_forcedNextTexture = 0;
+    GLenum g_pendingError = GL_NO_ERROR;
+    bool g_failNextUpload = false;
+    GLuint g_lastUploadTexture = 0;
+    GLuint g_lastSubImageTexture = 0;
+    GLuint g_lastMipmapTexture = 0;
     GLenum g_lastInternalFormat = 0;
     GLenum g_lastDataFormat = 0;
+    GLenum g_lastUploadType = 0;
+    GLsizei g_lastUploadWidth = 0;
+    GLsizei g_lastUploadHeight = 0;
+    const void* g_lastUploadData = nullptr;
+    GLenum g_lastUpdateFormat = 0;
+    GLenum g_lastUpdateType = 0;
+    const void* g_lastUpdateData = nullptr;
+    GLint g_lastMagFilter = 0;
+    GLint g_lastWrapS = 0;
+    GLint g_lastWrapT = 0;
+    GLint g_unpackAlignment = 4;
+    int g_generatedTextureCount = 0;
     GLint g_lastMinFilter = 0;
     int g_generateMipmapCalls = 0;
     int g_subImageCalls = 0;
@@ -41,7 +60,9 @@ namespace
 
     GLenum APIENTRY FakeGetError()
     {
-        return GL_NO_ERROR;
+        const GLenum error = g_pendingError;
+        g_pendingError = GL_NO_ERROR;
+        return error;
     }
 
     void APIENTRY FakeGetIntegerv(GLenum name, GLint* value)
@@ -52,7 +73,7 @@ namespace
         }
         switch (name)
         {
-        case GL_UNPACK_ALIGNMENT: *value = 4; break;
+        case GL_UNPACK_ALIGNMENT: *value = g_unpackAlignment; break;
         case GL_ACTIVE_TEXTURE: *value = static_cast<GLint>(g_activeTexture); break;
         case GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS: *value = 32; break;
         case GL_DEPTH_FUNC: *value = GL_LESS; break;
@@ -93,15 +114,24 @@ namespace
 
     void APIENTRY FakeGenTextures(GLsizei count, GLuint* textures)
     {
+        g_generatedTextureCount += count;
         for (GLsizei index = 0; index < count; ++index)
         {
-            textures[index] = g_nextTexture++;
+            textures[index] = g_forcedNextTexture ? g_forcedNextTexture : g_nextTexture++;
+            g_forcedNextTexture = 0;
         }
     }
 
     void APIENTRY FakeDeleteTextures(GLsizei count, const GLuint* textures)
     {
         g_deletedTextures.insert(g_deletedTextures.end(), textures, textures + count);
+        for (auto& boundTexture : g_boundTextures)
+        {
+            if (std::find(textures, textures + count, boundTexture) != textures + count)
+            {
+                boundTexture = 0;
+            }
+        }
     }
 
     void APIENTRY FakeBindTexture(GLenum target, GLuint texture)
@@ -120,6 +150,7 @@ namespace
         if (name == GL_UNPACK_ALIGNMENT)
         {
             g_unpackAlignments.push_back(value);
+            g_unpackAlignment = value;
         }
     }
 
@@ -127,15 +158,25 @@ namespace
         GLenum,
         GLint,
         GLint internalFormat,
-        GLsizei,
-        GLsizei,
+        GLsizei width,
+        GLsizei height,
         GLint,
         GLenum dataFormat,
-        GLenum,
-        const void*)
+        GLenum type,
+        const void* data)
     {
         g_lastInternalFormat = static_cast<GLenum>(internalFormat);
         g_lastDataFormat = dataFormat;
+        g_lastUploadType = type;
+        g_lastUploadWidth = width;
+        g_lastUploadHeight = height;
+        g_lastUploadData = data;
+        g_lastUploadTexture = g_boundTextures[g_activeTexture - GL_TEXTURE0];
+        if (g_failNextUpload)
+        {
+            g_pendingError = GL_OUT_OF_MEMORY;
+            g_failNextUpload = false;
+        }
     }
 
     void APIENTRY FakeTexSubImage2D(
@@ -145,18 +186,26 @@ namespace
         GLint,
         GLsizei,
         GLsizei,
-        GLenum,
-        GLenum,
-        const void*)
+        GLenum format,
+        GLenum type,
+        const void* data)
     {
         ++g_subImageCalls;
+        g_lastUpdateFormat = format;
+        g_lastUpdateType = type;
+        g_lastUpdateData = data;
+        g_lastSubImageTexture = g_boundTextures[g_activeTexture - GL_TEXTURE0];
     }
 
     void APIENTRY FakeTexParameteri(GLenum, GLenum name, GLint value)
     {
-        if (name == GL_TEXTURE_MIN_FILTER)
+        switch (name)
         {
-            g_lastMinFilter = value;
+        case GL_TEXTURE_MIN_FILTER: g_lastMinFilter = value; break;
+        case GL_TEXTURE_MAG_FILTER: g_lastMagFilter = value; break;
+        case GL_TEXTURE_WRAP_S: g_lastWrapS = value; break;
+        case GL_TEXTURE_WRAP_T: g_lastWrapT = value; break;
+        default: break;
         }
     }
 
@@ -167,6 +216,7 @@ namespace
     void APIENTRY FakeGenerateMipmap(GLenum)
     {
         ++g_generateMipmapCalls;
+        g_lastMipmapTexture = g_boundTextures[g_activeTexture - GL_TEXTURE0];
     }
 
     void APIENTRY FakeActiveTexture(GLenum texture)
@@ -351,6 +401,425 @@ namespace
         }
         return EXIT_SUCCESS;
     }
+
+    int TestTextureStateCoherence()
+    {
+        using namespace Pyramid;
+
+        OpenGLDevice device(nullptr);
+        TextureSpecification specification;
+        specification.GenerateMips = false;
+        const std::array<u8, 4> pixel = {63, 127, 191, 255};
+        auto anchor = device.CreateTexture2D(specification, pixel.data());
+        auto unaffected = device.CreateTexture2D(specification, pixel.data());
+        if (!anchor || !anchor->IsLoaded() || !unaffected || !unaffected->IsLoaded())
+        {
+            return Fail("texture-state anchor setup failed");
+        }
+        auto& state = OpenGLStateManager::GetInstance();
+        state.InvalidateState();
+        device.BindTexture(unaffected.get(), 5);
+        device.BindTexture(anchor.get(), 2);
+        auto uploaded = device.CreateTexture2D(specification, pixel.data());
+        if (!uploaded || !uploaded->IsLoaded() || g_activeTexture != GL_TEXTURE2 ||
+            g_boundTextures[2] != 0 || g_boundTextures[5] != unaffected->GetRendererID())
+        {
+            return Fail("texture upload changed the active selector, untouched unit, or final unbinding");
+        }
+        device.BindTexture(anchor.get(), 2);
+        if (g_boundTextures[2] != anchor->GetRendererID())
+        {
+            return Fail("binding cache skipped restoring a texture after upload on a nonzero unit");
+        }
+
+        uploaded->SetData(pixel.data(), static_cast<u32>(pixel.size()));
+        if (!uploaded->GetLastError().empty() ||
+            g_lastSubImageTexture != uploaded->GetRendererID() ||
+            g_activeTexture != GL_TEXTURE2 || g_boundTextures[2] != 0)
+        {
+            return Fail("SetData updated the wrong texture or changed its binding side effects");
+        }
+        device.BindTexture(anchor.get(), 2);
+        if (g_boundTextures[2] != anchor->GetRendererID())
+        {
+            return Fail("binding cache skipped restoring a texture after SetData");
+        }
+        uploaded->GenerateMipmaps();
+        if (!uploaded->GetLastError().empty() ||
+            g_lastMipmapTexture != uploaded->GetRendererID() ||
+            g_activeTexture != GL_TEXTURE2 || g_boundTextures[2] != 0)
+        {
+            return Fail("mipmap generation used the wrong texture or changed binding side effects");
+        }
+        device.BindTexture(anchor.get(), 2);
+        if (g_boundTextures[2] != anchor->GetRendererID())
+        {
+            return Fail("binding cache skipped restoring a texture after mipmap generation");
+        }
+
+        anchor->Bind(7);
+        device.BindTexture(uploaded.get(), 2);
+        if (g_activeTexture != GL_TEXTURE2 || g_boundTextures[2] != uploaded->GetRendererID() ||
+            g_boundTextures[7] != anchor->GetRendererID())
+        {
+            return Fail("direct texture Bind desynchronized the active-unit cache");
+        }
+        uploaded->Unbind(7);
+        if (g_activeTexture != GL_TEXTURE7 || g_boundTextures[7] != 0)
+        {
+            return Fail("direct texture Unbind did not affect the requested unit");
+        }
+        device.BindTexture(anchor.get(), 7);
+        if (g_boundTextures[7] != anchor->GetRendererID())
+        {
+            return Fail("direct texture Unbind left a falsely cached binding");
+        }
+
+        auto doomed = device.CreateTexture2D(specification, pixel.data());
+        if (!doomed || !doomed->IsLoaded())
+        {
+            return Fail("texture deletion fixture failed to load");
+        }
+        const GLuint deletedName = doomed->GetRendererID();
+        device.BindTexture(doomed.get(), 11);
+        device.BindTexture(doomed.get(), 12);
+        device.BindTexture(anchor.get(), 2);
+        doomed.reset();
+        if (g_boundTextures[11] != 0 || g_boundTextures[12] != 0 ||
+            g_boundTextures[2] != anchor->GetRendererID())
+        {
+            return Fail("texture deletion did not unbind only the deleted name across all units");
+        }
+        g_forcedNextTexture = deletedName;
+        auto reused = device.CreateTexture2D(specification, pixel.data());
+        if (!reused || !reused->IsLoaded() || reused->GetRendererID() != deletedName)
+        {
+            return Fail("OpenGL name-reuse fixture did not reuse the deleted name");
+        }
+        device.BindTexture(reused.get(), 11);
+        device.BindTexture(reused.get(), 12);
+        if (g_boundTextures[11] != deletedName || g_boundTextures[12] != deletedName)
+        {
+            return Fail("deleted-name cache entries suppressed binding a reused texture name");
+        }
+
+        const std::string filepath = "pyramid_texture_reload_fixture.jpg";
+        struct FixtureCleanup
+        {
+            const std::string& path;
+            ~FixtureCleanup() { std::remove(path.c_str()); }
+        } cleanup{filepath};
+        {
+            std::ofstream file(filepath, std::ios::binary);
+            file.write(reinterpret_cast<const char*>(Tests::Fixtures::BaselineRGBJPEG),
+                static_cast<std::streamsize>(Tests::Fixtures::BaselineRGBJPEGSize));
+            if (!file)
+            {
+                return Fail("could not write reload fixture");
+            }
+        }
+        OpenGLTexture2D reloadable(filepath, false, false);
+        if (!reloadable.IsLoaded())
+        {
+            return Fail("reload fixture failed to load");
+        }
+        const GLuint originalName = reloadable.GetRendererID();
+        device.BindTexture(&reloadable, 10);
+        device.BindTexture(anchor.get(), 2);
+        if (!reloadable.LoadFromFile(filepath, true, true) ||
+            reloadable.GetRendererID() == originalName || g_boundTextures[10] != 0 ||
+            g_activeTexture != GL_TEXTURE2 || g_boundTextures[2] != 0)
+        {
+            return Fail("successful reload did not publish a replacement and retire old bindings");
+        }
+        device.BindTexture(&reloadable, 10);
+        device.BindTexture(anchor.get(), 2);
+        if (g_boundTextures[2] != anchor->GetRendererID() ||
+            g_boundTextures[10] != reloadable.GetRendererID())
+        {
+            return Fail("binding cache did not track a successful texture reload");
+        }
+        const GLuint committedName = reloadable.GetRendererID();
+        const auto beforeMissingReload = g_textureBinds.size();
+        if (reloadable.LoadFromFile("missing_texture_reload.jpg", false, false) ||
+            reloadable.GetRendererID() != committedName ||
+            g_textureBinds.size() != beforeMissingReload || g_activeTexture != GL_TEXTURE2 ||
+            g_boundTextures[2] != anchor->GetRendererID() ||
+            g_boundTextures[10] != committedName)
+        {
+            return Fail("failed CPU reload changed committed resources or GPU bindings");
+        }
+        g_failNextUpload = true;
+        if (reloadable.LoadFromFile(filepath, false, false) || !reloadable.IsLoaded() ||
+            reloadable.GetRendererID() != committedName ||
+            reloadable.GetLastError().empty() || g_lastUploadTexture == committedName ||
+            std::find(g_deletedTextures.begin(), g_deletedTextures.end(), g_lastUploadTexture) ==
+                g_deletedTextures.end() || g_boundTextures[10] != committedName ||
+            g_activeTexture != GL_TEXTURE2 || g_boundTextures[2] != 0)
+        {
+            return Fail("failed GPU reload did not discard only the staged replacement");
+        }
+        device.BindTexture(anchor.get(), 2);
+        if (g_boundTextures[2] != anchor->GetRendererID())
+        {
+            return Fail("failed GPU reload left a falsely cached binding");
+        }
+        const auto beforeUnchangedBind = g_textureBinds.size();
+        device.BindTexture(unaffected.get(), 5);
+        if (g_boundTextures[5] != unaffected->GetRendererID() ||
+            g_textureBinds.size() != beforeUnchangedBind)
+        {
+            return Fail("texture mutation invalidated an unrelated unit's cached binding");
+        }
+
+        device.BindTexture(anchor.get(), 9);
+        state.InvalidateState();
+        state.BindTexture(GL_TEXTURE_2D, uploaded->GetRendererID());
+        state.BindTextureUnit(0, GL_TEXTURE_2D, uploaded->GetRendererID());
+        if (g_activeTexture != GL_TEXTURE0 || g_boundTextures[0] != uploaded->GetRendererID() ||
+            g_boundTextures[9] != uploaded->GetRendererID())
+        {
+            return Fail("retained invalidated state manager confused the active unit with unit zero");
+        }
+        return EXIT_SUCCESS;
+    }
+    int TestAdvertisedTextureFormats()
+    {
+        using namespace Pyramid;
+        std::array<u8, 24> bytes;
+        bytes.fill(127);
+        std::array<u16, 24> halves;
+        halves.fill(0x3800); // IEEE binary16 0.5, supplied as bits rather than integer values.
+        std::array<f32, 24> floats;
+        floats.fill(0.5f);
+        std::array<u16, 6> depth16;
+        depth16.fill(0x7fff);
+        std::array<u32, 6> depth24;
+        depth24.fill(0x7fffffffu);
+        std::array<u32, 6> depth24Stencil;
+        depth24Stencil.fill(0x7fffffa5u);
+        struct Depth32StencilPixel { f32 depth; u32 stencil; };
+        static_assert(sizeof(Depth32StencilPixel) == 8, "depth32f/stencil8 transfer must occupy eight bytes");
+        std::array<Depth32StencilPixel, 6> depth32Stencil;
+        depth32Stencil.fill({0.5f, 0xa5u});
+
+        struct FormatCase
+        {
+            const char* name;
+            TextureFormat format;
+            GLenum internalFormat;
+            GLenum dataFormat;
+            GLenum dataType;
+            u32 bytesPerPixel;
+            const void* pixels;
+            bool depth = false;
+            bool srgb = false;
+        };
+        const FormatCase cases[] = {
+            {"R8", TextureFormat::R8, GL_R8, GL_RED, GL_UNSIGNED_BYTE, 1, bytes.data()},
+            {"R16F", TextureFormat::R16F, GL_R16F, GL_RED, GL_HALF_FLOAT, 2, halves.data()},
+            {"R32F", TextureFormat::R32F, GL_R32F, GL_RED, GL_FLOAT, 4, floats.data()},
+            {"RGB8", TextureFormat::RGB8, GL_RGB8, GL_RGB, GL_UNSIGNED_BYTE, 3, bytes.data()},
+            {"RGBA8", TextureFormat::RGBA8, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, 4, bytes.data()},
+            {"SRGB8", TextureFormat::SRGB8, GL_SRGB8, GL_RGB, GL_UNSIGNED_BYTE, 3, bytes.data()},
+            {"SRGBA8", TextureFormat::SRGBA8, GL_SRGB8_ALPHA8, GL_RGBA, GL_UNSIGNED_BYTE, 4, bytes.data()},
+            {"RGB16F", TextureFormat::RGB16F, GL_RGB16F, GL_RGB, GL_HALF_FLOAT, 6, halves.data()},
+            {"RGBA16F", TextureFormat::RGBA16F, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT, 8, halves.data()},
+            {"RGB32F", TextureFormat::RGB32F, GL_RGB32F, GL_RGB, GL_FLOAT, 12, floats.data()},
+            {"RGBA32F", TextureFormat::RGBA32F, GL_RGBA32F, GL_RGBA, GL_FLOAT, 16, floats.data()},
+            {"Depth16", TextureFormat::Depth16, GL_DEPTH_COMPONENT16, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT, 2, depth16.data(), true},
+            {"Depth24", TextureFormat::Depth24, GL_DEPTH_COMPONENT24, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, 4, depth24.data(), true},
+            {"Depth32F", TextureFormat::Depth32F, GL_DEPTH_COMPONENT32F, GL_DEPTH_COMPONENT, GL_FLOAT, 4, floats.data(), true},
+            {"Depth24Stencil8", TextureFormat::Depth24Stencil8, GL_DEPTH24_STENCIL8, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, 4, depth24Stencil.data(), true},
+            {"Depth32FStencil8", TextureFormat::Depth32FStencil8, GL_DEPTH32F_STENCIL8, GL_DEPTH_STENCIL, GL_FLOAT_32_UNSIGNED_INT_24_8_REV, 8, depth32Stencil.data(), true},
+            {"RGB8+sRGB", TextureFormat::RGB8, GL_SRGB8, GL_RGB, GL_UNSIGNED_BYTE, 3, bytes.data(), false, true},
+            {"RGBA8+sRGB", TextureFormat::RGBA8, GL_SRGB8_ALPHA8, GL_RGBA, GL_UNSIGNED_BYTE, 4, bytes.data(), false, true}
+        };
+        for (const auto& test : cases)
+        {
+            const auto fail = [&](const char* message)
+            {
+                std::cerr << "Format " << test.name << ": ";
+                return Fail(message);
+            };
+            TextureSpecification specification;
+            specification.Width = 3;
+            specification.Height = 2;
+            specification.Format = test.format;
+            specification.GenerateMips = false;
+            specification.SRGB = test.srgb;
+            g_unpackAlignment = 8;
+            OpenGLTexture2D texture(specification, test.pixels);
+            if (!texture.IsLoaded() || texture.GetRendererID() == 0 ||
+                texture.GetWidth() != 3 || texture.GetHeight() != 2 || texture.GetFormat() != test.format ||
+                g_lastInternalFormat != test.internalFormat || g_lastDataFormat != test.dataFormat ||
+                g_lastUploadType != test.dataType || g_lastUploadWidth != 3 || g_lastUploadHeight != 2 ||
+                g_lastUploadData != test.pixels || g_unpackAlignment != 8)
+            {
+                return fail("advertised format upload or metadata did not match the CPU transfer contract");
+            }
+            const u32 byteCount = 6 * test.bytesPerPixel;
+            const int beforeUpdates = g_subImageCalls;
+            texture.SetData(test.pixels, byteCount - 1);
+            if (texture.GetLastError().empty() || g_subImageCalls != beforeUpdates)
+            {
+                return fail("short SetData upload was not rejected before GL");
+            }
+            texture.SetData(test.pixels, byteCount + 1);
+            if (texture.GetLastError().empty() || g_subImageCalls != beforeUpdates)
+            {
+                return fail("oversized SetData upload was not rejected before GL");
+            }
+            texture.SetData(nullptr, byteCount);
+            if (texture.GetLastError().empty() || g_subImageCalls != beforeUpdates)
+            {
+                return fail("null SetData upload was not rejected before GL");
+            }
+            texture.SetData(test.pixels, byteCount);
+            if (!texture.GetLastError().empty() || g_subImageCalls != beforeUpdates + 1 ||
+                g_lastUpdateFormat != test.dataFormat || g_lastUpdateType != test.dataType ||
+                g_lastUpdateData != test.pixels || g_unpackAlignment != 8)
+            {
+                return fail("valid SetData used the wrong scalar type or upload byte count");
+            }
+            OpenGLTexture2D storage(specification, nullptr);
+            if (!storage.IsLoaded() || g_lastUploadData != nullptr || g_lastUploadType != test.dataType ||
+                g_lastDataFormat != test.dataFormat || g_lastInternalFormat != test.internalFormat)
+            {
+                return fail("null-data storage allocation did not preserve the format");
+            }
+            specification.GenerateMips = true;
+            const int beforeMips = g_generateMipmapCalls;
+            OpenGLTexture2D mipmapped(specification, nullptr);
+            if (!mipmapped.IsLoaded() || mipmapped.GetMipLevels() != 2 ||
+                g_generateMipmapCalls != beforeMips + 1 || g_lastMinFilter != GL_LINEAR_MIPMAP_LINEAR)
+            {
+                return fail("null-data allocation did not create its requested complete mip chain");
+            }
+            const int beforeFactory = g_generatedTextureCount;
+            auto depthTarget = ITexture2D::CreateDepthTarget(3, 2, test.format);
+            if (test.depth)
+            {
+                if (!depthTarget || !depthTarget->IsLoaded() || depthTarget->GetFormat() != test.format ||
+                    depthTarget->GetMipLevels() != 1 || g_lastUploadType != test.dataType ||
+                    g_lastDataFormat != test.dataFormat || g_lastUploadData != nullptr ||
+                    g_lastMinFilter != GL_NEAREST || g_lastMagFilter != GL_NEAREST ||
+                    g_lastWrapS != GL_CLAMP_TO_EDGE || g_lastWrapT != GL_CLAMP_TO_EDGE)
+                {
+                    return fail("depth-target factory did not create the requested depth format and sampler");
+                }
+            }
+            else if (depthTarget || g_generatedTextureCount != beforeFactory)
+            {
+                return fail("depth-target factory accepted a color format or issued GL calls");
+            }
+            if (test.format != TextureFormat::RGB8 && test.format != TextureFormat::RGBA8 &&
+                test.format != TextureFormat::SRGB8 && test.format != TextureFormat::SRGBA8)
+            {
+                specification.SRGB = true;
+                const int beforeInvalid = g_generatedTextureCount;
+                OpenGLTexture2D invalidSRGB(specification, nullptr);
+                if (invalidSRGB.IsLoaded() || invalidSRGB.GetRendererID() != 0 ||
+                    invalidSRGB.GetLastError().find("sRGB") == std::string::npos ||
+                    g_generatedTextureCount != beforeInvalid)
+                {
+                    return fail("invalid sRGB flag was accepted or reached GL allocation");
+                }
+            }
+        }
+        struct InvalidCase { TextureFormat format; const char* diagnostic; };
+        const InvalidCase invalidCases[] = {
+            {TextureFormat::None, "None"},
+            {TextureFormat::BC1_RGB, "BC1_RGB"},
+            {TextureFormat::BC1_RGBA, "BC1_RGBA"},
+            {TextureFormat::BC3_RGBA, "BC3_RGBA"},
+            {TextureFormat::BC7_RGBA, "BC7_RGBA"},
+            {static_cast<TextureFormat>(9999), "9999"}
+        };
+        for (const auto& test : invalidCases)
+        {
+            TextureSpecification specification;
+            specification.Format = test.format;
+            const int beforeInvalid = g_generatedTextureCount;
+            OpenGLTexture2D invalid(specification, nullptr);
+            if (invalid.IsLoaded() || invalid.GetRendererID() != 0 ||
+                invalid.GetLastError().find(test.diagnostic) == std::string::npos ||
+                ITexture2D::CreateDepthTarget(3, 2, test.format) ||
+                g_generatedTextureCount != beforeInvalid)
+            {
+                std::cerr << "Invalid format " << test.diagnostic << ": ";
+                return Fail("unsupported format lacked a specific diagnostic or allocated a texture");
+            }
+        }
+        TextureSpecification overflowing;
+        overflowing.Width = static_cast<u32>((std::numeric_limits<GLsizei>::max)());
+        overflowing.Height = overflowing.Width;
+        overflowing.Format = TextureFormat::RGBA32F;
+        const int beforeOverflow = g_generatedTextureCount;
+        OpenGLTexture2D overflowTexture(overflowing, nullptr);
+        if (overflowTexture.IsLoaded() || overflowTexture.GetLastError().empty() ||
+            g_generatedTextureCount != beforeOverflow)
+        {
+            return Fail("overflowing texture byte size reached GL allocation");
+        }
+        g_unpackAlignment = 4;
+        return EXIT_SUCCESS;
+    }
+
+    int TestReloadTransferLayout()
+    {
+        using namespace Pyramid;
+        const std::string filepath = "pyramid_texture_type_transition_fixture.jpg";
+        struct FixtureCleanup
+        {
+            const std::string& path;
+            ~FixtureCleanup() { std::remove(path.c_str()); }
+        } cleanup{filepath};
+        {
+            std::ofstream file(filepath, std::ios::binary);
+            file.write(reinterpret_cast<const char*>(Tests::Fixtures::BaselineRGBJPEG),
+                static_cast<std::streamsize>(Tests::Fixtures::BaselineRGBJPEGSize));
+            if (!file) return Fail("could not write transfer-layout reload fixture");
+        }
+        TextureSpecification specification;
+        specification.Width = 3;
+        specification.Height = 2;
+        specification.Format = TextureFormat::R32F;
+        specification.GenerateMips = false;
+        const std::array<f32, 6> values = {0.0f, 0.25f, 0.5f, 0.75f, 1.0f, 2.0f};
+        OpenGLTexture2D texture(specification, values.data());
+        if (!texture.IsLoaded()) return Fail("native float reload fixture did not load");
+        const GLuint committed = texture.GetRendererID();
+        if (texture.LoadFromFile("missing_native_float_reload.jpg", false, false) ||
+            texture.GetRendererID() != committed || texture.GetFormat() != TextureFormat::R32F)
+        {
+            return Fail("failed CPU reload changed native float metadata");
+        }
+        g_failNextUpload = true;
+        if (texture.LoadFromFile(filepath, false, false) || texture.GetRendererID() != committed ||
+            texture.GetFormat() != TextureFormat::R32F || texture.GetWidth() != 3 || texture.GetHeight() != 2)
+        {
+            return Fail("failed GPU reload changed native float metadata");
+        }
+        texture.SetData(values.data(), static_cast<u32>(sizeof(values)));
+        if (!texture.GetLastError().empty() || g_lastUpdateFormat != GL_RED || g_lastUpdateType != GL_FLOAT)
+        {
+            return Fail("failed reload did not preserve native float SetData transfer type");
+        }
+        if (!texture.LoadFromFile(filepath, false, false) || texture.GetFormat() != TextureFormat::RGB8 ||
+            texture.GetWidth() != 8 || texture.GetHeight() != 8)
+        {
+            return Fail("successful float-to-file reload did not commit RGB metadata");
+        }
+        const std::array<u8, 8 * 8 * 3> pixels{};
+        texture.SetData(pixels.data(), static_cast<u32>(pixels.size()));
+        if (!texture.GetLastError().empty() || g_lastUpdateFormat != GL_RGB ||
+            g_lastUpdateType != GL_UNSIGNED_BYTE || g_lastUpdateData != pixels.data())
+        {
+            return Fail("successful float-to-file reload retained stale scalar type or byte size");
+        }
+        return EXIT_SUCCESS;
+    }
 }
 
 int main()
@@ -433,7 +902,8 @@ int main()
         return Fail("texture object was not released");
     }
 
-    if (TestDeviceTextureBinding() != EXIT_SUCCESS)
+    if (TestDeviceTextureBinding() != EXIT_SUCCESS || TestTextureStateCoherence() != EXIT_SUCCESS ||
+        TestAdvertisedTextureFormats() != EXIT_SUCCESS || TestReloadTransferLayout() != EXIT_SUCCESS)
     {
         return EXIT_FAILURE;
     }

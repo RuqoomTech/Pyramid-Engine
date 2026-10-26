@@ -29,6 +29,8 @@ namespace Pyramid
         void ActiveTexture(GLenum texture);
         void BindTexture(GLenum target, GLuint texture);
         void BindTextureUnit(u32 unit, GLenum target, GLuint texture);
+        /** Forget a deleted name on all units/targets without changing GL or unrelated cache entries. */
+        void ForgetTexture(GLuint texture);
 
         // Framebuffer state
         void BindFramebuffer(GLenum target, GLuint framebuffer);

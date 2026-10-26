@@ -14,6 +14,7 @@
 #include <Pyramid/Graphics/Scene/SceneSerializer.hpp>
 #include <Pyramid/Graphics/CameraController.hpp>
 
+#include <array>
 #include <iostream>
 
 int main()
@@ -22,6 +23,22 @@ int main()
     const auto meshId = Pyramid::MeshAssetId::FromString("consumer/mesh");
     const auto shaderId = Pyramid::ShaderAssetId::FromString("consumer/shader");
     const auto textureId = Pyramid::TextureAssetId::FromString("consumer/texture");
+    const std::array<Pyramid::f32, 2> redPixels{0.25f, 0.75f};
+    Pyramid::TextureResourceSpecification redTexture;
+    redTexture.texture.Width = 2;
+    redTexture.texture.Height = 1;
+    redTexture.texture.Format = Pyramid::TextureFormat::R32F;
+    redTexture.texture.GenerateMips = false;
+    redTexture.pixelData = redPixels.data();
+    redTexture.pixelDataSize = sizeof(redPixels);
+    const auto redTextureId = Pyramid::TextureResource::CalculateContentId(redTexture);
+    redTexture.pixelDataSize -= 1;
+    const auto truncatedTextureId = Pyramid::TextureResource::CalculateContentId(redTexture);
+    if (!redTextureId.IsValid() || truncatedTextureId.IsValid())
+    {
+        std::cerr << "Installed texture API must accept R32F pixels and reject truncated data\n";
+        return 1;
+    }
     const auto materialId = Pyramid::MaterialAssetId::FromString("consumer/material");
     Pyramid::MaterialCache materialCache;
     Pyramid::InputState input;

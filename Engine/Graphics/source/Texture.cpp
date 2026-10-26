@@ -1,5 +1,6 @@
 #include "Pyramid/Graphics/Texture.hpp"
 #include "Pyramid/Graphics/OpenGL/OpenGLTexture.hpp"
+#include "Texture/TextureFormatInfo.hpp"
 #include <Pyramid/Util/Log.hpp>
 
 #include <algorithm>
@@ -37,11 +38,23 @@ namespace Pyramid
 
     std::shared_ptr<ITexture2D> ITexture2D::CreateDepthTarget(u32 width, u32 height, TextureFormat format)
     {
-        (void)width;
-        (void)height;
-        (void)format;
-        PYRAMID_LOG_ERROR("Depth texture creation is not implemented by OpenGLTexture2D; use OpenGLFramebuffer");
-        return nullptr;
+        if (!Detail::GetTextureFormatInfo(format).depth)
+        {
+            PYRAMID_LOG_ERROR("CreateDepthTarget requires a depth or depth-stencil texture format; got ",
+                              static_cast<u32>(format));
+            return nullptr;
+        }
+
+        TextureSpecification specification;
+        specification.Width = width;
+        specification.Height = height;
+        specification.Format = format;
+        specification.GenerateMips = false;
+        specification.MinFilter = TextureFilter::Nearest;
+        specification.MagFilter = TextureFilter::Nearest;
+        specification.WrapS = TextureWrap::ClampToEdge;
+        specification.WrapT = TextureWrap::ClampToEdge;
+        return Create(specification, nullptr);
     }
 
     std::shared_ptr<ITexture2D> ITexture2D::CreateFromColor(u32 width, u32 height, const Color& color)
