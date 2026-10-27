@@ -168,7 +168,11 @@ namespace Pyramid::Tests
     public:
         bool Initialize() override { return true; }
         void Shutdown() override {}
-        void Clear(const Color&) override {}
+        void Clear(const Color& color) override
+        {
+            ++clearCalls;
+            lastClearColor = color;
+        }
         void Present(bool) override {}
 
         void DrawIndexed(u32 count, PrimitiveTopology topology) override
@@ -321,6 +325,8 @@ namespace Pyramid::Tests
         u32 viewportHeight = 0;
         u32 viewportChanges = 0;
         u32 boundFramebufferHandle = 0;
+        u32 clearCalls = 0;
+        Color lastClearColor;
         u32 drawCalls = 0;
         bool lastDrawIndexed = false;
         u32 lastDrawCount = 0;

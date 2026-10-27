@@ -76,7 +76,7 @@ The default pipeline uses shadow and forward rendering. The deferred setup uses 
 
 Known constraints:
 
-- compute `Dispatch` commands are logged but not executed;
+- the renderer command buffer has no compute-dispatch method, tag, or payload; low-level shader compute compilation/dispatch remains separate from its graphics submission path;
 - generic framebuffer binding outside the OpenGL renderer remains incomplete;
 - shadow-map resolution is intentionally independent of window size;
 - render statistics do not yet represent complete GPU execution metrics.

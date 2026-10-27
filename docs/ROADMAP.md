@@ -47,7 +47,10 @@ The current `0.6.0-pre-alpha` baseline includes:
 
 ### Rendering correctness
 
-- Implement compute dispatch or remove it from the command model.
+- Command-buffer dispatch removal plan:
+  1. [x] Remove the unused `CommandBuffer::Dispatch` method, command tag/payload, and log-only execution case. Preserve supported command codes (`ClearTarget = 15`); leave the independently implemented low-level shader compute APIs unchanged.
+  2. [x] Add source and installed-package API guards and exercise supported clear/draw recording, execution, statistics, and reset behavior through the existing test device. Update API linkage, maintained documentation, and changelog.
+  3. [x] Run GCC Debug/Release builds and tests plus a fresh installed-package consumer, then commit. Visual/native-driver acceptance remains deferred.
 - Complete backend-neutral framebuffer binding.
 - [x] Add platform-neutral window resize events.
 - [x] Propagate renderable resize events into the default viewport and active camera.

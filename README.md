@@ -73,7 +73,7 @@ The project is intended for engine development and experimentation. It is not ye
 
 - DirectX and Vulkan enum values are reserved; only OpenGL is implemented.
 - Linux and macOS builds are rejected explicitly.
-- Compute dispatch is recorded by the command buffer but is not executed by OpenGL.
+- The renderer command buffer exposes graphics commands only; it has no compute dispatch API. Lower-level shader compute APIs are separate from the validated OpenGL 3.3 reference path.
 - `SceneSerializer` version 2 persists stable entities, hierarchy, transforms, mesh-renderer components, light components, and the primary light. Cameras, environment settings, gameplay components, and editor metadata are not serialized yet; the legacy `SceneManager` JSON/XML/Binary methods remain unsupported.
 - Occlusion culling remains a placeholder and is disabled by default.
 - Direct and cached memory textures support the uncompressed RGB/RGBA, red-channel, floating-point, and depth/depth-stencil formats; [CPU upload layouts](docs/API.md#textures) are explicit. BC compressed formats remain reserved and unsupported, file codecs still decode RGB/RGBA 8-bit pixels, and framebuffer renderability is validated separately. Runtime sampling/readback and visual verification of the expanded format set remain pending.

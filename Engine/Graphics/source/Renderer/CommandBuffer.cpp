@@ -256,18 +256,6 @@ namespace Pyramid
             }
         }
 
-        void CommandBuffer::Dispatch(u32 x, u32 y, u32 z)
-        {
-            if (!m_recording) return;
-
-            RenderCommand cmd;
-            cmd.type = RenderCommandType::Dispatch;
-            cmd.data.dispatch.x = x;
-            cmd.data.dispatch.y = y;
-            cmd.data.dispatch.z = z;
-            m_commands.push_back(cmd);
-        }
-
         void CommandBuffer::ClearTarget(f32 r, f32 g, f32 b, f32 a)
         {
             if (!m_recording) return;
@@ -556,11 +544,6 @@ namespace Pyramid
                         }
                         break;
                     }
-
-                    case RenderCommandType::Dispatch:
-                        PYRAMID_LOG_DEBUG("Compute dispatch command: ", cmd.data.dispatch.x, "x", cmd.data.dispatch.y, "x", cmd.data.dispatch.z);
-                        // Dispatch will be handled when compute shader support is added
-                        break;
 
                     default:
                         PYRAMID_LOG_WARN("Unknown render command type: ", static_cast<int>(cmd.type));

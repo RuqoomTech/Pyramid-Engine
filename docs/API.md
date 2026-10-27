@@ -406,7 +406,7 @@ Pyramid::ShaderCache shaderCache(*device);
 auto shader = shaderCache.GetOrCreate(shaderSpec);
 ```
 
-`ShaderProgram` is an immutable compiled resource that implements `IShader`, so it can be assigned directly to materials and command buffers. Exact stage-source sets receive a deterministic content identifier and compile only once even when requested through several caller-defined stable aliases. Graphics specifications require vertex and fragment stages; tessellation control/evaluation stages must be paired; compute programs cannot mix with graphics stages. Debug names are excluded from content identity.
+`ShaderProgram` is an immutable compiled resource that implements `IShader`, so it can be assigned directly to materials and command buffers. Exact stage-source sets receive a deterministic content identifier and compile only once even when requested through several caller-defined stable aliases. Graphics specifications require vertex and fragment stages; tessellation control/evaluation stages must be paired; compute programs cannot mix with graphics stages. Debug names are excluded from content identity. Renderer command buffers submit graphics commands only: the former log-only `CommandBuffer::Dispatch`, its command tag, and its payload have been removed. Calls to that method no longer compile; there is no queued compute replacement. Lower-level `IShader`/`ShaderProgram` compute APIs are unchanged and require separate capability checks and validation. Supported render-command numeric codes remain unchanged, including `ClearTarget = 15`.
 
 Changing a stable asset uses transactional replacement:
 

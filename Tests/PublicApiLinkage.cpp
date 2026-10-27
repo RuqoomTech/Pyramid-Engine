@@ -548,6 +548,10 @@ namespace
         &Pyramid::Renderer::CommandBuffer::DrawMesh;
     volatile decltype(&Pyramid::Renderer::CommandBuffer::GetDrawStats) g_getDrawStats =
         &Pyramid::Renderer::CommandBuffer::GetDrawStats;
+    volatile decltype(&Pyramid::Renderer::CommandBuffer::ClearTarget) g_clearCommandTarget =
+        &Pyramid::Renderer::CommandBuffer::ClearTarget;
+    volatile decltype(&Pyramid::Renderer::CommandBuffer::Execute) g_executeCommandBuffer =
+        &Pyramid::Renderer::CommandBuffer::Execute;
     volatile decltype(&Pyramid::OpenGLFramebuffer::Resize) g_resizeFramebuffer =
         &Pyramid::OpenGLFramebuffer::Resize;
     volatile decltype(&Pyramid::Renderer::RenderTarget::Resize) g_resizeRenderTarget =
@@ -798,6 +802,8 @@ int main()
                    g_setCommandUniformMat4 &&
                    g_drawMesh &&
                    g_getDrawStats &&
+                   g_clearCommandTarget &&
+                   g_executeCommandBuffer &&
                    g_forgetTexture &&
                    g_resizeFramebuffer &&
                    g_resizeRenderTarget &&

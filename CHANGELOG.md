@@ -4,6 +4,12 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 
 ## [Unreleased]
 
+### Command-buffer API correctness
+
+- Removed the unused `CommandBuffer::Dispatch` API, compute command tag/payload, and log-only execution case so the renderer no longer accepts compute work it cannot submit.
+- Preserved supported command numeric codes, including `ClearTarget = 15`, while retaining the independently implemented low-level shader compute APIs.
+- Added source/installed API guards, positive clear/draw execution and reset coverage, and public linkage checks for supported commands. Visual/native-driver acceptance remains deferred.
+
 ### Texture sampler correctness
 
 - Implemented mutable OpenGL texture filter, wrap, border-color, and anisotropy setters with shared CPU/native validation, tracked binding updates, native error diagnostics, and attempted sampler restoration after failure.

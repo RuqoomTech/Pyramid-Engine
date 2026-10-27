@@ -13,6 +13,7 @@
 #include <Pyramid/Graphics/Scene.hpp>
 #include <Pyramid/Graphics/Scene/SceneSerializer.hpp>
 #include <Pyramid/Graphics/CameraController.hpp>
+#include <Pyramid/Graphics/Renderer/RenderSystem.hpp>
 
 #include <array>
 #include <iostream>
@@ -24,8 +25,60 @@ static_assert(std::is_same_v<
     const std::shared_ptr<const Pyramid::ITexture2D>&>,
     "Installed cached texture access must preserve a const native pointee");
 
+namespace
+{
+    template <typename T, typename = void>
+    struct HasDispatchCall : std::false_type {};
+
+    template <typename T>
+    struct HasDispatchCall<T, std::void_t<decltype(std::declval<T&>().Dispatch(
+        Pyramid::u32{}, Pyramid::u32{}, Pyramid::u32{}))>> : std::true_type {};
+
+    template <typename T, typename = void>
+    struct HasDispatchTag : std::false_type {};
+
+    template <typename T>
+    struct HasDispatchTag<T, std::void_t<decltype(T::Dispatch)>> : std::true_type {};
+
+    template <typename T, typename = void>
+    struct HasDispatchPayload : std::false_type {};
+
+    template <typename T>
+    struct HasDispatchPayload<T, std::void_t<decltype(std::declval<T&>().data.dispatch)>>
+        : std::true_type {};
+
+    static_assert(!HasDispatchCall<Pyramid::Renderer::CommandBuffer>::value,
+        "Installed command buffers must not advertise unsupported compute dispatch");
+    static_assert(!HasDispatchTag<Pyramid::Renderer::RenderCommandType>::value,
+        "Installed render commands must not retain an unsupported dispatch tag");
+    static_assert(!HasDispatchPayload<Pyramid::Renderer::RenderCommand>::value,
+        "Installed render commands must not retain an unsupported dispatch payload");
+}
+
 int main()
 {
+    Pyramid::Renderer::CommandBuffer commands;
+    commands.Begin();
+    const bool recording = commands.IsRecording();
+    commands.ClearTarget(0.1f, 0.2f, 0.3f, 1.0f);
+    commands.DrawIndexed(6, 2, Pyramid::PrimitiveTopology::Triangles);
+    commands.DrawArrays(4, 0, 1, Pyramid::PrimitiveTopology::TriangleStrip);
+    commands.End();
+    const auto drawStats = commands.GetDrawStats();
+    if (!recording || commands.IsRecording() || commands.GetCommandCount() != 3 ||
+        drawStats.drawCalls != 2 || drawStats.vertices != 16 || drawStats.triangles != 6)
+    {
+        std::cerr << "Installed command-buffer recording or draw statistics failed\n";
+        return 1;
+    }
+    commands.Reset();
+    const auto emptyStats = commands.GetDrawStats();
+    if (commands.IsRecording() || commands.GetCommandCount() != 0 ||
+        emptyStats.drawCalls != 0 || emptyStats.vertices != 0 || emptyStats.triangles != 0)
+    {
+        std::cerr << "Installed command-buffer reset retained recorded work\n";
+        return 1;
+    }
     const Pyramid::Math::Vec3 value(1.0f, 2.0f, 3.0f);
     const auto meshId = Pyramid::MeshAssetId::FromString("consumer/mesh");
     const auto shaderId = Pyramid::ShaderAssetId::FromString("consumer/shader");
