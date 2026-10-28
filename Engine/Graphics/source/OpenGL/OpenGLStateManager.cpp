@@ -231,6 +231,25 @@ namespace Pyramid
         }
     }
 
+    void OpenGLStateManager::ForgetFramebuffer(GLuint framebuffer)
+    {
+        if (!framebuffer)
+        {
+            return;
+        }
+        for (auto binding = m_boundFramebuffers.begin(); binding != m_boundFramebuffers.end();)
+        {
+            if (binding->second == framebuffer)
+            {
+                binding = m_boundFramebuffers.erase(binding);
+            }
+            else
+            {
+                ++binding;
+            }
+        }
+    }
+
     void OpenGLStateManager::BindFramebuffer(GLenum target, GLuint framebuffer)
     {
         // GL_FRAMEBUFFER is an alias that binds to both GL_DRAW_FRAMEBUFFER and GL_READ_FRAMEBUFFER

@@ -5,6 +5,7 @@
 #include <Pyramid/Graphics/Buffer/VertexBuffer.hpp>
 #include <Pyramid/Graphics/Geometry/MeshBounds.hpp>
 #include <Pyramid/Graphics/GraphicsDevice.hpp>
+#include <Pyramid/Graphics/Framebuffer.hpp>
 #include <Pyramid/Graphics/Texture.hpp>
 #include <Pyramid/Graphics/Shader/Shader.hpp>
 
@@ -287,7 +288,14 @@ namespace Pyramid::Tests
         std::string GetLastError() const override { return {}; }
         void SetWireframeMode(bool enable) override { wireframeEnabled = enable; }
         void SetPolygonMode(u32 mode) override { polygonMode = mode; }
-        void BindFramebuffer(IFramebuffer*) override {}
+        void BindFramebuffer(IFramebuffer* framebuffer) override
+        {
+            ++framebufferBindCalls;
+            if (framebuffer && !framebuffer->IsInitialized()) return;
+            boundFramebuffer = framebuffer;
+            if (framebuffer) framebuffer->Bind();
+            else boundFramebufferHandle = 0;
+        }
         void BindFramebufferHandle(u32 handle) override { boundFramebufferHandle = handle; }
         void BindShader(IShader* shader) override
         {
@@ -325,6 +333,8 @@ namespace Pyramid::Tests
         u32 viewportHeight = 0;
         u32 viewportChanges = 0;
         u32 boundFramebufferHandle = 0;
+        u32 framebufferBindCalls = 0;
+        IFramebuffer* boundFramebuffer = nullptr;
         u32 clearCalls = 0;
         Color lastClearColor;
         u32 drawCalls = 0;

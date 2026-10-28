@@ -4,6 +4,13 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 
 ## [Unreleased]
 
+### Framebuffer binding correctness
+
+- Defined the small renderer-neutral `IFramebuffer` contract and implemented generic device binding using the existing OpenGL framebuffer; uninitialized targets fail explicitly without changing binding or viewport state.
+- Routed shadow/deferred targets and default-surface submission through generic binding, preserving existing target viewport behavior and explicit main-surface restoration.
+- Invalidated cached read/draw framebuffer names before native deletion, including resize/release paths, and added binding, viewport, invalidation/name-reuse, public-linkage, and installed-interface regressions.
+- Framebuffer creation and attachment specifications remain OpenGL-specific. Applications must rebuild for the new virtual base; visual/native-driver acceptance remains deferred.
+
 ### Command-buffer API correctness
 
 - Removed the unused `CommandBuffer::Dispatch` API, compute command tag/payload, and log-only execution case so the renderer no longer accepts compute work it cannot submit.

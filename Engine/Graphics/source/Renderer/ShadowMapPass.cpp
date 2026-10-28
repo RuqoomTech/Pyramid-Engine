@@ -296,7 +296,7 @@ namespace Pyramid
                 m_lightSpaceMatrices[i] = CalculateLightSpaceMatrix(camera, nearPlane, farPlane, lightDir);
 
                 // Bind shadow map framebuffer
-                m_device->BindFramebufferHandle(m_shadowMaps[i]->GetFramebufferID());
+                m_device->BindFramebuffer(m_shadowMaps[i].get());
 
                 // Clear depth buffer
                 m_device->ClearBuffers(GL_DEPTH_BUFFER_BIT);
@@ -349,7 +349,7 @@ namespace Pyramid
                 }
 
                 // Unbind shadow map framebuffer
-                m_device->BindFramebufferHandle(0);
+                m_device->BindFramebuffer(nullptr);
 
                 PYRAMID_LOG_DEBUG("Cascade ", i, " rendered (", nearPlane, " - ", farPlane, ")");
             }

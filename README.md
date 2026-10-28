@@ -52,7 +52,7 @@ The project is intended for engine development and experimentation. It is not ye
 - Reusable camera-controller framework with free-fly, target-orbit, and optional XZ-ground-plane strategy controllers. Controllers consume configurable named actions and never own physical bindings.
 - A game-side RTS reference interaction layer with focus-safe edge scrolling, ray-based selection, and ground-plane command requests; RTS semantics remain outside `Pyramid::Engine`.
 - Win32 window creation, resize-event delivery, resize-safe viewport updates, visibility, positioning, and WGL context management.
-- OpenGL device, a game-owned `ResourceRegistry`, generation-checked typed resource handles, versioned resource manifests and entity-scene serialization, engine-owned mesh and material resources, stable resource identifiers, content-deduplicating mesh, shader-program, texture, and material caches, buffers, vertex arrays, shaders, textures, resize-safe framebuffers, and state caching.
+- OpenGL device, a game-owned `ResourceRegistry`, generation-checked typed resource handles, versioned resource manifests and entity-scene serialization, engine-owned mesh and material resources, stable resource identifiers, content-deduplicating mesh, shader-program, texture, and material caches, buffers, vertex arrays, shaders, textures, resize-safe framebuffers with generic device binding, and state caching.
 - Forward, cascaded-shadow, deferred-geometry, and deferred-lighting passes.
 - Perspective and orthographic cameras with normalized world-space frusta and point/sphere/AABB visibility tests.
 - Bounds-aware point, sphere, box, ray, nearest-object, and K-nearest scene queries with octree/linear parity.

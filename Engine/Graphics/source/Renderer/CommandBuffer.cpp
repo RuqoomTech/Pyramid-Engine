@@ -411,7 +411,7 @@ namespace Pyramid
                         }
                         else
                         {
-                            device->BindFramebufferHandle(0);
+                            device->BindFramebuffer(nullptr);
                         }
                         break;
                     }

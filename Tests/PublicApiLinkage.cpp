@@ -11,6 +11,7 @@
 #include <Pyramid/Graphics/Scene.hpp>
 #include <Pyramid/Graphics/Camera.hpp>
 #include <Pyramid/Graphics/CameraController.hpp>
+#include <Pyramid/Graphics/OpenGL/OpenGLDevice.hpp>
 #include <Pyramid/Graphics/OpenGL/OpenGLFramebuffer.hpp>
 #include <Pyramid/Graphics/OpenGL/OpenGLStateManager.hpp>
 #include <Pyramid/Graphics/OpenGL/OpenGLTexture.hpp>
@@ -61,6 +62,12 @@ namespace
         g_resolveRuntimePath = &Pyramid::Platform::ResolveRuntimePath;
     volatile decltype(&Pyramid::OpenGLStateManager::ForgetTexture) g_forgetTexture =
         &Pyramid::OpenGLStateManager::ForgetTexture;
+    volatile decltype(&Pyramid::OpenGLStateManager::ForgetFramebuffer) g_forgetFramebuffer =
+        &Pyramid::OpenGLStateManager::ForgetFramebuffer;
+    volatile decltype(&Pyramid::OpenGLDevice::BindFramebuffer) g_bindFramebuffer =
+        &Pyramid::OpenGLDevice::BindFramebuffer;
+    volatile decltype(&Pyramid::OpenGLFramebuffer::Bind) g_bindOpenGLFramebuffer =
+        &Pyramid::OpenGLFramebuffer::Bind;
 
     volatile decltype(&Pyramid::InputActionSystem::CreateContext) g_createInputContext =
         &Pyramid::InputActionSystem::CreateContext;
@@ -805,6 +812,9 @@ int main()
                    g_clearCommandTarget &&
                    g_executeCommandBuffer &&
                    g_forgetTexture &&
+                   g_forgetFramebuffer &&
+                   g_bindFramebuffer &&
+                   g_bindOpenGLFramebuffer &&
                    g_resizeFramebuffer &&
                    g_resizeRenderTarget &&
                    g_resizeRenderSystem &&

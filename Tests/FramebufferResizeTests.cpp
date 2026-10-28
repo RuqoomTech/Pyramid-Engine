@@ -1,4 +1,5 @@
 #include <Pyramid/Graphics/OpenGL/OpenGLFramebuffer.hpp>
+#include <Pyramid/Graphics/OpenGL/OpenGLDevice.hpp>
 #include <Pyramid/Graphics/OpenGL/OpenGLStateManager.hpp>
 #include <Pyramid/Graphics/Renderer/RenderSystem.hpp>
 
@@ -14,6 +15,12 @@ namespace
     GLenum g_framebufferStatus = GL_FRAMEBUFFER_COMPLETE;
     GLuint g_nextFramebuffer = 1;
     GLuint g_nextTexture = 100;
+    GLuint g_drawFramebuffer = 0;
+    GLuint g_readFramebuffer = 0;
+    std::size_t g_framebufferBindCalls = 0;
+    std::size_t g_viewportCalls = 0;
+    std::array<GLint, 4> g_viewport = {0, 0, 1280, 720};
+    std::vector<GLuint> g_attachmentFramebuffers;
     std::vector<GLuint> g_deletedFramebuffers;
     std::vector<GLuint> g_deletedTextures;
     GLenum g_activeTexture = GL_TEXTURE0;
@@ -48,7 +55,15 @@ namespace
         case GL_ACTIVE_TEXTURE:
             values[0] = static_cast<GLint>(g_activeTexture);
             break;
+        case GL_DRAW_FRAMEBUFFER_BINDING:
+            values[0] = static_cast<GLint>(g_drawFramebuffer);
+            break;
+        case GL_READ_FRAMEBUFFER_BINDING:
+            values[0] = static_cast<GLint>(g_readFramebuffer);
+            break;
         case GL_VIEWPORT:
+            std::copy(g_viewport.begin(), g_viewport.end(), values);
+            break;
         case GL_SCISSOR_BOX:
             values[0] = 0;
             values[1] = 0;
@@ -109,10 +124,24 @@ namespace
     {
         g_deletedFramebuffers.insert(
             g_deletedFramebuffers.end(), framebuffers, framebuffers + count);
+        for (GLsizei index = 0; index < count; ++index)
+        {
+            if (g_drawFramebuffer == framebuffers[index]) g_drawFramebuffer = 0;
+            if (g_readFramebuffer == framebuffers[index]) g_readFramebuffer = 0;
+        }
     }
 
-    void APIENTRY FakeBindFramebuffer(GLenum, GLuint)
+    void APIENTRY FakeBindFramebuffer(GLenum target, GLuint framebuffer)
     {
+        ++g_framebufferBindCalls;
+        if (target == GL_FRAMEBUFFER || target == GL_DRAW_FRAMEBUFFER)
+        {
+            g_drawFramebuffer = framebuffer;
+        }
+        if (target == GL_FRAMEBUFFER || target == GL_READ_FRAMEBUFFER)
+        {
+            g_readFramebuffer = framebuffer;
+        }
     }
 
     GLenum APIENTRY FakeCheckFramebufferStatus(GLenum)
@@ -177,6 +206,7 @@ namespace
 
     void APIENTRY FakeFramebufferTexture2D(GLenum, GLenum, GLenum, GLuint, GLint)
     {
+        g_attachmentFramebuffers.push_back(g_drawFramebuffer);
     }
 
     void APIENTRY FakeDrawBuffers(GLsizei, const GLenum*)
@@ -191,8 +221,10 @@ namespace
     {
     }
 
-    void APIENTRY FakeViewport(GLint, GLint, GLsizei, GLsizei)
+    void APIENTRY FakeViewport(GLint x, GLint y, GLsizei width, GLsizei height)
     {
+        ++g_viewportCalls;
+        g_viewport = {x, y, width, height};
     }
 
     void InstallFakeOpenGL()
@@ -219,6 +251,23 @@ namespace
         glad_glDrawBuffer = FakeDrawBuffer;
         glad_glReadBuffer = FakeReadBuffer;
         glad_glViewport = FakeViewport;
+    }
+
+    bool HasFramebufferBindings(GLuint draw, GLuint read)
+    {
+        auto& state = Pyramid::OpenGLStateManager::GetInstance();
+        return g_drawFramebuffer == draw && g_readFramebuffer == read &&
+            state.GetBoundFramebuffer(GL_DRAW_FRAMEBUFFER) == draw &&
+            state.GetBoundFramebuffer(GL_READ_FRAMEBUFFER) == read;
+    }
+
+    bool HasViewport(GLint x, GLint y, GLint width, GLint height)
+    {
+        GLint cachedX, cachedY, cachedWidth, cachedHeight;
+        Pyramid::OpenGLStateManager::GetInstance().GetViewport(
+            cachedX, cachedY, cachedWidth, cachedHeight);
+        return g_viewport == std::array<GLint, 4>{x, y, width, height} &&
+            cachedX == x && cachedY == y && cachedWidth == width && cachedHeight == height;
     }
 
     bool Contains(const std::vector<GLuint>& values, GLuint value)
@@ -324,6 +373,8 @@ int main()
     InstallFakeOpenGL();
 
     auto& stateManager = OpenGLStateManager::GetInstance();
+    OpenGLDevice openGLDevice(nullptr);
+    IGraphicsDevice& device = openGLDevice;
     constexpr GLuint sampledTexture = 71;
     stateManager.BindTextureUnit(0, GL_TEXTURE_2D, sampledTexture);
     stateManager.BindTextureUnit(3, GL_TEXTURE_2D, sampledTexture);
@@ -344,6 +395,58 @@ int main()
     const GLuint initialFramebuffer = initializedFramebuffer.GetFramebufferID();
     const GLuint initialColor = initializedFramebuffer.GetColorAttachmentTexture();
     const GLuint initialDepth = initializedFramebuffer.GetDepthAttachmentTexture();
+
+    device.SetViewport(11, 17, 321, 123);
+    const std::size_t bindsBeforeInvalid = g_framebufferBindCalls;
+    const std::size_t viewportsBeforeInvalid = g_viewportCalls;
+    device.BindFramebuffer(&uninitializedFramebuffer);
+    if (device.GetLastError().empty() || !HasFramebufferBindings(0, 0) ||
+        !HasViewport(11, 17, 321, 123) || g_framebufferBindCalls != bindsBeforeInvalid ||
+        g_viewportCalls != viewportsBeforeInvalid)
+    {
+        return Fail("uninitialized generic framebuffer binding did not report failure and preserve state");
+    }
+    device.BindFramebuffer(&initializedFramebuffer);
+    if (!device.GetLastError().empty() ||
+        !HasFramebufferBindings(initialFramebuffer, initialFramebuffer) ||
+        !HasViewport(0, 0, 640, 480))
+    {
+        return Fail("generic framebuffer binding did not select both targets, apply its viewport, or clear the old error");
+    }
+    const std::size_t bindsBeforeRepeat = g_framebufferBindCalls;
+    const std::size_t viewportsBeforeRepeat = g_viewportCalls;
+    device.BindFramebuffer(&initializedFramebuffer);
+    if (g_framebufferBindCalls != bindsBeforeRepeat || g_viewportCalls != viewportsBeforeRepeat)
+    {
+        return Fail("repeated generic framebuffer binding bypassed the state cache");
+    }
+    stateManager.BindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+    if (!HasFramebufferBindings(initialFramebuffer, 0))
+    {
+        return Fail("test fixture did not preserve independent draw/read framebuffer bindings");
+    }
+    device.BindFramebuffer(&initializedFramebuffer);
+    if (!HasFramebufferBindings(initialFramebuffer, initialFramebuffer))
+    {
+        return Fail("generic framebuffer binding did not reunify split draw/read targets");
+    }
+    device.BindFramebuffer(nullptr);
+    if (!HasFramebufferBindings(0, 0) || !HasViewport(0, 0, 640, 480) ||
+        g_viewportCalls != viewportsBeforeRepeat)
+    {
+        return Fail("default framebuffer binding did not select zero or unexpectedly changed viewport");
+    }
+    device.SetViewport(0, 0, 1280, 720);
+    if (!HasViewport(0, 0, 1280, 720))
+    {
+        return Fail("explicit main-surface viewport restoration failed");
+    }
+    initializedFramebuffer.Bind();
+    if (!HasFramebufferBindings(initialFramebuffer, initialFramebuffer) ||
+        !HasViewport(0, 0, 640, 480))
+    {
+        return Fail("legacy direct framebuffer binding lost its target viewport behavior");
+    }
 
     if (!initializedFramebuffer.Resize(800, 600))
     {
@@ -377,6 +480,12 @@ int main()
     const GLuint stableFramebuffer = initializedFramebuffer.GetFramebufferID();
     const GLuint stableColor = initializedFramebuffer.GetColorAttachmentTexture();
     const GLuint stableDepth = initializedFramebuffer.GetDepthAttachmentTexture();
+    device.BindFramebuffer(&initializedFramebuffer);
+    if (!HasFramebufferBindings(stableFramebuffer, stableFramebuffer) ||
+        !HasViewport(0, 0, 800, 600))
+    {
+        return Fail("generic binding after resize used stale framebuffer ownership or viewport dimensions");
+    }
 
     initializedFramebuffer.GenerateMipmaps();
     stateManager.BindTextureUnit(3, GL_TEXTURE_2D, sampledTexture);
@@ -422,13 +531,36 @@ int main()
             return Fail("deletion regression framebuffer did not initialize");
         }
         const GLuint deletedColor = deletedFramebuffer.GetColorAttachmentTexture();
+        const GLuint deletedNativeFramebuffer = deletedFramebuffer.GetFramebufferID();
+        device.BindFramebuffer(&deletedFramebuffer);
+        stateManager.BindFramebuffer(GL_READ_FRAMEBUFFER, stableFramebuffer);
+        if (!HasFramebufferBindings(deletedNativeFramebuffer, stableFramebuffer))
+        {
+            return Fail("deletion fixture did not establish an unrelated live read framebuffer");
+        }
         stateManager.BindTextureUnit(1, GL_TEXTURE_2D, deletedColor);
         stateManager.BindTextureUnit(5, GL_TEXTURE_2D, deletedColor);
         deletedFramebuffer.Invalidate();
+        if (!HasFramebufferBindings(0, stableFramebuffer))
+        {
+            return Fail("framebuffer deletion retained its draw binding or lost the unrelated live read binding");
+        }
+        const std::size_t bindsBeforeInvalidated = g_framebufferBindCalls;
+        const std::size_t viewportsBeforeInvalidated = g_viewportCalls;
+        device.BindFramebuffer(&deletedFramebuffer);
+        if (device.GetLastError().empty() || !HasFramebufferBindings(0, stableFramebuffer) ||
+            !HasViewport(0, 0, 32, 32) || g_framebufferBindCalls != bindsBeforeInvalidated ||
+            g_viewportCalls != viewportsBeforeInvalidated)
+        {
+            return Fail("invalidated framebuffer binding did not report failure and preserve state");
+        }
 
         const GLuint nextTexture = g_nextTexture;
+        const GLuint nextFramebuffer = g_nextFramebuffer;
         const std::size_t allocationsBeforeReuse = g_allocatedTextures.size();
+        const std::size_t attachmentsBeforeReuse = g_attachmentFramebuffers.size();
         g_nextTexture = deletedColor;
+        g_nextFramebuffer = deletedNativeFramebuffer;
         OpenGLFramebuffer reusedFramebuffer(colorOnly);
         if (!reusedFramebuffer.Initialize() ||
             g_allocatedTextures.size() != allocationsBeforeReuse + 1 ||
@@ -437,6 +569,19 @@ int main()
             return Fail("a reused attachment texture name skipped its allocation binding after deletion");
         }
         g_nextTexture = nextTexture;
+        g_nextFramebuffer = nextFramebuffer;
+        if (reusedFramebuffer.GetFramebufferID() != deletedNativeFramebuffer ||
+            g_attachmentFramebuffers.size() != attachmentsBeforeReuse + 1 ||
+            g_attachmentFramebuffers.back() != deletedNativeFramebuffer)
+        {
+            return Fail("a reused framebuffer name skipped its required attachment binding after deletion");
+        }
+        device.BindFramebuffer(&reusedFramebuffer);
+        if (!device.GetLastError().empty() ||
+            !HasFramebufferBindings(deletedNativeFramebuffer, deletedNativeFramebuffer))
+        {
+            return Fail("reused framebuffer could not be bound through the generic interface");
+        }
         stateManager.BindTextureUnit(1, GL_TEXTURE_2D, deletedColor);
         stateManager.BindTextureUnit(5, GL_TEXTURE_2D, deletedColor);
         if (g_boundTextures[1][GL_TEXTURE_2D] != deletedColor ||
@@ -467,6 +612,27 @@ int main()
         return Fail("multisampled attachments corrupted a sampled target binding or attempted invalid mipmaps");
     }
 
-    std::cout << "Framebuffer resize tests passed\n";
+    device.BindFramebuffer(&initializedFramebuffer);
+    OpenGLFramebuffer swapChainFramebuffer(swapChainSpec);
+    if (!swapChainFramebuffer.Initialize())
+    {
+        return Fail("swap-chain framebuffer did not initialize");
+    }
+    device.BindFramebuffer(&swapChainFramebuffer);
+    if (!HasFramebufferBindings(0, 0) || !HasViewport(0, 0, 1280, 720))
+    {
+        return Fail("generic swap-chain binding did not select zero and its target viewport");
+    }
+    if (!swapChainFramebuffer.Resize(1920, 1080))
+    {
+        return Fail("swap-chain framebuffer resize failed");
+    }
+    device.BindFramebuffer(&swapChainFramebuffer);
+    if (!HasFramebufferBindings(0, 0) || !HasViewport(0, 0, 1920, 1080))
+    {
+        return Fail("generic resized swap-chain binding did not apply its new viewport");
+    }
+
+    std::cout << "Framebuffer binding and resize tests passed\n";
     return EXIT_SUCCESS;
 }

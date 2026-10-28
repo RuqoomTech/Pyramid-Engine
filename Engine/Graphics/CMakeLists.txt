@@ -46,6 +46,7 @@ target_sources(PyramidEngine
         source/Scene/Octree.cpp
     PRIVATE
         include/Pyramid/Graphics/GraphicsDevice.hpp
+        include/Pyramid/Graphics/Framebuffer.hpp
         include/Pyramid/Graphics/Buffer/VertexBuffer.hpp
         include/Pyramid/Graphics/Buffer/IndexBuffer.hpp
         include/Pyramid/Graphics/Buffer/VertexArray.hpp

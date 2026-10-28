@@ -56,6 +56,8 @@ Held states persist across frames. Repeated native key-down messages do not crea
 
 OpenGL resources use RAII wrappers, but raw pointers passed into binding and command APIs are non-owning. Their owners must outlive command execution.
 
+`IFramebuffer` supplies required readiness and binding operations without GLAD or platform types. The graphics device borrows it for a bind, rejects uninitialized targets with an actionable error, and delegates ready objects to their existing binding implementation. Target binding applies its viewport; binding the default surface leaves the viewport unchanged, so render-system and UI boundaries explicitly restore main-surface dimensions. Implementations require the calling device's current context. Construction and attachment specifications remain OpenGL-specific.
+
 Texture binding accepts native OpenGL textures and immutable `TextureResource` wrappers from the registry caches. The OpenGL adapter resolves a wrapper to its existing native texture, validates that backend type, and binds through the shared state cache without changing ownership. Materials and command buffers use the same device path.
 
 ## Renderer
@@ -77,7 +79,7 @@ The default pipeline uses shadow and forward rendering. The deferred setup uses 
 Known constraints:
 
 - the renderer command buffer has no compute-dispatch method, tag, or payload; low-level shader compute compilation/dispatch remains separate from its graphics submission path;
-- generic framebuffer binding outside the OpenGL renderer remains incomplete;
+- framebuffer construction, attachment specifications, blits, and readback remain OpenGL-specific;
 - shadow-map resolution is intentionally independent of window size;
 - render statistics do not yet represent complete GPU execution metrics.
 
@@ -140,7 +142,7 @@ Size-based, render-target, and solid-color convenience factories remain availabl
 
 `CreateDepthTarget` allocates single-level depth/depth-stencil storage with nearest filtering and rejects non-depth formats. Texture allocation does not establish framebuffer renderability or attach the texture to a render pass. General specifications support mipmap generation, including allocation with undefined initial pixels; depth mips do not imply a min/max hierarchy, and OpenGL 3.3 sampling exposes the depth component rather than stencil. Graphics ownership, transactional replacement, and state-cache synchronization remain shared with existing texture paths.
 
-`OpenGLFramebuffer` owns one framebuffer and its attachments through a single cleanup path. Resizing creates and validates a replacement first, then swaps it into service; failed replacement creation leaves the previous framebuffer intact. `Renderer::RenderTarget` delegates to this same implementation rather than maintaining a second raw OpenGL lifecycle. `RenderSystem::Resize()` propagates window dimensions to managed targets and passes, while fixed-resolution shadow maps remain unchanged.
+`OpenGLFramebuffer` implements `IFramebuffer` and owns one framebuffer and its attachments through a single cleanup path. Releasing a native framebuffer invalidates its cached read/draw bindings before deletion so numeric name reuse cannot bypass a required bind. Resizing creates and validates a replacement first, then swaps it into service; failed replacement creation leaves the previous framebuffer intact. `Renderer::RenderTarget` delegates to this same implementation rather than maintaining a second raw OpenGL lifecycle. `RenderSystem::Resize()` propagates window dimensions to managed targets and passes, while fixed-resolution shadow maps remain unchanged.
 
 ## Image loading
 

@@ -300,7 +300,7 @@ namespace Pyramid
                 // Render passes may bind off-screen targets and change the viewport.
                 // Re-establish the main render surface before the next pass and
                 // before direct overlays such as Pyramid::UI render after Render().
-                m_device->BindFramebufferHandle(0);
+                m_device->BindFramebuffer(nullptr);
                 m_device->SetViewport(0, 0, m_width, m_height);
 
                 // Prepare command buffer for next pass.

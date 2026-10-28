@@ -375,6 +375,7 @@ renderer.Render(ui.GetDrawList(), frame);
 Primary headers:
 
 - `Pyramid/Graphics/GraphicsDevice.hpp`
+- `Pyramid/Graphics/Framebuffer.hpp`
 - `Pyramid/Graphics/Buffer/*.hpp`
 - `Pyramid/Graphics/Shader/Shader.hpp`
 - `Pyramid/Graphics/Shader/ShaderProgram.hpp`
@@ -391,6 +392,25 @@ Primary headers:
 - `Pyramid/Graphics/Resources/ResourceManifest.hpp`
 - `Pyramid/Graphics/Resources/ResourceRegistry.hpp`
 - `Pyramid/Graphics/Scene/SceneSerializer.hpp`
+
+### Framebuffers
+
+`Pyramid/Graphics/Framebuffer.hpp` defines the renderer-neutral `IFramebuffer` contract: `IsInitialized()` and `Bind()` are required virtual operations. `OpenGLFramebuffer` implements it with its existing resource ownership. Binding a ready target selects both its framebuffer and its target-sized viewport; it does not save previous state.
+
+`IGraphicsDevice::BindFramebuffer(IFramebuffer*)` borrows the object for the call and does not retain it. An uninitialized or invalidated target is rejected with a diagnostic and `GetLastError()`, preserving the current framebuffer and viewport. A successful generic bind clears that error. Implementations must belong to the calling device's current graphics context; this interface does not validate arbitrary native implementations or provide cross-context synchronization.
+
+```cpp
+// framebuffer is an initialized OpenGLFramebuffer owned by the caller.
+Pyramid::IFramebuffer& target = framebuffer;
+device->BindFramebuffer(&target);       // Selects the target and its viewport.
+// Submit off-screen graphics work.
+device->BindFramebuffer(nullptr);       // Selects the default surface only.
+device->SetViewport(0, 0, surfaceWidth, surfaceHeight);
+```
+
+Binding `nullptr` does not restore an earlier viewport. `RenderSystem` and the final UI pass explicitly establish the main surface and its viewport. `BindFramebufferHandle()` remains a native escape hatch and also leaves the viewport unchanged. The OpenGL state cache forgets deleted framebuffer names across read/draw bindings, preventing a reused name from suppressing a required native bind.
+
+Creation, attachment specifications, resize, blits, and readback remain OpenGL-specific; there is no generic framebuffer factory. Resources must be released while their owning context is current. Adding the virtual base changes `OpenGLFramebuffer`'s binary layout: rebuild applications and libraries together; no stable binary ABI is promised during pre-alpha. Fake-GL, linkage, and installed-package checks do not establish native-driver or visual correctness, which remains deferred.
 
 ### Shader programs
 

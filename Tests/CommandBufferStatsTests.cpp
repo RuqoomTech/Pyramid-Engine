@@ -90,6 +90,20 @@ int main()
         return EXIT_FAILURE;
     }
 
+    commands.Begin();
+    commands.SetRenderTarget(static_cast<Renderer::RenderTarget*>(nullptr));
+    commands.End();
+    device.BindFramebufferHandle(47);
+    device.SetViewport(13, 17, 640, 480);
+    commands.Execute(&device);
+    if (device.framebufferBindCalls != 1 || device.boundFramebuffer != nullptr ||
+        device.boundFramebufferHandle != 0 || device.viewportX != 13 ||
+        device.viewportY != 17 || device.viewportWidth != 640 || device.viewportHeight != 480)
+    {
+        std::cerr << "Default render-target command did not use generic binding or changed viewport\n";
+        return EXIT_FAILURE;
+    }
+
     std::cout << "CommandBuffer statistics tests passed\n";
     return EXIT_SUCCESS;
 }

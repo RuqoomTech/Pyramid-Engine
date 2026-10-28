@@ -370,14 +370,19 @@ namespace Pyramid
     {
         if (framebuffer)
         {
-            // TODO: Implement when IFramebuffer interface is available
-            m_lastError = "Framebuffer binding not yet implemented";
+            if (!framebuffer->IsInitialized())
+            {
+                m_lastError = "Cannot bind framebuffer: object is not initialized";
+                PYRAMID_LOG_ERROR(m_lastError);
+                return;
+            }
+            framebuffer->Bind();
         }
         else
         {
-            // Bind default framebuffer
             OpenGLStateManager::GetInstance().BindFramebuffer(GL_FRAMEBUFFER, 0);
         }
+        m_lastError.clear();
     }
 
     void OpenGLDevice::BindFramebufferHandle(u32 framebufferId)

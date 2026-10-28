@@ -34,6 +34,8 @@ namespace Pyramid
 
         // Framebuffer state
         void BindFramebuffer(GLenum target, GLuint framebuffer);
+        /** Forget a deleted name without changing GL or unrelated read/draw bindings. */
+        void ForgetFramebuffer(GLuint framebuffer);
         GLuint GetBoundFramebuffer(GLenum target) const;
 
         // Viewport state

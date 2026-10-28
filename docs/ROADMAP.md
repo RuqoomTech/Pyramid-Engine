@@ -51,7 +51,10 @@ The current `0.6.0-pre-alpha` baseline includes:
   1. [x] Remove the unused `CommandBuffer::Dispatch` method, command tag/payload, and log-only execution case. Preserve supported command codes (`ClearTarget = 15`); leave the independently implemented low-level shader compute APIs unchanged.
   2. [x] Add source and installed-package API guards and exercise supported clear/draw recording, execution, statistics, and reset behavior through the existing test device. Update API linkage, maintained documentation, and changelog.
   3. [x] Run GCC Debug/Release builds and tests plus a fresh installed-package consumer, then commit. Visual/native-driver acceptance remains deferred.
-- Complete backend-neutral framebuffer binding.
+- Framebuffer binding execution plan:
+  1. [x] Define a small GL-free `IFramebuffer` readiness/binding interface and adapt the existing OpenGL framebuffer. Implement borrowed device binding with explicit readiness errors; preserve target-viewport binding and require explicit viewport restoration after binding the default surface.
+  2. [x] Route shadow/deferred/default-surface submission through the generic device call without changing resource ownership. Invalidate cached framebuffer names when owned native objects are released so name reuse cannot suppress a required bind.
+  3. [x] Add fake-GL binding, viewport, invalid-object, resize, deletion/name-reuse regressions and installed-interface/public-linkage coverage. Run GCC Debug/Release plus installed-package validation, update maintained documentation, and commit. Visual/native-driver acceptance remains deferred.
 - [x] Add platform-neutral window resize events.
 - [x] Propagate renderable resize events into the default viewport and active camera.
 - [x] Remove fixed deferred target dimensions and propagate resize events into framebuffer/render-pass targets.

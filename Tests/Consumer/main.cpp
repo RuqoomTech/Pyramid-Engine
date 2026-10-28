@@ -1,3 +1,4 @@
+#include <Pyramid/Graphics/Framebuffer.hpp>
 #include <Pyramid/Core/Prerequisites.hpp>
 #include <Pyramid/Math/Math.hpp>
 #include <Pyramid/Platform/Input.hpp>
@@ -27,6 +28,16 @@ static_assert(std::is_same_v<
 
 namespace
 {
+    class ConsumerFramebuffer final : public Pyramid::IFramebuffer
+    {
+    public:
+        bool IsInitialized() const override { return m_initialized; }
+        void Bind() const override { ++m_bindCalls; }
+
+        bool m_initialized = false;
+        mutable unsigned int m_bindCalls = 0;
+    };
+
     template <typename T, typename = void>
     struct HasDispatchCall : std::false_type {};
 
@@ -57,6 +68,21 @@ namespace
 
 int main()
 {
+    ConsumerFramebuffer framebuffer;
+    Pyramid::IFramebuffer& framebufferInterface = framebuffer;
+    if (framebufferInterface.IsInitialized())
+    {
+        std::cerr << "Installed framebuffer interface lost its readiness state\n";
+        return 1;
+    }
+    framebuffer.m_initialized = true;
+    framebufferInterface.Bind();
+    if (!framebufferInterface.IsInitialized() || framebuffer.m_bindCalls != 1)
+    {
+        std::cerr << "Installed framebuffer interface failed virtual readiness or binding dispatch\n";
+        return 1;
+    }
+
     Pyramid::Renderer::CommandBuffer commands;
     commands.Begin();
     const bool recording = commands.IsRecording();

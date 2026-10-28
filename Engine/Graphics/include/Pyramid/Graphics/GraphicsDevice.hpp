@@ -1,6 +1,7 @@
 #pragma once
 #include <Pyramid/Core/Prerequisites.hpp>
 #include <Pyramid/Graphics/PrimitiveTopology.hpp>
+#include <Pyramid/Graphics/Framebuffer.hpp>
 #include <memory>
 #include <string> // Added for std::string
 
@@ -265,10 +266,14 @@ namespace Pyramid
         virtual void SetPolygonMode(u32 mode) = 0;
 
         /**
-         * @brief Bind a framebuffer for rendering
-         * @param framebuffer Framebuffer to bind (nullptr for default)
+         * @brief Bind an initialized framebuffer and its target viewport.
+         *
+         * Borrows the object for this call; it must belong to this device's
+         * graphics context. Uninitialized objects are rejected with GetLastError()
+         * and leave binding/viewport state unchanged. nullptr binds the default
+         * surface without restoring the viewport; set the surface viewport explicitly.
          */
-        virtual void BindFramebuffer(class IFramebuffer *framebuffer) = 0;
+        virtual void BindFramebuffer(IFramebuffer *framebuffer) = 0;
         /**
          * @brief Bind a native framebuffer handle
          * @param framebufferId OpenGL framebuffer ID (0 for default)

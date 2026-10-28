@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Pyramid/Core/Prerequisites.hpp>
+#include <Pyramid/Graphics/Framebuffer.hpp>
 #include <glad/glad.h>
 #include <string>
 #include <vector>
@@ -56,11 +57,11 @@ namespace Pyramid
     /**
      * @brief OpenGL framebuffer object with resize-safe attachment recreation.
      */
-    class OpenGLFramebuffer
+    class OpenGLFramebuffer : public IFramebuffer
     {
     public:
         explicit OpenGLFramebuffer(const FramebufferSpec& spec);
-        ~OpenGLFramebuffer();
+        ~OpenGLFramebuffer() override;
 
         OpenGLFramebuffer(const OpenGLFramebuffer&) = delete;
         OpenGLFramebuffer& operator=(const OpenGLFramebuffer&) = delete;
@@ -68,7 +69,7 @@ namespace Pyramid
         OpenGLFramebuffer& operator=(OpenGLFramebuffer&&) = delete;
 
         bool Initialize();
-        void Bind() const;
+        void Bind() const override;
         void Unbind() const;
         void Clear(f32 r = 0.0f, f32 g = 0.0f, f32 b = 0.0f, f32 a = 1.0f) const;
         void ClearAttachment(u32 attachmentIndex, const void* value) const;
@@ -111,7 +112,7 @@ namespace Pyramid
                          u32 dstX0, u32 dstY0, u32 dstX1, u32 dstY1) const;
 
         bool IsComplete() const;
-        bool IsInitialized() const { return m_initialized; }
+        bool IsInitialized() const override { return m_initialized; }
         bool IsMultisampled() const { return m_spec.samples > 1; }
         u32 GetColorAttachmentCount() const;
 

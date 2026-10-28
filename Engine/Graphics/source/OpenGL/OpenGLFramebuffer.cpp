@@ -253,6 +253,7 @@ namespace Pyramid
     {
         if (m_framebufferID != 0)
         {
+            OpenGLStateManager::GetInstance().ForgetFramebuffer(m_framebufferID);
             glDeleteFramebuffers(1, &m_framebufferID);
             m_framebufferID = 0;
         }
