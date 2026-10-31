@@ -330,6 +330,7 @@ namespace Pyramid
             std::shared_ptr<IUniformBuffer> m_lightingUBO;
 
             // Configuration
+            bool m_deferredPipeline = false;
             bool m_vsyncEnabled = true;
             bool m_hdrEnabled = false;
             bool m_multisamplingEnabled = false;

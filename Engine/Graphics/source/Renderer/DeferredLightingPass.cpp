@@ -3,7 +3,6 @@
 #include <Pyramid/Graphics/Scene.hpp>
 #include <Pyramid/Graphics/Camera.hpp>
 #include <Pyramid/Graphics/Shader/Shader.hpp>
-#include <Pyramid/Graphics/Texture.hpp>
 #include <Pyramid/Graphics/OpenGL/OpenGLFramebuffer.hpp>
 #include <Pyramid/Graphics/Buffer/VertexArray.hpp>
 #include <Pyramid/Graphics/Buffer/VertexBuffer.hpp>
@@ -11,202 +10,253 @@
 #include <Pyramid/Graphics/Renderer/ShaderPathResolver.hpp>
 #include <Pyramid/Util/Log.hpp>
 #include <glad/glad.h>
+#include <cmath>
+#include <utility>
 
 namespace Pyramid
 {
     namespace Renderer
     {
+        namespace
+        {
+            bool IsShadowDataValid(
+                const std::vector<std::shared_ptr<OpenGLFramebuffer>>& shadowMaps,
+                const std::vector<Math::Mat4>& lightSpaceMatrices,
+                const std::vector<f32>& cascadeSplits,
+                f32 depthBias)
+            {
+                const auto count = shadowMaps.size();
+                if (count == 0 || count > MaxShadowCascades ||
+                    lightSpaceMatrices.size() != count || cascadeSplits.size() != count + 1 ||
+                    !std::isfinite(depthBias) || depthBias < 0.0f)
+                {
+                    return false;
+                }
+                for (std::size_t index = 0; index < cascadeSplits.size(); ++index)
+                {
+                    if (!std::isfinite(cascadeSplits[index]) ||
+                        (index > 0 && cascadeSplits[index] <= cascadeSplits[index - 1]))
+                    {
+                        return false;
+                    }
+                }
+                for (std::size_t index = 0; index < count; ++index)
+                {
+                    const auto& map = shadowMaps[index];
+                    if (!map || !map->IsInitialized() || map->IsMultisampled() ||
+                        map->GetDepthAttachmentTexture() == 0)
+                    {
+                        return false;
+                    }
+                    for (f32 value : lightSpaceMatrices[index].m)
+                    {
+                        if (!std::isfinite(value)) return false;
+                    }
+                }
+                return true;
+            }
+
+            bool IsGBufferReady(const std::shared_ptr<OpenGLFramebuffer>& gBuffer)
+            {
+                if (!gBuffer || !gBuffer->IsInitialized() || gBuffer->IsMultisampled() ||
+                    gBuffer->GetColorAttachmentCount() < 4 || gBuffer->GetDepthAttachmentTexture() == 0)
+                {
+                    return false;
+                }
+                for (u32 index = 0; index < 4; ++index)
+                {
+                    if (gBuffer->GetColorAttachmentTexture(index) == 0) return false;
+                }
+                return true;
+            }
+        }
 
         DeferredLightingPass::DeferredLightingPass(const std::string& name, IGraphicsDevice* device)
             : RenderPass(RenderPassType::Lighting, name)
             , m_device(device)
         {
-            PYRAMID_LOG_INFO("DeferredLightingPass created");
-            
-            // Create lighting shader
+            if (!m_device)
+            {
+                PYRAMID_LOG_ERROR("Cannot create deferred lighting pass without a graphics device");
+                return;
+            }
             m_lightingShader = m_device->CreateShader();
-            
+            if (!m_lightingShader)
+            {
+                PYRAMID_LOG_ERROR("Failed to create deferred lighting shader");
+                return;
+            }
             const std::string vertSrc = ShaderPathResolver::LoadTextFile("Engine/Graphics/shaders/deferred_lighting.vert");
             const std::string fragSrc = ShaderPathResolver::LoadTextFile("Engine/Graphics/shaders/deferred_lighting.frag");
-
             if (vertSrc.empty() || fragSrc.empty())
             {
                 PYRAMID_LOG_ERROR("Failed to open deferred lighting shader files");
+                return;
             }
-            else
+            m_shaderReady = m_lightingShader->Compile(vertSrc, fragSrc);
+            if (!m_shaderReady)
             {
-                if (!m_lightingShader->Compile(vertSrc, fragSrc))
-                {
-                    PYRAMID_LOG_ERROR("Failed to compile deferred lighting shaders");
-                }
-                else
-                {
-                    PYRAMID_LOG_INFO("Deferred lighting shaders compiled successfully");
-                }
+                PYRAMID_LOG_ERROR("Failed to compile deferred lighting shaders");
+                return;
             }
-            
-            // Create fullscreen quad
             CreateFullscreenQuad();
         }
 
         void DeferredLightingPass::CreateFullscreenQuad()
         {
-            // Fullscreen triangle (more efficient than quad - covers entire screen with one triangle)
-            float vertices[] = {
-                // Positions      // TexCoords
-                -1.0f, -1.0f,     0.0f, 0.0f,
-                 3.0f, -1.0f,     2.0f, 0.0f,
-                -1.0f,  3.0f,     0.0f, 2.0f
+            // One fullscreen triangle, including its texture coordinates.
+            const f32 vertices[] = {
+                -1.0f, -1.0f, 0.0f, 0.0f,
+                 3.0f, -1.0f, 2.0f, 0.0f,
+                -1.0f,  3.0f, 0.0f, 2.0f
             };
-            
             auto vbo = m_device->CreateVertexBuffer();
+            auto vao = m_device->CreateVertexArray();
+            if (!vbo || !vao)
+            {
+                PYRAMID_LOG_ERROR("Failed to create deferred lighting fullscreen geometry");
+                return;
+            }
             vbo->SetData(vertices, sizeof(vertices));
-            
-            BufferLayout layout = {
-                { ShaderDataType::Float2, "a_Position" },
-                { ShaderDataType::Float2, "a_TexCoord" }
+            const BufferLayout layout = {
+                {ShaderDataType::Float2, "a_Position"},
+                {ShaderDataType::Float2, "a_TexCoord"}
             };
-            
-            m_fullscreenQuad = m_device->CreateVertexArray();
-            m_fullscreenQuad->AddVertexBuffer(vbo, layout);
-            
-            PYRAMID_LOG_DEBUG("Fullscreen quad created for deferred lighting");
+            vao->AddVertexBuffer(vbo, layout);
+            m_fullscreenQuad = std::move(vao);
         }
 
         void DeferredLightingPass::Begin(CommandBuffer& cmd)
         {
-            // Bind default framebuffer (render to screen)
+            (void)cmd;
+            if (!m_device) return;
             m_device->BindFramebuffer(nullptr);
-            
-            // Clear screen
             m_device->SetClearColor(0.0f, 0.0f, 0.0f, 1.0f);
             m_device->ClearBuffers(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-            
-            // Disable depth testing (fullscreen quad doesn't need it)
-            if (m_device)
-            {
-                m_device->EnableDepthTest(false);
-            }
-            
-            // Disable face culling
-            if (m_device)
-            {
-                m_device->EnableCullFace(false);
-            }
-            
-            PYRAMID_LOG_DEBUG("DeferredLightingPass::Begin");
+            m_device->EnableDepthTest(false);
+            m_device->EnableCullFace(false);
         }
 
         void DeferredLightingPass::Execute(CommandBuffer& cmd, const Scene& scene, const Camera& camera)
         {
-            if (!m_lightingShader || !m_fullscreenQuad || !m_gBuffer)
+            (void)cmd;
+            if (!m_device || !m_shaderReady || !m_lightingShader || !m_fullscreenQuad || !IsGBufferReady(m_gBuffer))
             {
-                PYRAMID_LOG_WARN("DeferredLightingPass not properly initialized");
+                PYRAMID_LOG_WARN("Deferred lighting requires a compiled shader, fullscreen geometry and a complete sampled G-buffer");
                 return;
             }
-            
-            // Bind lighting shader
             m_device->BindShader(m_lightingShader.get());
-            
-            // Bind G-Buffer textures
-            GLuint albedoMetallic = m_gBuffer->GetColorAttachmentTexture(0);
-            GLuint normalRoughness = m_gBuffer->GetColorAttachmentTexture(1);
-            GLuint positionAO = m_gBuffer->GetColorAttachmentTexture(2);
-            GLuint emissive = m_gBuffer->GetColorAttachmentTexture(3);
-            GLuint depth = m_gBuffer->GetDepthAttachmentTexture();
-            
-            m_device->BindNativeTexture(albedoMetallic, 0, GL_TEXTURE_2D);
-            m_lightingShader->SetUniformInt("u_GAlbedoMetallic", 0);
-            
-            m_device->BindNativeTexture(normalRoughness, 1, GL_TEXTURE_2D);
-            m_lightingShader->SetUniformInt("u_GNormalRoughness", 1);
-            
-            m_device->BindNativeTexture(positionAO, 2, GL_TEXTURE_2D);
-            m_lightingShader->SetUniformInt("u_GPositionAO", 2);
-            
-            m_device->BindNativeTexture(emissive, 3, GL_TEXTURE_2D);
-            m_lightingShader->SetUniformInt("u_GEmissive", 3);
-            
-            m_device->BindNativeTexture(depth, 4, GL_TEXTURE_2D);
-            m_lightingShader->SetUniformInt("u_GDepth", 4);
-            
-            // Bind shadow maps if available
-            if (!m_shadowMaps.empty())
+            const char* gBufferUniforms[] = {
+                "u_GAlbedoMetallic", "u_GNormalRoughness", "u_GPositionAO", "u_GEmissive"
+            };
+            for (u32 index = 0; index < 4; ++index)
             {
-                // For now, bind first shadow map cascade
-                // TODO: Implement shadow map array binding
-                GLuint shadowMap = m_shadowMaps[0]->GetDepthAttachmentTexture();
-                m_device->BindNativeTexture(shadowMap, 5, GL_TEXTURE_2D);
-                m_lightingShader->SetUniformInt("u_ShadowMaps", 5);
+                m_device->BindNativeTexture(m_gBuffer->GetColorAttachmentTexture(index), index, GL_TEXTURE_2D);
+                m_lightingShader->SetUniformInt(gBufferUniforms[index], static_cast<int>(index));
             }
-            
-            // Set camera uniforms
-            Math::Vec3 camPos = camera.GetPosition();
+            m_device->BindNativeTexture(m_gBuffer->GetDepthAttachmentTexture(), 4, GL_TEXTURE_2D);
+            m_lightingShader->SetUniformInt("u_GDepth", 4);
+
+            // The lighting draw is immediate; supply camera data immediately too.
+            const Math::Vec3 camPos = camera.GetPosition();
             m_lightingShader->SetUniformFloat3("u_CameraPosition", camPos.x, camPos.y, camPos.z);
-            
-            // Get primary directional light from scene
-            auto primaryLight = scene.GetPrimaryLight();
+            m_lightingShader->SetUniformMat4("u_View", camera.GetViewMatrix().m);
+
+            const auto primaryLight = scene.GetPrimaryLight();
             if (primaryLight && primaryLight->enabled)
             {
-                Math::Vec3 lightDir = primaryLight->direction.Normalized();
+                const Math::Vec3 lightDir = primaryLight->direction.Normalized();
                 m_lightingShader->SetUniformFloat3("u_LightDirection", lightDir.x, lightDir.y, lightDir.z);
-                m_lightingShader->SetUniformFloat3("u_LightColor", 
-                    primaryLight->color.x, 
-                    primaryLight->color.y, 
-                    primaryLight->color.z);
+                m_lightingShader->SetUniformFloat3("u_LightColor",
+                    primaryLight->color.x, primaryLight->color.y, primaryLight->color.z);
                 m_lightingShader->SetUniformFloat("u_LightIntensity", primaryLight->intensity);
             }
             else
             {
-                // Default lighting
                 m_lightingShader->SetUniformFloat3("u_LightDirection", 0.5f, -1.0f, 0.5f);
                 m_lightingShader->SetUniformFloat3("u_LightColor", 1.0f, 1.0f, 1.0f);
                 m_lightingShader->SetUniformFloat("u_LightIntensity", 1.0f);
             }
-            
-            // Set shadow parameters
-            m_lightingShader->SetUniformFloat("u_ShadowBias", 0.005f);
-            m_lightingShader->SetUniformInt("u_CascadeCount", static_cast<int>(m_shadowMaps.size()));
-            
-            // Set technique flags
+
+            const bool useShadows = primaryLight && primaryLight->enabled && primaryLight->castShadows &&
+                IsShadowDataValid(m_shadowMaps, m_lightSpaceMatrices, m_cascadeSplits, m_shadowBias);
+            const u32 cascadeCount = useShadows ? static_cast<u32>(m_shadowMaps.size()) : 0;
+            m_lightingShader->SetUniformInt("u_CascadeCount", static_cast<int>(cascadeCount));
+            m_lightingShader->SetUniformFloat("u_ShadowBias", m_shadowBias);
+            for (u32 index = 0; index < MaxShadowCascades; ++index)
+            {
+                m_device->BindNativeTexture(index < cascadeCount ? m_shadowMaps[index]->GetDepthAttachmentTexture() : 0,
+                    5 + index, GL_TEXTURE_2D);
+                const std::string suffix = "[" + std::to_string(index) + "]";
+                m_lightingShader->SetUniformInt("u_ShadowMaps" + suffix, static_cast<int>(5 + index));
+                if (index < cascadeCount)
+                {
+                    m_lightingShader->SetUniformMat4("u_LightSpaceMatrices" + suffix, m_lightSpaceMatrices[index].m);
+                    m_lightingShader->SetUniformFloat("u_CascadeSplits" + suffix, m_cascadeSplits[index]);
+                }
+            }
+            if (cascadeCount > 0)
+            {
+                m_lightingShader->SetUniformFloat("u_CascadeSplits[" + std::to_string(cascadeCount) + "]",
+                    m_cascadeSplits[cascadeCount]);
+            }
             m_lightingShader->SetUniformInt("u_EnableSSAO", m_enableSSAO ? 1 : 0);
             m_lightingShader->SetUniformInt("u_EnableIBL", m_enableIBL ? 1 : 0);
-            
-            // Draw fullscreen quad
             m_device->BindVertexArray(m_fullscreenQuad.get());
             m_device->DrawArraysInstanced(3, 1, 0);
-            
-            PYRAMID_LOG_DEBUG("DeferredLightingPass::Execute - Fullscreen lighting applied");
         }
 
         void DeferredLightingPass::End(CommandBuffer& cmd)
         {
-            // Re-enable depth testing for subsequent passes
-            if (m_device)
+            (void)cmd;
+            if (!m_device) return;
+            m_device->EnableDepthTest(true);
+            for (u32 index = 0; index < 5 + MaxShadowCascades; ++index)
             {
-                m_device->EnableDepthTest(true);
+                m_device->BindNativeTexture(0, index, GL_TEXTURE_2D);
             }
-            
-            // Unbind textures
-            for (int i = 0; i < 6; i++)
-            {
-                m_device->BindNativeTexture(0, static_cast<u32>(i), GL_TEXTURE_2D);
-            }
-            
-            PYRAMID_LOG_DEBUG("DeferredLightingPass::End");
         }
 
         void DeferredLightingPass::SetGBuffer(std::shared_ptr<OpenGLFramebuffer> gBuffer)
         {
-            m_gBuffer = gBuffer;
-            PYRAMID_LOG_DEBUG("G-Buffer set for deferred lighting pass");
+            m_gBuffer = std::move(gBuffer);
         }
 
         void DeferredLightingPass::SetShadowMaps(const std::vector<std::shared_ptr<OpenGLFramebuffer>>& shadowMaps)
         {
             m_shadowMaps = shadowMaps;
-            PYRAMID_LOG_DEBUG("Shadow maps set for deferred lighting pass (", shadowMaps.size(), " cascades)");
+            m_lightSpaceMatrices.clear();
+            m_cascadeSplits.clear();
+            if (!shadowMaps.empty())
+            {
+                PYRAMID_LOG_WARN("Deferred shadow maps need matrices and split distances; use SetShadowData to enable shadows");
+            }
         }
 
-    } // namespace Renderer
-} // namespace Pyramid
+        bool DeferredLightingPass::SetShadowData(
+            const std::vector<std::shared_ptr<OpenGLFramebuffer>>& shadowMaps,
+            const std::vector<Math::Mat4>& lightSpaceMatrices,
+            const std::vector<f32>& cascadeSplits,
+            f32 depthBias)
+        {
+            if (shadowMaps.empty() && lightSpaceMatrices.empty() && cascadeSplits.empty())
+            {
+                SetShadowMaps({});
+                m_shadowBias = 0.005f;
+                return true;
+            }
+            if (!IsShadowDataValid(shadowMaps, lightSpaceMatrices, cascadeSplits, depthBias))
+            {
+                SetShadowMaps({});
+                m_shadowBias = 0.005f;
+                PYRAMID_LOG_ERROR("Invalid deferred shadow data: require 1-8 initialized depth targets, matching finite matrices, increasing finite splits and nonnegative finite bias; shadows disabled");
+                return false;
+            }
+            m_shadowMaps = shadowMaps;
+            m_lightSpaceMatrices = lightSpaceMatrices;
+            m_cascadeSplits = cascadeSplits;
+            m_shadowBias = depthBias;
+            return true;
+        }
+    }
+}

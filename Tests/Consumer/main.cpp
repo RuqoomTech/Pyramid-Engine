@@ -15,19 +15,32 @@
 #include <Pyramid/Graphics/Scene/SceneSerializer.hpp>
 #include <Pyramid/Graphics/CameraController.hpp>
 #include <Pyramid/Graphics/Renderer/RenderSystem.hpp>
+#include <Pyramid/Graphics/Renderer/RenderPasses.hpp>
 
 #include <array>
 #include <iostream>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 static_assert(std::is_same_v<
     decltype(std::declval<const Pyramid::TextureResource&>().GetTexture()),
     const std::shared_ptr<const Pyramid::ITexture2D>&>,
     "Installed cached texture access must preserve a const native pointee");
 
+static_assert(Pyramid::Renderer::MaxShadowCascades == 8,
+    "Installed deferred shadow support must retain the documented eight-cascade bound");
+
 namespace
 {
+    using SetShadowDataFunction = bool (Pyramid::Renderer::DeferredLightingPass::*)(
+        const std::vector<std::shared_ptr<Pyramid::OpenGLFramebuffer>>&,
+        const std::vector<Pyramid::Math::Mat4>&,
+        const std::vector<Pyramid::f32>&,
+        Pyramid::f32);
+    volatile SetShadowDataFunction g_setShadowData =
+        &Pyramid::Renderer::DeferredLightingPass::SetShadowData;
+
     class ConsumerFramebuffer final : public Pyramid::IFramebuffer
     {
     public:
@@ -177,7 +190,7 @@ int main()
               << inputActions.GetActionValue2D("consumer-gameplay", "MoveForward").y
               << " | camera z: " << consumerCamera.GetPosition().z
               << " | released resources: " << released.GetTotal() << '\n';
-    return value.LengthSquared() > 0.0f && meshId.IsValid() && shaderId.IsValid() &&
+    return g_setShadowData && value.LengthSquared() > 0.0f && meshId.IsValid() && shaderId.IsValid() &&
         textureId.IsValid() && materialId.IsValid() && meshHandle.IsValid() &&
         materialHandle.IsValid() && input.IsKeyDown(Pyramid::Key::W) &&
         input.WasKeyPressed(Pyramid::Key::W) && actionConfigured &&

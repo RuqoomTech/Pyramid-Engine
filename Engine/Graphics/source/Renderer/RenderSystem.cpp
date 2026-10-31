@@ -254,6 +254,7 @@ namespace Pyramid
 
         void RenderSystem::Shutdown()
         {
+            m_deferredPipeline = false;
             m_renderPasses.clear();
             m_renderTargets.clear();
             m_cameraUBO.reset();
@@ -284,6 +285,21 @@ namespace Pyramid
             for (auto& pass : m_renderPasses) {
                 if (!pass->IsEnabled()) continue;
 
+                if (auto* lighting = m_deferredPipeline ? dynamic_cast<DeferredLightingPass*>(pass.get()) : nullptr)
+                {
+                    auto geometry = std::dynamic_pointer_cast<DeferredGeometryPass>(GetRenderPass(RenderPassType::GBuffer));
+                    lighting->SetGBuffer(geometry && geometry->IsEnabled() ? geometry->GetGBuffer() : nullptr);
+                    auto shadow = std::dynamic_pointer_cast<ShadowMapPass>(GetRenderPass(RenderPassType::Shadow));
+                    if (shadow && shadow->IsEnabled() && shadow->HasValidShadowData())
+                    {
+                        lighting->SetShadowData(shadow->GetShadowMaps(), shadow->GetLightSpaceMatrices(),
+                            shadow->GetCascadeSplits(), shadow->GetDepthBias());
+                    }
+                    else
+                    {
+                        lighting->SetShadowMaps({});
+                    }
+                }
                 // Keep global UBO state in sync for each pass execution.
                 UpdateGlobalUniforms(camera);
                 pass->Begin(*m_mainCommandBuffer);
@@ -474,6 +490,7 @@ namespace Pyramid
 
         void RenderSystem::SetupDefaultRenderPasses()
         {
+            m_deferredPipeline = false;
             // Create shadow map pass (renders first)
             auto shadowPass = std::make_shared<ShadowMapPass>("Shadow", m_device, 4);
             shadowPass->SetShadowMapResolution(2048);
@@ -492,6 +509,7 @@ namespace Pyramid
 
         void RenderSystem::SetupDeferredPipeline()
         {
+            m_deferredPipeline = true;
             // Clear existing render passes
             m_renderPasses.clear();
 
@@ -514,8 +532,7 @@ namespace Pyramid
             // Connect G-Buffer from geometry pass to lighting pass
             lightingPass->SetGBuffer(geometryPass->GetGBuffer());
 
-            // Connect shadow maps from shadow pass to lighting pass
-            lightingPass->SetShadowMaps(shadowPass->GetShadowMaps());
+            // Shadow metadata is connected after the producer renders each frame.
 
             AddRenderPass(lightingPass);
 

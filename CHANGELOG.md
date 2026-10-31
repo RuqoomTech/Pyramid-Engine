@@ -4,6 +4,14 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 
 ## [Unreleased]
 
+### Deferred cascade binding
+
+- Matched deferred shadow samplers to the existing separate 2D depth textures, binding all 1-8 cascades with matrices, split distances, bias and immediate camera data; invalid/unavailable data produces unshadowed lighting.
+- Refreshed built-in deferred pipeline connections every frame, bounded constructor settings, preserved validated custom splits, and made cascade-target recreation transactional.
+- Corrected cascade near/far corner pairing and light projection depth bounds, and removed mismatched camera blocks from deferred shaders in favor of their actual uniform submission paths.
+- Guarded optional framebuffer debug labels by context capability and entry-point availability after pipeline integration reproduced a null-call crash on the OpenGL 3.3 path.
+- Added fake-GL cascade binding/producer/validation/cleanup regressions and public/installed API checks. Real shader compilation, native-driver rendering and visual acceptance remain deferred.
+
 ### Framebuffer binding correctness
 
 - Defined the small renderer-neutral `IFramebuffer` contract and implemented generic device binding using the existing OpenGL framebuffer; uninitialized targets fail explicitly without changing binding or viewport state.

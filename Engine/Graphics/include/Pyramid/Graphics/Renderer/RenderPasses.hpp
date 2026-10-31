@@ -9,6 +9,7 @@ namespace Pyramid
 {
     namespace Renderer
     {
+        inline constexpr u32 MaxShadowCascades = 8;
 
         /**
          * @brief Forward rendering pass for opaque geometry
@@ -82,6 +83,10 @@ namespace Pyramid
 
             void SetGBuffer(std::shared_ptr<Pyramid::OpenGLFramebuffer> gBuffer);
             void SetShadowMaps(const std::vector<std::shared_ptr<Pyramid::OpenGLFramebuffer>>& shadowMaps);
+            // Complete cascade data; invalid input disables shadows and returns false.
+            bool SetShadowData(const std::vector<std::shared_ptr<Pyramid::OpenGLFramebuffer>>& shadowMaps,
+                const std::vector<Math::Mat4>& lightSpaceMatrices,
+                const std::vector<f32>& cascadeSplits, f32 depthBias);
             void SetEnableSSAO(bool enable) { m_enableSSAO = enable; }
             void SetEnableIBL(bool enable) { m_enableIBL = enable; }
 
@@ -91,6 +96,10 @@ namespace Pyramid
             IGraphicsDevice* m_device;
             std::shared_ptr<Pyramid::OpenGLFramebuffer> m_gBuffer;
             std::vector<std::shared_ptr<Pyramid::OpenGLFramebuffer>> m_shadowMaps;
+            std::vector<Math::Mat4> m_lightSpaceMatrices;
+            std::vector<f32> m_cascadeSplits;
+            f32 m_shadowBias = 0.005f;
+            bool m_shaderReady = false;
             std::shared_ptr<IShader> m_lightingShader;
             std::shared_ptr<IVertexArray> m_fullscreenQuad;
             bool m_enableSSAO = false;
@@ -119,9 +128,12 @@ namespace Pyramid
             // Accessors
             const std::vector<std::shared_ptr<Pyramid::OpenGLFramebuffer>>& GetShadowMaps() const { return m_shadowMaps; }
             const std::vector<Math::Mat4>& GetLightSpaceMatrices() const { return m_lightSpaceMatrices; }
+            const std::vector<f32>& GetCascadeSplits() const { return m_cascadeSplits; }
+            f32 GetDepthBias() const { return m_depthBias; }
+            bool HasValidShadowData() const { return m_hasValidShadowData; }
 
         private:
-            void CreateShadowMaps();
+            bool CreateShadowMaps();
             void CalculateCascadeSplits(const Camera& camera);
             Math::Mat4 CalculateLightSpaceMatrix(const Camera& camera, f32 nearPlane, f32 farPlane, const Math::Vec3& lightDir);
 
@@ -133,6 +145,9 @@ namespace Pyramid
             std::vector<Math::Mat4> m_lightSpaceMatrices;
             f32 m_depthBias;
             std::shared_ptr<IShader> m_shadowShader;
+            bool m_shaderReady = false;
+            bool m_hasValidShadowData = false;
+            bool m_customCascadeSplits = false;
         };
 
     } // namespace Renderer

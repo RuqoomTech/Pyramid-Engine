@@ -58,7 +58,10 @@ The current `0.6.0-pre-alpha` baseline includes:
 - [x] Add platform-neutral window resize events.
 - [x] Propagate renderable resize events into the default viewport and active camera.
 - [x] Remove fixed deferred target dimensions and propagate resize events into framebuffer/render-pass targets.
-- Complete deferred shadow-map-array binding.
+- Deferred cascade binding execution plan:
+  1. [x] Match the existing separate depth textures with a GLSL 3.30 sampler2D array using literal-index sampling, supporting 1-8 cascades on slots 5-12. Supply view/camera data explicitly, matrices, splits and bias; reject incomplete data and disable stale shadows.
+  2. [x] Refresh producer data before every deferred lighting pass, publish readiness only for complete current-frame shadows, bound cascade configuration, and correct cascade frustum pairing/depth bounds. Preserve framebuffer ownership and transactional recreation.
+  3. [x] Add focused fake-GL producer/lighting, invalid metadata, no-shadow, refresh and cleanup tests plus public/package API checks. Run GCC Debug/Release and installed-package validation, then commit. Real shader compilation, native-driver rendering and visual acceptance remain deferred.
 - Verify multisampled targets and resolve behavior across supported drivers; attachment ownership and resize preservation are now centralized.
 - [x] Add OpenGL debug-callback handling.
 - [ ] Add comprehensive render-state transition tests; UI viewport/scissor/state restoration now has focused coverage.

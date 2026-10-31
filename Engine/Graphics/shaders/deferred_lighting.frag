@@ -9,19 +9,15 @@ uniform sampler2D u_GPositionAO;
 uniform sampler2D u_GEmissive;
 uniform sampler2D u_GDepth;
 
-// Shadow maps
-uniform sampler2DArray u_ShadowMaps;
-uniform mat4 u_LightSpaceMatrices[4];
-uniform float u_CascadeSplits[5];
+// Separate owned 2D depth targets; keep the limit in sync with MaxShadowCascades.
+uniform sampler2D u_ShadowMaps[8];
+uniform mat4 u_LightSpaceMatrices[8];
+uniform float u_CascadeSplits[9];
 uniform int u_CascadeCount;
 
-// Camera
-layout(std140) uniform Camera {
-    mat4 u_ViewProjection;
-    mat4 u_View;
-    mat4 u_Projection;
-    vec4 u_CameraPosition;
-};
+// This immediate pass receives camera data independently of queued uniform blocks.
+uniform mat4 u_View;
+uniform vec3 u_CameraPosition;
 
 // Lighting
 uniform vec3 u_LightDirection;
@@ -73,36 +69,66 @@ float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
     return ggx1 * ggx2;
 }
 
-// Shadow calculation (same as forward pass)
+// GLSL 3.30 requires constant integral sampler-array indices. Explicit LOD also
+// avoids implicit derivatives inside fragment-dependent cascade branches.
+float SampleShadowDepth(int cascadeIndex, vec2 uv) {
+    switch (cascadeIndex) {
+        case 0: return textureLod(u_ShadowMaps[0], uv, 0.0).r;
+        case 1: return textureLod(u_ShadowMaps[1], uv, 0.0).r;
+        case 2: return textureLod(u_ShadowMaps[2], uv, 0.0).r;
+        case 3: return textureLod(u_ShadowMaps[3], uv, 0.0).r;
+        case 4: return textureLod(u_ShadowMaps[4], uv, 0.0).r;
+        case 5: return textureLod(u_ShadowMaps[5], uv, 0.0).r;
+        case 6: return textureLod(u_ShadowMaps[6], uv, 0.0).r;
+        case 7: return textureLod(u_ShadowMaps[7], uv, 0.0).r;
+    }
+    return 1.0;
+}
+
+vec2 ShadowTexelSize(int cascadeIndex) {
+    switch (cascadeIndex) {
+        case 0: return 1.0 / vec2(textureSize(u_ShadowMaps[0], 0));
+        case 1: return 1.0 / vec2(textureSize(u_ShadowMaps[1], 0));
+        case 2: return 1.0 / vec2(textureSize(u_ShadowMaps[2], 0));
+        case 3: return 1.0 / vec2(textureSize(u_ShadowMaps[3], 0));
+        case 4: return 1.0 / vec2(textureSize(u_ShadowMaps[4], 0));
+        case 5: return 1.0 / vec2(textureSize(u_ShadowMaps[5], 0));
+        case 6: return 1.0 / vec2(textureSize(u_ShadowMaps[6], 0));
+        case 7: return 1.0 / vec2(textureSize(u_ShadowMaps[7], 0));
+    }
+    return vec2(0.0);
+}
+
 float CalculateShadow(vec3 worldPos, vec3 normal) {
-    float depth = length(u_CameraPosition.xyz - worldPos);
-    int cascadeIndex = 0;
+    // Never consult shadow textures or metadata for a disabled/incomplete frame.
+    if (u_CascadeCount <= 0 || u_CascadeCount > 8) return 0.0;
+
+    float depth = -(u_View * vec4(worldPos, 1.0)).z;
+    if (depth < u_CascadeSplits[0] || depth >= u_CascadeSplits[u_CascadeCount]) return 0.0;
+    int cascadeIndex = u_CascadeCount - 1;
     for (int i = 0; i < u_CascadeCount; i++) {
         if (depth < u_CascadeSplits[i + 1]) {
             cascadeIndex = i;
             break;
         }
     }
-    
+
     vec4 lightSpacePos = u_LightSpaceMatrices[cascadeIndex] * vec4(worldPos, 1.0);
+    if (lightSpacePos.w <= 0.00001) return 0.0;
     vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
     projCoords = projCoords * 0.5 + 0.5;
-    
-    if (projCoords.z > 1.0) return 0.0;
-    
+    if (any(lessThan(projCoords, vec3(0.0))) || any(greaterThan(projCoords, vec3(1.0)))) return 0.0;
+
     float bias = max(u_ShadowBias * (1.0 - dot(normal, -u_LightDirection)), u_ShadowBias * 0.1);
-    
     float shadow = 0.0;
-    vec2 texelSize = 1.0 / textureSize(u_ShadowMaps, 0).xy;
+    vec2 texelSize = ShadowTexelSize(cascadeIndex);
     for (int x = -1; x <= 1; x++) {
         for (int y = -1; y <= 1; y++) {
-            float pcfDepth = texture(u_ShadowMaps, vec3(projCoords.xy + vec2(x, y) * texelSize, cascadeIndex)).r;
+            float pcfDepth = SampleShadowDepth(cascadeIndex, projCoords.xy + vec2(x, y) * texelSize);
             shadow += (projCoords.z - bias) > pcfDepth ? 1.0 : 0.0;
         }
     }
-    shadow /= 9.0;
-    
-    return shadow;
+    return shadow / 9.0;
 }
 
 void main() {
@@ -120,7 +146,7 @@ void main() {
     float ao = positionAO.a;
     
     // Calculate PBR lighting
-    vec3 V = normalize(u_CameraPosition.xyz - worldPos);
+    vec3 V = normalize(u_CameraPosition - worldPos);
     vec3 L = normalize(-u_LightDirection);
     vec3 H = normalize(V + L);
     

@@ -5,13 +5,8 @@ layout(location = 1) in vec3 a_Normal;
 layout(location = 2) in vec2 a_TexCoord;
 layout(location = 3) in vec3 a_Tangent;
 
-// Camera UBO
-layout(std140) uniform Camera {
-    mat4 u_ViewProjection;
-    mat4 u_View;
-    mat4 u_Projection;
-    vec4 u_CameraPosition;
-};
+// The geometry pass supplies this per draw through the command buffer.
+uniform mat4 u_ViewProjection;
 
 // Per-object uniforms
 uniform mat4 u_Model;

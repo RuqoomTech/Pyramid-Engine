@@ -23,6 +23,7 @@
 #include <Pyramid/Graphics/Shader/ShaderProgram.hpp>
 #include <Pyramid/Graphics/Shader/ShaderCache.hpp>
 #include <Pyramid/Graphics/Renderer/RenderSystem.hpp>
+#include <Pyramid/Graphics/Renderer/RenderPasses.hpp>
 #include <Pyramid/Graphics/Material/Material.hpp>
 #include <Pyramid/Graphics/Material/MaterialCache.hpp>
 #include <Pyramid/Graphics/Resources/ResourceHandle.hpp>
@@ -39,6 +40,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace
 {
@@ -559,6 +561,13 @@ namespace
         &Pyramid::Renderer::CommandBuffer::ClearTarget;
     volatile decltype(&Pyramid::Renderer::CommandBuffer::Execute) g_executeCommandBuffer =
         &Pyramid::Renderer::CommandBuffer::Execute;
+    using SetShadowDataFunction = bool (Pyramid::Renderer::DeferredLightingPass::*)(
+        const std::vector<std::shared_ptr<Pyramid::OpenGLFramebuffer>>&,
+        const std::vector<Pyramid::Math::Mat4>&,
+        const std::vector<Pyramid::f32>&,
+        Pyramid::f32);
+    volatile SetShadowDataFunction g_setShadowData =
+        &Pyramid::Renderer::DeferredLightingPass::SetShadowData;
     volatile decltype(&Pyramid::OpenGLFramebuffer::Resize) g_resizeFramebuffer =
         &Pyramid::OpenGLFramebuffer::Resize;
     volatile decltype(&Pyramid::Renderer::RenderTarget::Resize) g_resizeRenderTarget =
@@ -811,6 +820,7 @@ int main()
                    g_getDrawStats &&
                    g_clearCommandTarget &&
                    g_executeCommandBuffer &&
+                   g_setShadowData &&
                    g_forgetTexture &&
                    g_forgetFramebuffer &&
                    g_bindFramebuffer &&

@@ -257,9 +257,9 @@ namespace Pyramid::Tests
                 ? textureFileFactory(filepath, srgb, generateMips)
                 : nullptr;
         }
-        std::shared_ptr<IUniformBuffer> CreateUniformBuffer(size_t, BufferUsage) override
+        std::shared_ptr<IUniformBuffer> CreateUniformBuffer(size_t size, BufferUsage usage) override
         {
-            return nullptr;
+            return uniformBufferFactory ? uniformBufferFactory(size, usage) : nullptr;
         }
         std::shared_ptr<IInstanceBuffer> CreateInstanceBuffer() override { return nullptr; }
         std::shared_ptr<IShaderStorageBuffer> CreateShaderStorageBuffer() override { return nullptr; }
@@ -309,7 +309,10 @@ namespace Pyramid::Tests
             boundTextures[slot] = texture;
             if (texture) texture->Bind(slot);
         }
-        void BindNativeTexture(u32, u32, u32) override {}
+        void BindNativeTexture(u32 texture, u32 slot, u32 target) override
+        {
+            nativeTextureBindings.push_back({texture, slot, target});
+        }
         void SetTextureBorderColor(u32, u32, f32, f32, f32, f32) override {}
         void BindUniformBuffer(IUniformBuffer*, u32) override {}
         void ClearBuffers(u32) override {}
@@ -360,6 +363,13 @@ namespace Pyramid::Tests
         u32 polygonMode = 0;
         IShader* boundShader = nullptr;
         std::vector<ITexture2D*> boundTextures;
+        struct NativeTextureBinding
+        {
+            u32 texture;
+            u32 slot;
+            u32 target;
+        };
+        std::vector<NativeTextureBinding> nativeTextureBindings;
         u32 vertexBufferCreations = 0;
         u32 indexBufferCreations = 0;
         u32 vertexArrayCreations = 0;
@@ -367,6 +377,7 @@ namespace Pyramid::Tests
         u32 textureCreations = 0;
         u32 textureFileCreations = 0;
         std::function<std::shared_ptr<IShader>()> shaderFactory;
+        std::function<std::shared_ptr<IUniformBuffer>(size_t, BufferUsage)> uniformBufferFactory;
         std::function<std::shared_ptr<ITexture2D>(const TextureSpecification&, const void*)>
             textureFactory;
         std::function<std::shared_ptr<ITexture2D>(const std::string&, bool, bool)>

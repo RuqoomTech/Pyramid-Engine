@@ -1210,10 +1210,15 @@ namespace Pyramid
 
     void OpenGLFramebuffer::SetDebugLabel(const std::string &label) const
     {
-        if (m_framebufferID != 0)
+        if (m_framebufferID == 0) return;
+        const bool supportsLabels = GLAD_GL_KHR_debug || GLVersion.major > 4 ||
+            (GLVersion.major == 4 && GLVersion.minor >= 3);
+        if (!supportsLabels || !glObjectLabel)
         {
-            glObjectLabel(GL_FRAMEBUFFER, m_framebufferID, static_cast<GLsizei>(label.length()), label.c_str());
+            PYRAMID_LOG_DEBUG("Framebuffer debug labels are unavailable in this context");
+            return;
         }
+        glObjectLabel(GL_FRAMEBUFFER, m_framebufferID, static_cast<GLsizei>(label.length()), label.c_str());
     }
 
     std::string OpenGLFramebuffer::GetDebugInfo() const

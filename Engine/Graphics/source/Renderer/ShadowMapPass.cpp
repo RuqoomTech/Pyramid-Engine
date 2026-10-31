@@ -19,23 +19,27 @@ namespace Pyramid
         ShadowMapPass::ShadowMapPass(const std::string& name, IGraphicsDevice* device, u32 cascadeCount)
             : RenderPass(RenderPassType::Shadow, name)
             , m_device(device)
-            , m_cascadeCount(cascadeCount)
+            , m_cascadeCount(cascadeCount >= 1 && cascadeCount <= MaxShadowCascades ? cascadeCount : 4)
             , m_shadowMapResolution(2048)
             , m_depthBias(0.005f)
         {
             PYRAMID_LOG_INFO("ShadowMapPass created with ", cascadeCount, " cascades");
 
+            if (cascadeCount < 1 || cascadeCount > MaxShadowCascades)
+            {
+                PYRAMID_LOG_WARN("Invalid initial cascade count; using four cascades");
+            }
             // Initialize cascade splits vector
-            m_cascadeSplits.resize(cascadeCount + 1);
-            m_lightSpaceMatrices.resize(cascadeCount);
+            m_cascadeSplits.resize(m_cascadeCount + 1);
+            m_lightSpaceMatrices.resize(m_cascadeCount);
 
             // Create shadow shader
-            m_shadowShader = m_device->CreateShader();
+            m_shadowShader = m_device ? m_device->CreateShader() : nullptr;
 
             const std::string vertSrc = ShaderPathResolver::LoadTextFile("Engine/Graphics/shaders/shadow.vert");
             const std::string fragSrc = ShaderPathResolver::LoadTextFile("Engine/Graphics/shaders/shadow.frag");
 
-            if (vertSrc.empty() || fragSrc.empty())
+            if (!m_shadowShader || vertSrc.empty() || fragSrc.empty())
             {
                 PYRAMID_LOG_ERROR("Failed to open shadow shader files");
             }
@@ -45,15 +49,21 @@ namespace Pyramid
                 {
                     PYRAMID_LOG_ERROR("Failed to compile shadow shaders");
                 }
+                else
+                {
+                    m_shaderReady = true;
+                }
             }
 
             // Create shadow map framebuffers
             CreateShadowMaps();
         }
 
-        void ShadowMapPass::CreateShadowMaps()
+        bool ShadowMapPass::CreateShadowMaps()
         {
-            m_shadowMaps.clear();
+            m_hasValidShadowData = false;
+            if (!m_device) return false;
+            std::vector<std::shared_ptr<OpenGLFramebuffer>> replacements;
 
             PYRAMID_LOG_INFO("Creating ", m_cascadeCount, " shadow maps at ",
                            m_shadowMapResolution, "x", m_shadowMapResolution);
@@ -87,17 +97,19 @@ namespace Pyramid
                 if (!shadowMap->Initialize())
                 {
                     PYRAMID_LOG_ERROR("Failed to initialize shadow map framebuffer ", i);
-                    continue;
+                    return false;
                 }
 
                 // Set border color to 1.0 (outside shadow = not in shadow)
                 GLuint depthTexture = shadowMap->GetDepthAttachmentTexture();
                 m_device->SetTextureBorderColor(depthTexture, GL_TEXTURE_2D, 1.0f, 1.0f, 1.0f, 1.0f);
 
-                m_shadowMaps.push_back(shadowMap);
+                replacements.push_back(shadowMap);
 
                 PYRAMID_LOG_DEBUG("Shadow map cascade ", i, " created successfully");
             }
+            m_shadowMaps.swap(replacements);
+            return true;
         }
 
         void ShadowMapPass::CalculateCascadeSplits(const Camera& camera)
@@ -116,7 +128,7 @@ namespace Pyramid
                 f32 p = static_cast<f32>(i) / static_cast<f32>(m_cascadeCount);
 
                 // Logarithmic split
-                f32 logSplit = nearPlane * std::pow(farPlane / nearPlane, p);
+                f32 logSplit = nearPlane > 0.0f ? nearPlane * std::pow(farPlane / nearPlane, p) : nearPlane + clipRange * p;
 
                 // Uniform split
                 f32 uniformSplit = nearPlane + clipRange * p;
@@ -147,11 +159,11 @@ namespace Pyramid
 
             // Calculate frustum corners in NDC space
             std::vector<Math::Vec4> frustumCorners;
-            for (u32 x = 0; x < 2; x++)
+            for (u32 z = 0; z < 2; z++)
             {
                 for (u32 y = 0; y < 2; y++)
                 {
-                    for (u32 z = 0; z < 2; z++)
+                    for (u32 x = 0; x < 2; x++)
                     {
                         Math::Vec4 corner(
                             2.0f * x - 1.0f,
@@ -219,7 +231,7 @@ namespace Pyramid
             minZ = minZ - zExtension;
 
             // Create orthographic projection
-            Math::Mat4 lightProjection = Math::Mat4::CreateOrthographic(minX, maxX, minY, maxY, minZ, maxZ);
+            Math::Mat4 lightProjection = Math::Mat4::CreateOrthographic(minX, maxX, minY, maxY, -maxZ, -minZ);
 
             return lightProjection * lightView;
         }
@@ -227,6 +239,7 @@ namespace Pyramid
         void ShadowMapPass::Begin(CommandBuffer& cmd)
         {
             (void)cmd;
+            m_hasValidShadowData = false;
             // Enable depth testing for shadow rendering
             if (m_device)
             {
@@ -254,7 +267,16 @@ namespace Pyramid
         {
             (void)cmd;
             // Calculate cascade splits based on camera frustum
-            CalculateCascadeSplits(camera);
+            m_hasValidShadowData = false;
+            if (!m_device || !m_shaderReady || m_shadowMaps.size() != m_cascadeCount ||
+                !std::isfinite(camera.GetNearPlane()) || !std::isfinite(camera.GetFarPlane()) ||
+                camera.GetFarPlane() <= camera.GetNearPlane()) return;
+            for (const auto& target : m_shadowMaps)
+            {
+                if (!target || !target->IsInitialized() || target->IsMultisampled() ||
+                    target->GetDepthAttachmentTexture() == 0) return;
+            }
+            if (!m_customCascadeSplits) CalculateCascadeSplits(camera);
 
             // Get primary directional light
             auto primaryLight = scene.GetPrimaryLight();
@@ -264,7 +286,10 @@ namespace Pyramid
                 return;
             }
 
-            Math::Vec3 lightDir = primaryLight->direction.Normalized();
+            const auto direction = primaryLight->direction;
+            if (!std::isfinite(direction.x) || !std::isfinite(direction.y) ||
+                !std::isfinite(direction.z) || direction.LengthSquared() <= 1e-8f) return;
+            Math::Vec3 lightDir = direction.Normalized();
 
             // Get all shadow-casting objects
             auto allObjects = scene.GetRenderObjects();
@@ -294,6 +319,10 @@ namespace Pyramid
                 f32 nearPlane = m_cascadeSplits[i];
                 f32 farPlane = m_cascadeSplits[i + 1];
                 m_lightSpaceMatrices[i] = CalculateLightSpaceMatrix(camera, nearPlane, farPlane, lightDir);
+                for (const f32 value : m_lightSpaceMatrices[i].m)
+                {
+                    if (!std::isfinite(value)) return;
+                }
 
                 // Bind shadow map framebuffer
                 m_device->BindFramebuffer(m_shadowMaps[i].get());
@@ -310,8 +339,8 @@ namespace Pyramid
                 // Bind shadow shader
                 if (m_shadowShader)
                 {
-                    m_shadowShader->SetUniformMat4("u_LightSpaceMatrix", m_lightSpaceMatrices[i].m);
                     m_device->BindShader(m_shadowShader.get());
+                    m_shadowShader->SetUniformMat4("u_LightSpaceMatrix", m_lightSpaceMatrices[i].m);
                 }
 
                 // Render shadow casters
@@ -353,6 +382,7 @@ namespace Pyramid
 
                 PYRAMID_LOG_DEBUG("Cascade ", i, " rendered (", nearPlane, " - ", farPlane, ")");
             }
+            m_hasValidShadowData = true;
         }
 
         void ShadowMapPass::End(CommandBuffer& cmd)
@@ -375,18 +405,22 @@ namespace Pyramid
 
         void ShadowMapPass::SetCascadeCount(u32 count)
         {
-            if (count < 1 || count > 8)
+            if (count < 1 || count > MaxShadowCascades)
             {
                 PYRAMID_LOG_WARN("Invalid cascade count: ", count, " (must be 1-8)");
                 return;
             }
 
+            const u32 previousCount = m_cascadeCount;
             m_cascadeCount = count;
+            if (!CreateShadowMaps())
+            {
+                m_cascadeCount = previousCount;
+                return;
+            }
             m_cascadeSplits.resize(count + 1);
             m_lightSpaceMatrices.resize(count);
-
-            // Recreate shadow maps with new cascade count
-            CreateShadowMaps();
+            m_customCascadeSplits = false;
 
             PYRAMID_LOG_INFO("Cascade count set to ", count);
         }
@@ -399,10 +433,13 @@ namespace Pyramid
                 return;
             }
 
+            const u32 previousResolution = m_shadowMapResolution;
             m_shadowMapResolution = resolution;
-
-            // Recreate shadow maps with new resolution
-            CreateShadowMaps();
+            if (!CreateShadowMaps())
+            {
+                m_shadowMapResolution = previousResolution;
+                return;
+            }
 
             PYRAMID_LOG_INFO("Shadow map resolution set to ", resolution);
         }
@@ -416,13 +453,29 @@ namespace Pyramid
                 return;
             }
 
+            for (size_t index = 0; index < splits.size(); ++index)
+            {
+                if (!std::isfinite(splits[index]) || (index && splits[index] <= splits[index - 1]))
+                {
+                    PYRAMID_LOG_WARN("Cascade splits must be finite and strictly increasing");
+                    return;
+                }
+            }
             m_cascadeSplits = splits;
+            m_customCascadeSplits = true;
+            m_hasValidShadowData = false;
             PYRAMID_LOG_INFO("Custom cascade splits set");
         }
 
         void ShadowMapPass::SetDepthBias(f32 bias)
         {
+            if (!std::isfinite(bias) || bias < 0.0f)
+            {
+                PYRAMID_LOG_WARN("Shadow bias must be finite and non-negative");
+                return;
+            }
             m_depthBias = bias;
+            m_hasValidShadowData = false;
             PYRAMID_LOG_DEBUG("Depth bias set to ", bias);
         }
 
