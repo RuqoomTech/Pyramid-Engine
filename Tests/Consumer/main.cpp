@@ -14,6 +14,7 @@
 #include <Pyramid/Graphics/Resources/ResourceManifest.hpp>
 #include <Pyramid/Graphics/Scene.hpp>
 #include <Pyramid/Graphics/Scene/SceneSerializer.hpp>
+#include <Pyramid/Graphics/Scene/SceneManager.hpp>
 #include <Pyramid/Graphics/CameraController.hpp>
 #include <Pyramid/Graphics/Renderer/RenderSystem.hpp>
 #include <Pyramid/Graphics/Renderer/RenderPasses.hpp>
@@ -34,6 +35,20 @@ static_assert(Pyramid::Renderer::MaxShadowCascades == 8,
 
 namespace
 {
+    template <typename T, typename = void>
+    struct HasOcclusionCullingSetting : std::false_type {};
+
+    template <typename T>
+    struct HasOcclusionCullingSetting<T, std::void_t<decltype(
+        std::declval<T&>().SetOcclusionCullingEnabled(bool{}))>> : std::true_type {};
+
+    static_assert(!HasOcclusionCullingSetting<Pyramid::SceneManagement::SceneManager>::value,
+        "SceneManager must not advertise unsupported occlusion culling");
+
+    volatile decltype(&Pyramid::SceneManagement::SceneManager::GetVisibleObjects) g_getVisibleSceneObjects =
+        &Pyramid::SceneManagement::SceneManager::GetVisibleObjects;
+    volatile decltype(&Pyramid::SceneManagement::SceneManager::SetFrustumCullingEnabled) g_setSceneFrustumCulling =
+        &Pyramid::SceneManagement::SceneManager::SetFrustumCullingEnabled;
     volatile decltype(&Pyramid::OpenGLStateManager::ForgetBuffer) g_forgetBuffer =
         &Pyramid::OpenGLStateManager::ForgetBuffer;
     volatile decltype(&Pyramid::OpenGLStateManager::ForgetVertexArray) g_forgetVertexArray =
@@ -195,7 +210,8 @@ int main()
               << inputActions.GetActionValue2D("consumer-gameplay", "MoveForward").y
               << " | camera z: " << consumerCamera.GetPosition().z
               << " | released resources: " << released.GetTotal() << '\n';
-    return g_setShadowData && g_forgetBuffer && g_forgetVertexArray && value.LengthSquared() > 0.0f && meshId.IsValid() && shaderId.IsValid() &&
+    return g_getVisibleSceneObjects && g_setSceneFrustumCulling &&
+        g_setShadowData && g_forgetBuffer && g_forgetVertexArray && value.LengthSquared() > 0.0f && meshId.IsValid() && shaderId.IsValid() &&
         textureId.IsValid() && materialId.IsValid() && meshHandle.IsValid() &&
         materialHandle.IsValid() && input.IsKeyDown(Pyramid::Key::W) &&
         input.WasKeyPressed(Pyramid::Key::W) && actionConfigured &&

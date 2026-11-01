@@ -9,9 +9,11 @@
 #include <iostream>
 #include <memory>
 #include <vector>
+#include <string>
 
 namespace
 {
+
     bool NearlyEqual(Pyramid::f32 lhs, Pyramid::f32 rhs, Pyramid::f32 epsilon = 0.001f)
     {
         return std::abs(lhs - rhs) <= epsilon;
@@ -42,6 +44,68 @@ namespace
     bool Contains(const std::vector<std::shared_ptr<T>> &objects, const std::shared_ptr<T> &object)
     {
         return std::find(objects.begin(), objects.end(), object) != objects.end();
+    }
+    bool TestSupportedManagerVisibility()
+    {
+        using namespace Pyramid;
+        using Math::Vec3;
+        bool passed = true;
+        auto scene = std::make_shared<Scene>("Entity visibility contract");
+        const auto AddRenderer = [&](const char* name, const Vec3& position,
+            const MeshRendererComponent& component)
+        {
+            auto entity = scene->CreateEntity(name);
+            passed &= Expect(entity.SetLocalPosition(position), "visibility fixture position was rejected");
+            passed &= Expect(entity.SetMeshRenderer(component), "visibility fixture renderer was rejected");
+            return entity;
+        };
+        const MeshRendererComponent defaultRenderer;
+        const auto front = AddRenderer("Front", Vec3(0, 0, -3), defaultRenderer);
+        const auto rear = AddRenderer("Rear", Vec3(0, 0, -6), defaultRenderer);
+        MeshRendererComponent wideRenderer;
+        wideRenderer.boundsMode = RenderBoundsMode::Manual;
+        wideRenderer.localBoundsMin = Vec3(-2, -0.5f, -0.5f);
+        wideRenderer.localBoundsMax = Vec3(2, 0.5f, 0.5f);
+        const auto intersecting = AddRenderer("Intersecting", Vec3(6, 0, -5), wideRenderer);
+        const auto outside = AddRenderer("Outside", Vec3(10, 0, -5), defaultRenderer);
+        auto hiddenParent = scene->CreateEntity("Hidden parent");
+        auto hiddenChild = AddRenderer("Hidden child", Vec3(0, 0, -4), defaultRenderer);
+        passed &= Expect(hiddenParent.SetVisible(false) && hiddenChild.SetParent(hiddenParent) &&
+            !hiddenChild.IsEffectivelyVisible(), "visibility fixture did not inherit hidden parent state");
+        if (!passed) return false;
+
+        Camera camera(Math::Radians(90.0f), 1.0f, 1.0f, 10.0f);
+        SceneManagement::SceneManager manager;
+        manager.SetActiveScene(scene);
+        for (bool spatialEnabled : {false, true})
+        {
+            manager.EnableSpatialPartitioning(spatialEnabled);
+            for (bool frustumEnabled : {false, true})
+            {
+                manager.SetFrustumCullingEnabled(frustumEnabled);
+                manager.UpdateVisibility(camera);
+                const auto visible = manager.GetVisibleObjects(camera);
+                const auto HasEntity = [&](EntityId id)
+                {
+                    return std::any_of(visible.begin(), visible.end(), [id](const auto& object)
+                    {
+                        return object && object->entityId == id;
+                    });
+                };
+                const u32 expectedVisible = frustumEnabled ? 3u : 4u;
+                const std::string context = " (spatial=" + std::to_string(spatialEnabled) +
+                    ", frustum=" + std::to_string(frustumEnabled) + ")";
+                passed &= Expect(visible.size() == expectedVisible && HasEntity(front.GetId()) &&
+                    HasEntity(rear.GetId()) && HasEntity(intersecting.GetId()) &&
+                    HasEntity(outside.GetId()) == !frustumEnabled && !HasEntity(hiddenChild.GetId()),
+                    ("supported visibility lost overlap/bounds/hidden filtering" + context).c_str());
+                const auto& stats = manager.GetStats();
+                passed &= Expect(stats.totalObjects == 5 && stats.visibleObjects == expectedVisible &&
+                    stats.culledObjects == 5 - expectedVisible,
+                    ("supported visibility statistics changed" + context).c_str());
+            }
+        }
+        return passed;
     }
 }
 
@@ -232,5 +296,6 @@ int main()
     passed &= Expect(!Contains(octreeVisible, outside), "octree frustum query should reject outside objects");
     passed &= Expect(!Contains(octreeVisible, hidden), "octree frustum query should reject hidden objects");
 
+    passed &= TestSupportedManagerVisibility();
     return passed ? 0 : 1;
 }

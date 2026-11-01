@@ -40,10 +40,22 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace
 {
+    template <typename T, typename = void>
+    struct HasOcclusionCullingSetting : std::false_type {};
+
+    template <typename T>
+    struct HasOcclusionCullingSetting<T, std::void_t<decltype(
+        std::declval<T&>().SetOcclusionCullingEnabled(bool{}))>> : std::true_type {};
+
+    static_assert(!HasOcclusionCullingSetting<Pyramid::SceneManagement::SceneManager>::value,
+        "SceneManager must not advertise unsupported occlusion culling");
+
     class GameLinkageProbe final : public Pyramid::Game
     {
     public:
@@ -291,6 +303,10 @@ namespace
     volatile decltype(&SceneManager::SaveScene) g_saveScene = &SceneManager::SaveScene;
     volatile decltype(&SceneManager::GetObjectsInBox) g_getObjectsInBox = &SceneManager::GetObjectsInBox;
     volatile decltype(&SceneManager::QueryScene) g_queryScene = &SceneManager::QueryScene;
+    volatile decltype(&SceneManager::GetVisibleObjects) g_getVisibleSceneObjects =
+        &SceneManager::GetVisibleObjects;
+    volatile decltype(&SceneManager::SetFrustumCullingEnabled) g_setSceneFrustumCulling =
+        &SceneManager::SetFrustumCullingEnabled;
     volatile decltype(&SceneManager::GetNearestObject) g_getNearestObject =
         &SceneManager::GetNearestObject;
     volatile decltype(&SceneManager::GetKNearestObjects) g_getKNearestObjects =
@@ -695,6 +711,8 @@ int main()
                    g_saveScene &&
                    g_getObjectsInBox &&
                    g_queryScene &&
+                   g_getVisibleSceneObjects &&
+                   g_setSceneFrustumCulling &&
                    g_getNearestObject &&
                    g_getKNearestObjects &&
                    g_aabbDistanceSquared &&

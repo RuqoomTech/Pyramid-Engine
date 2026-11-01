@@ -4,6 +4,12 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 
 ## [Unreleased]
 
+### Occlusion placeholder removal
+
+- Removed the unused `SceneManager::SetOcclusionCullingEnabled(bool)` method, private flag/predicate and always-false filtering branch so scene settings no longer advertise unsupported culling.
+- Retained inherited visibility, optional frustum culling, octree/linear queries and scene statistics; the removed flag was not serialized, so no format or enum migration is needed.
+- Added source/installed API absence guards and supported visibility/frustum regressions. Calls to the former setter no longer compile; consumers must rebuild for the changed pre-alpha class layout. Native-driver and visual checks remain deferred.
+
 ### Render-state transition correctness
 
 - Added focused fake-native-state coverage for tracked OpenGL state, repeated-call suppression, retained-reference invalidation, aliasing, per-VAO element bindings, legal baseline restoration and mutation counts.

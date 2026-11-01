@@ -92,7 +92,10 @@ The current `0.6.0-pre-alpha` baseline includes:
 - [x] Prevent retained entity facades from reviving after scene clearing or explicit reuse of a destroyed entity ID; reject stale facade mutations.
 - [x] Implement hierarchy-wide transform dirty propagation and cycle-safe reparenting.
 - [x] Extract normalized camera frustum planes and use transformed object bounds for scene/octree visibility.
-- Replace placeholder occlusion culling with a supported technique or remove the setting.
+- Occlusion placeholder removal plan:
+  1. [x] Remove the unused occlusion switch, private predicate/member, and always-false visibility branch; retain supported frustum, visibility, spatial-query and statistics behavior. No persistent-format or enum change is needed.
+  2. [x] Add source/installed API absence guards and positive visibility/frustum checks using existing tests; document the source break and consumer rebuild requirement.
+  3. [x] Run GCC Debug/Release builds/tests and a fresh installed-package consumer, update maintained documentation/changelog, and commit. Native-driver and visual checks remain deferred. Revisit actual occlusion algorithms only after measured overdraw justifies them.
 - [x] Introduce an engine-owned mesh resource with validated vertex/index ownership, layout, topology, draw count, and immutable local bounds.
 - [x] Add stable mesh identifiers and a graphics-device-bound resource cache that shares exact geometry across aliases; manual `RenderObject` bounds overrides and the unit-cube fallback remain supported.
 - [x] Integrate dependency-free OBJ primitives transactionally with the mesh cache while preserving material-slot metadata.

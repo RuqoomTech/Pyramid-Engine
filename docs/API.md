@@ -783,7 +783,7 @@ Hierarchy edits reject missing entities, cycles, and self-parenting. Reparenting
 
 ### Spatial management
 
-`SceneManager` synchronizes entity-generated render proxies into the octree. Point, sphere, box, ray, nearest, and K-nearest queries operate on complete world AABBs. `QueryResult::entities` identifies the owning scene entities.
+`SceneManager` synchronizes entity-generated render proxies into the octree. Point, sphere, box, ray, nearest, and K-nearest queries operate on complete world AABBs. `QueryResult::entities` identifies the owning scene entities. `GetVisibleObjects()` respects inherited visibility and the supported frustum-culling setting, through the octree or linear path. The unused `SetOcclusionCullingEnabled(bool)` method, private flag and always-false predicate have been removed; calls to the old method no longer compile. There is no replacement occlusion algorithm or setting. Rebuild consumers because the pre-alpha class layout changed. Scene statistics and persistent-format versions are unchanged; the removed flag was never serialized.
 
 ## Math
 

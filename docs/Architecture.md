@@ -99,7 +99,7 @@ Each entity record owns a lifetime token borrowed weakly by its `Entity` facades
 
 `SceneManager` consumes the scene's generated render proxies for frustum culling, octree synchronization, and spatial queries. Query results also expose the corresponding entities. The octree operates on complete world AABBs, updates moved objects incrementally, compacts empty branches, and supports transactional configuration plus health metrics. Renderer proxies must be refreshed through the scene rather than treated as a second transform authority.
 
-Legacy `SceneManager::LoadScene` and `SaveScene` JSON/XML/Binary methods remain unsupported; use `SceneSerializer`. Cameras, environment settings, gameplay components, and editor metadata are future scene-format extensions. Occlusion culling remains unimplemented and disabled by default.
+Legacy `SceneManager::LoadScene` and `SaveScene` JSON/XML/Binary methods remain unsupported; use `SceneSerializer`. Cameras, environment settings, gameplay components, and editor metadata are future scene-format extensions. Occlusion culling remains unsupported; its unused scene-manager switch and always-false predicate have been removed. Visibility flags and optional manager frustum culling define the supported visibility behavior.
 
 ## Model import
 
