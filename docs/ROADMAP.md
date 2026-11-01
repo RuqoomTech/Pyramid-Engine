@@ -17,7 +17,7 @@ The current `0.6.0-pre-alpha` baseline includes:
 - strict required window operations with Win32 implementations;
 - relocatable install/export package and external-consumer test;
 - Windows Debug/Release CI for build, CTest, install, and package consumption;
-- 57 registered Windows tests, including standalone foundation, math, input, image, model, font, international text, UI, executable-relative runtime paths, exact installed-system-font selection/coverage/cache validation, pre-action UI input consumption, command-buffer statistics, OpenGL UI batching and clipping, platform input, action mapping, reusable camera controllers, game-side RTS interaction, engine-owned mesh resources, transactional OBJ-to-mesh/texture/material publication, immutable geometry bounds, real PNG/JPEG decoding, transactional texture loading, OpenGL diagnostics, window events, camera resize/frustum behavior, framebuffer resize, scene-hierarchy transforms, spatial queries, resource caches, and scene serialization;
+- 58 registered Windows tests, including standalone foundation, math, input, image, model, font, international text, UI, executable-relative runtime paths, exact installed-system-font selection/coverage/cache validation, pre-action UI input consumption, command-buffer statistics, OpenGL UI batching and clipping, native state-cache transitions, platform input, action mapping, reusable camera controllers, game-side RTS interaction, engine-owned mesh resources, transactional OBJ-to-mesh/texture/material publication, immutable geometry bounds, real PNG/JPEG decoding, transactional texture loading, OpenGL diagnostics, window events, camera resize/frustum behavior, framebuffer resize, scene-hierarchy transforms, spatial queries, resource caches, and scene serialization;
 - extracted primitive types/logging, math, physical/action input, image codecs, CPU model importing, TrueType/font assets, text, and UI into independently installable `Pyramid::Foundation`, `Pyramid::Math`, `Pyramid::Input`, `Pyramid::Image`, `Pyramid::Model`, `Pyramid::Font`, `Pyramid::Text`, and `Pyramid::UI` packages;
 - completed the previously stubbed `Mat4` determinant and inverse operations with pivoted elimination;
 - corrected standards-invalid PNG, zlib, and JPEG test fixtures;
@@ -64,7 +64,10 @@ The current `0.6.0-pre-alpha` baseline includes:
   3. [x] Add focused fake-GL producer/lighting, invalid metadata, no-shadow, refresh and cleanup tests plus public/package API checks. Run GCC Debug/Release and installed-package validation, then commit. Real shader compilation, native-driver rendering and visual acceptance remain deferred.
 - Verify multisampled targets and resolve behavior across supported drivers; attachment ownership and resize preservation are now centralized.
 - [x] Add OpenGL debug-callback handling.
-- [ ] Add comprehensive render-state transition tests; UI viewport/scissor/state restoration now has focused coverage.
+- Render-state transition execution plan:
+  1. [x] Add a focused fake-native-state CTest for implemented cache state, repeat suppression, retained-reference invalidation, read/draw aliases, per-VAO element bindings, and legal baseline restoration; preserve existing texture/FBO coverage.
+  2. [x] Fix demonstrated cache/adapter coherence gaps, keep native vertex/index binding and deletion synchronized, and prevent inherited blend/polygon state from changing deferred fullscreen lighting. Add UI/material and pass transition regressions without a new rendering framework.
+  3. [x] Run GCC Debug/Release builds/tests and an installed-package consumer, update maintained API/architecture/changelog, and commit. Native-driver, real shader and visual acceptance remain deferred; these tests cover the explicitly tracked state subset.
 
 ### Texture and image correctness
 

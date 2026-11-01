@@ -473,7 +473,21 @@ namespace
             if (!lighting.SetShadowData(selectedMaps, selectedMatrices, selectedSplits, 0.0125f))
                 return Fail("valid deferred cascade data was rejected");
             const u32 drawsBefore = device.drawCalls;
+            device.EnableBlend(true);
+            device.SetBlendFunc(GL_SRC_ALPHA, GL_ONE);
+            device.SetPolygonMode(count == 1 ? GL_LINE : GL_POINT);
+            lighting.Begin(commands);
+            bool lightingDrawStateCorrect = false;
+            device.onDraw = [&]()
+            {
+                lightingDrawStateCorrect = !device.blendEnabled && !device.depthTestEnabled &&
+                    !device.cullFaceEnabled && device.polygonMode == GL_FILL &&
+                    !device.wireframeEnabled && device.boundFramebufferHandle == 0;
+            };
             Execute();
+            device.onDraw = {};
+            if (!lightingDrawStateCorrect)
+                return Fail("fullscreen lighting inherited a geometry material's blend or rasterization mode");
             if (shader->ints["u_CascadeCount"] != static_cast<int>(count) || device.drawCalls != drawsBefore + 1)
                 return Fail("deferred lighting lost valid cascade count or fullscreen draw");
             for (u32 index = 0; index < MaxShadowCascades; ++index)

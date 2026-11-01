@@ -64,6 +64,10 @@ namespace
         g_resolveRuntimePath = &Pyramid::Platform::ResolveRuntimePath;
     volatile decltype(&Pyramid::OpenGLStateManager::ForgetTexture) g_forgetTexture =
         &Pyramid::OpenGLStateManager::ForgetTexture;
+    volatile decltype(&Pyramid::OpenGLStateManager::ForgetBuffer) g_forgetBuffer =
+        &Pyramid::OpenGLStateManager::ForgetBuffer;
+    volatile decltype(&Pyramid::OpenGLStateManager::ForgetVertexArray) g_forgetVertexArray =
+        &Pyramid::OpenGLStateManager::ForgetVertexArray;
     volatile decltype(&Pyramid::OpenGLStateManager::ForgetFramebuffer) g_forgetFramebuffer =
         &Pyramid::OpenGLStateManager::ForgetFramebuffer;
     volatile decltype(&Pyramid::OpenGLDevice::BindFramebuffer) g_bindFramebuffer =
@@ -823,6 +827,8 @@ int main()
                    g_setShadowData &&
                    g_forgetTexture &&
                    g_forgetFramebuffer &&
+                   g_forgetBuffer &&
+                   g_forgetVertexArray &&
                    g_bindFramebuffer &&
                    g_bindOpenGLFramebuffer &&
                    g_resizeFramebuffer &&

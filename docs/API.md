@@ -393,6 +393,16 @@ Primary headers:
 - `Pyramid/Graphics/Resources/ResourceRegistry.hpp`
 - `Pyramid/Graphics/Scene/SceneSerializer.hpp`
 
+### Render-state transitions
+
+`OpenGLStateManager` caches the engine's supported program, vertex-array/generic buffer, texture, framebuffer, viewport, blend, depth, stencil, culling, scissor and clear state. Every tracked state operation refreshes an invalidated cache, including calls through a retained manager reference. External native state changes require `InvalidateState()` before further engine use. Statistics access does not query graphics state; mutation counts describe native state changes emitted by the manager, excluding queries and suppressed repeats.
+
+Buffer lookups report the cached binding, or zero when unknown. Initial/invalidated snapshots seed array and current element bindings; other generic targets become known through explicit `BindBuffer()` calls. Element-buffer bindings follow the current VAO. Native vertex/index/instance buffer and VAO adapters use the same cache for binding and forget deleted names. `ForgetBuffer()` and `ForgetVertexArray()` invalidate references without changing unrelated state. Index-buffer `SetData()` uploads storage through `GL_COPY_WRITE_BUFFER`, leaving element attachment to `Bind()`/`SetIndexBuffer()` with a nonzero VAO. An element-buffer bind with VAO zero is rejected with a diagnostic.
+
+`ResetToDefaults()` applies this baseline: program/VAO/array-buffer/default framebuffer zero; unit-zero 2D/cube textures unbound with active unit zero; blending off with ONE/ZERO factors and ADD equations; depth test/clamp off with LESS and writes enabled; stencil test off with ALWAYS/zero/all-bit comparison and KEEP operations on both faces; culling off with BACK/CCW/FILL; scissor disabled; clear color zero, depth one and stencil zero. It preserves viewport/scissor rectangles, textures on other units/targets and stored element attachments in other VAOs. Indexed UBO/SSBO state and unlisted OpenGL features are outside this reset contract.
+
+UI establishes its physical surface and clip at draw time, then restores its documented UI baseline. A following material reapplies its own blend/depth/cull/polygon state. Deferred fullscreen lighting explicitly selects filled rasterization and disables blending before drawing. Fake-native-state and draw-snapshot tests verify these contracts; native-driver and visual checks remain separate deferred gates.
+
 ### Framebuffers
 
 `Pyramid/Graphics/Framebuffer.hpp` defines the renderer-neutral `IFramebuffer` contract: `IsInitialized()` and `Bind()` are required virtual operations. `OpenGLFramebuffer` implements it with its existing resource ownership. Binding a ready target selects both its framebuffer and its target-sized viewport; it does not save previous state.

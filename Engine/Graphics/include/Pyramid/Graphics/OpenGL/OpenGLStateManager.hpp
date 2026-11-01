@@ -18,12 +18,16 @@ namespace Pyramid
 
         // Shader state
         void UseProgram(GLuint program);
-        GLuint GetCurrentProgram() const { return m_currentProgram; }
+        GLuint GetCurrentProgram() const { EnsureState(); return m_currentProgram; }
 
         // Buffer binding state
         void BindVertexArray(GLuint vao);
         void BindBuffer(GLenum target, GLuint buffer);
         GLuint GetBoundBuffer(GLenum target) const;
+        /** Forget a deleted buffer name without changing GL or unrelated bindings. */
+        void ForgetBuffer(GLuint buffer);
+        /** Forget a deleted VAO name; deletion of the current VAO selects zero. */
+        void ForgetVertexArray(GLuint vao);
 
         // Texture state
         void ActiveTexture(GLenum texture);
@@ -87,6 +91,7 @@ namespace Pyramid
         OpenGLStateManager& operator=(const OpenGLStateManager&) = delete;
 
         void InitializeState();
+        void EnsureState() const;
 
         // Shader state
         GLuint m_currentProgram = 0;
@@ -116,7 +121,7 @@ namespace Pyramid
             bool enabled = false;
             GLenum srcRGB = GL_ONE, dstRGB = GL_ZERO;
             GLenum srcAlpha = GL_ONE, dstAlpha = GL_ZERO;
-            GLenum equation = GL_FUNC_ADD;
+            GLenum equation = GL_FUNC_ADD, alphaEquation = GL_FUNC_ADD;
         } m_blendState;
 
         // Depth state
@@ -136,6 +141,10 @@ namespace Pyramid
             i32 ref = 0;
             u32 mask = 0xFFFFFFFF;
             GLenum fail = GL_KEEP, zfail = GL_KEEP, zpass = GL_KEEP;
+            GLenum backFunc = GL_ALWAYS;
+            i32 backRef = 0;
+            u32 backMask = 0xFFFFFFFF;
+            GLenum backFail = GL_KEEP, backZfail = GL_KEEP, backZpass = GL_KEEP;
         } m_stencilState;
 
         // Culling state

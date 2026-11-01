@@ -1,5 +1,6 @@
 // Engine/Graphics/source/OpenGL/Buffer/OpenGLIndexBuffer.cpp
 #include <Pyramid/Graphics/OpenGL/Buffer/OpenGLIndexBuffer.hpp>
+#include <Pyramid/Graphics/OpenGL/OpenGLStateManager.hpp>
 
 namespace Pyramid
 {
@@ -13,24 +14,28 @@ namespace Pyramid
     OpenGLIndexBuffer::~OpenGLIndexBuffer()
     {
         if (m_bufferId)
+        {
+            OpenGLStateManager::GetInstance().ForgetBuffer(m_bufferId);
             glDeleteBuffers(1, &m_bufferId);
+        }
     }
 
     void OpenGLIndexBuffer::Bind()
     {
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_bufferId);
+        OpenGLStateManager::GetInstance().BindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_bufferId);
     }
 
     void OpenGLIndexBuffer::Unbind()
     {
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+        OpenGLStateManager::GetInstance().BindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     }
 
     void OpenGLIndexBuffer::SetData(const void *data, u32 count)
     {
         m_count = count;
-        Bind();
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, count * sizeof(u32), data, GL_STATIC_DRAW);
+        // Storage upload must not depend on a bound VAO. Element binding is VAO state.
+        OpenGLStateManager::GetInstance().BindBuffer(GL_COPY_WRITE_BUFFER, m_bufferId);
+        glBufferData(GL_COPY_WRITE_BUFFER, count * sizeof(u32), data, GL_STATIC_DRAW);
     }
 
 } // namespace Pyramid

@@ -4,6 +4,13 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 
 ## [Unreleased]
 
+### Render-state transition correctness
+
+- Added focused fake-native-state coverage for tracked OpenGL state, repeated-call suppression, retained-reference invalidation, aliasing, per-VAO element bindings, legal baseline restoration and mutation counts.
+- Synchronized native vertex/index/instance/VAO binding and deletion with the shared cache, and uploaded index storage without requiring an element attachment on VAO zero.
+- Completed blend-equation and front/back stencil state queries so combined resets cannot suppress required native updates.
+- Established fill and disabled blending for deferred fullscreen lighting, and added draw-time UI/material/pass transition regressions. Documented the supported reset subset; native-driver and visual acceptance remain deferred.
+
 ### Deferred cascade binding
 
 - Matched deferred shadow samplers to the existing separate 2D depth textures, binding all 1-8 cascades with matrices, split distances, bias and immediate camera data; invalid/unavailable data produces unshadowed lighting.

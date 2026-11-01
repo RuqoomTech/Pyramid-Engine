@@ -190,6 +190,11 @@ target_link_libraries(ModelMaterialResourceImporterTests PRIVATE Pyramid::Engine
 set_target_properties(ModelMaterialResourceImporterTests PROPERTIES FOLDER "Tests/Graphics")
 add_test(NAME Graphics.ModelMaterialResourceImport COMMAND $<TARGET_FILE:ModelMaterialResourceImporterTests>)
 
+add_executable(OpenGLStateTransitionTests OpenGLStateTransitionTests.cpp)
+target_link_libraries(OpenGLStateTransitionTests PRIVATE Pyramid::Engine)
+set_target_properties(OpenGLStateTransitionTests PROPERTIES FOLDER "Tests/Graphics")
+add_test(NAME Graphics.OpenGLStateTransitions COMMAND $<TARGET_FILE:OpenGLStateTransitionTests>)
+
 if(TARGET PyramidMinGWRuntime)
     get_property(_pyramid_test_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
     foreach(_pyramid_test_target IN LISTS _pyramid_test_targets)

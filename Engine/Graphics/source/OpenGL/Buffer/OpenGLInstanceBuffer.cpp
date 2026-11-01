@@ -1,5 +1,6 @@
 #include <Pyramid/Graphics/OpenGL/Buffer/OpenGLInstanceBuffer.hpp>
 #include <Pyramid/Util/Log.hpp>
+#include <Pyramid/Graphics/OpenGL/OpenGLStateManager.hpp>
 
 namespace Pyramid
 {
@@ -15,6 +16,7 @@ namespace Pyramid
     {
         if (m_bufferId)
         {
+            OpenGLStateManager::GetInstance().ForgetBuffer(m_bufferId);
             glDeleteBuffers(1, &m_bufferId);
             PYRAMID_LOG_DEBUG("Deleted OpenGL instance buffer with ID: ", m_bufferId);
         }
@@ -22,12 +24,12 @@ namespace Pyramid
 
     void OpenGLInstanceBuffer::Bind()
     {
-        glBindBuffer(GL_ARRAY_BUFFER, m_bufferId);
+        OpenGLStateManager::GetInstance().BindBuffer(GL_ARRAY_BUFFER, m_bufferId);
     }
 
     void OpenGLInstanceBuffer::Unbind()
     {
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        OpenGLStateManager::GetInstance().BindBuffer(GL_ARRAY_BUFFER, 0);
     }
 
     void OpenGLInstanceBuffer::SetData(const void* data, u32 size, u32 instanceCount)

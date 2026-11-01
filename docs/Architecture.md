@@ -56,6 +56,8 @@ Held states persist across frames. Repeated native key-down messages do not crea
 
 OpenGL resources use RAII wrappers, but raw pointers passed into binding and command APIs are non-owning. Their owners must outlive command execution.
 
+Tracked OpenGL state resynchronizes after invalidation even through retained cache references. Vertex-array element bindings follow the selected VAO; vertex/index/instance adapter binding and deletion share the cache. Combined blend/stencil updates account for both channels/faces. Default restoration has an explicit supported subset documented in [API.md](API.md#render-state-transitions), including core-profile VAO-zero restrictions. Deferred lighting establishes fill and disabled blending, while UI/material transitions are checked at draw time.
+
 `IFramebuffer` supplies required readiness and binding operations without GLAD or platform types. The graphics device borrows it for a bind, rejects uninitialized targets with an actionable error, and delegates ready objects to their existing binding implementation. Target binding applies its viewport; binding the default surface leaves the viewport unchanged, so render-system and UI boundaries explicitly restore main-surface dimensions. Implementations require the calling device's current context. Construction and attachment specifications remain OpenGL-specific.
 
 Texture binding accepts native OpenGL textures and immutable `TextureResource` wrappers from the registry caches. The OpenGL adapter resolves a wrapper to its existing native texture, validates that backend type, and binds through the shared state cache without changing ownership. Materials and command buffers use the same device path.

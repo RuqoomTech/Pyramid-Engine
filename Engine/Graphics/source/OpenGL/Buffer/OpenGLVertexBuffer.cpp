@@ -1,5 +1,6 @@
 #include <Pyramid/Graphics/OpenGL/Buffer/OpenGLVertexBuffer.hpp>
 #include <Pyramid/Graphics/Geometry/MeshBounds.hpp>
+#include <Pyramid/Graphics/OpenGL/OpenGLStateManager.hpp>
 
 #include <cstring>
 
@@ -14,17 +15,20 @@ OpenGLVertexBuffer::OpenGLVertexBuffer()
 OpenGLVertexBuffer::~OpenGLVertexBuffer()
 {
     if (m_bufferId)
+    {
+        OpenGLStateManager::GetInstance().ForgetBuffer(m_bufferId);
         glDeleteBuffers(1, &m_bufferId);
+    }
 }
 
 void OpenGLVertexBuffer::Bind()
 {
-    glBindBuffer(GL_ARRAY_BUFFER, m_bufferId);
+    OpenGLStateManager::GetInstance().BindBuffer(GL_ARRAY_BUFFER, m_bufferId);
 }
 
 void OpenGLVertexBuffer::Unbind()
 {
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    OpenGLStateManager::GetInstance().BindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
 void OpenGLVertexBuffer::SetData(const void* data, u32 size)

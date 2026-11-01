@@ -15,6 +15,14 @@ namespace Pyramid
         return instance;
     }
 
+    void OpenGLStateManager::EnsureState() const
+    {
+        if (!m_initialized)
+        {
+            const_cast<OpenGLStateManager*>(this)->InitializeState();
+        }
+    }
+
     void OpenGLStateManager::InitializeState()
     {
         m_boundBuffers.clear();
@@ -41,9 +49,12 @@ namespace Pyramid
         }
 
         // Initialize buffer bindings
-        GLint arrayBuffer, elementArrayBuffer;
+        GLint arrayBuffer = 0, elementArrayBuffer = 0;
         glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &arrayBuffer);
-        glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &elementArrayBuffer);
+        if (m_currentVAO != 0)
+        {
+            glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &elementArrayBuffer);
+        }
         m_boundBuffers[GL_ARRAY_BUFFER] = arrayBuffer;
         m_boundBuffers[GL_ELEMENT_ARRAY_BUFFER] = elementArrayBuffer;
 
@@ -69,6 +80,7 @@ namespace Pyramid
         glGetIntegerv(GL_BLEND_SRC_ALPHA, reinterpret_cast<GLint *>(&m_blendState.srcAlpha));
         glGetIntegerv(GL_BLEND_DST_ALPHA, reinterpret_cast<GLint *>(&m_blendState.dstAlpha));
         glGetIntegerv(GL_BLEND_EQUATION_RGB, reinterpret_cast<GLint *>(&m_blendState.equation));
+        glGetIntegerv(GL_BLEND_EQUATION_ALPHA, reinterpret_cast<GLint *>(&m_blendState.alphaEquation));
 
         // Initialize depth state
         m_depthState.testEnabled = glIsEnabled(GL_DEPTH_TEST);
@@ -83,6 +95,15 @@ namespace Pyramid
         glGetIntegerv(GL_STENCIL_FUNC, reinterpret_cast<GLint *>(&m_stencilState.func));
         glGetIntegerv(GL_STENCIL_REF, &m_stencilState.ref);
         glGetIntegerv(GL_STENCIL_VALUE_MASK, reinterpret_cast<GLint *>(&m_stencilState.mask));
+        glGetIntegerv(GL_STENCIL_FAIL, reinterpret_cast<GLint *>(&m_stencilState.fail));
+        glGetIntegerv(GL_STENCIL_PASS_DEPTH_FAIL, reinterpret_cast<GLint *>(&m_stencilState.zfail));
+        glGetIntegerv(GL_STENCIL_PASS_DEPTH_PASS, reinterpret_cast<GLint *>(&m_stencilState.zpass));
+        glGetIntegerv(GL_STENCIL_BACK_FUNC, reinterpret_cast<GLint *>(&m_stencilState.backFunc));
+        glGetIntegerv(GL_STENCIL_BACK_REF, &m_stencilState.backRef);
+        glGetIntegerv(GL_STENCIL_BACK_VALUE_MASK, reinterpret_cast<GLint *>(&m_stencilState.backMask));
+        glGetIntegerv(GL_STENCIL_BACK_FAIL, reinterpret_cast<GLint *>(&m_stencilState.backFail));
+        glGetIntegerv(GL_STENCIL_BACK_PASS_DEPTH_FAIL, reinterpret_cast<GLint *>(&m_stencilState.backZfail));
+        glGetIntegerv(GL_STENCIL_BACK_PASS_DEPTH_PASS, reinterpret_cast<GLint *>(&m_stencilState.backZpass));
 
         // Initialize cull state
         m_cullState.enabled = glIsEnabled(GL_CULL_FACE);
@@ -117,6 +138,7 @@ namespace Pyramid
 
     void OpenGLStateManager::UseProgram(GLuint program)
     {
+        EnsureState();
         if (m_currentProgram != program)
         {
             glUseProgram(program);
@@ -127,16 +149,29 @@ namespace Pyramid
 
     void OpenGLStateManager::BindVertexArray(GLuint vao)
     {
+        EnsureState();
         if (m_currentVAO != vao)
         {
             glBindVertexArray(vao);
             m_currentVAO = vao;
+            GLint elementBuffer = 0;
+            if (vao != 0)
+            {
+                glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &elementBuffer);
+            }
+            m_boundBuffers[GL_ELEMENT_ARRAY_BUFFER] = static_cast<GLuint>(elementBuffer);
             m_stateChangeCount++;
         }
     }
 
     void OpenGLStateManager::BindBuffer(GLenum target, GLuint buffer)
     {
+        EnsureState();
+        if (target == GL_ELEMENT_ARRAY_BUFFER && m_currentVAO == 0)
+        {
+            PYRAMID_LOG_WARN("Cannot bind an element buffer without a vertex array in the core profile");
+            return;
+        }
         auto it = m_boundBuffers.find(target);
         if (it == m_boundBuffers.end() || it->second != buffer)
         {
@@ -148,16 +183,36 @@ namespace Pyramid
 
     GLuint OpenGLStateManager::GetBoundBuffer(GLenum target) const
     {
+        EnsureState();
         auto it = m_boundBuffers.find(target);
         return (it != m_boundBuffers.end()) ? it->second : 0;
     }
 
+    void OpenGLStateManager::ForgetBuffer(GLuint buffer)
+    {
+        EnsureState();
+        if (buffer == 0) return;
+        for (auto binding = m_boundBuffers.begin(); binding != m_boundBuffers.end();)
+        {
+            if (binding->second == buffer) binding = m_boundBuffers.erase(binding);
+            else ++binding;
+        }
+    }
+
+    void OpenGLStateManager::ForgetVertexArray(GLuint vao)
+    {
+        EnsureState();
+        if (vao != 0 && m_currentVAO == vao)
+        {
+            m_currentVAO = 0;
+            m_boundBuffers[GL_ELEMENT_ARRAY_BUFFER] = 0;
+        }
+    }
+
     void OpenGLStateManager::ActiveTexture(GLenum texture)
     {
-        if (!m_initialized)
-        {
-            InitializeState();
-        }
+        EnsureState();
+
         if (m_activeTexture != texture)
         {
             glActiveTexture(texture);
@@ -168,10 +223,8 @@ namespace Pyramid
 
     void OpenGLStateManager::BindTexture(GLenum target, GLuint texture)
     {
-        if (!m_initialized)
-        {
-            InitializeState();
-        }
+        EnsureState();
+
         u32 unit = m_activeTexture - GL_TEXTURE0;
         if (unit < m_runtimeTextureUnitCount && unit < MAX_TEXTURE_UNITS)
         {
@@ -194,10 +247,8 @@ namespace Pyramid
 
     void OpenGLStateManager::BindTextureUnit(u32 unit, GLenum target, GLuint texture)
     {
-        if (!m_initialized)
-        {
-            InitializeState();
-        }
+        EnsureState();
+
         if (unit < m_runtimeTextureUnitCount && unit < MAX_TEXTURE_UNITS)
         {
             ActiveTexture(GL_TEXTURE0 + unit);
@@ -211,6 +262,7 @@ namespace Pyramid
 
     void OpenGLStateManager::ForgetTexture(GLuint texture)
     {
+        EnsureState();
         if (!texture)
         {
             return;
@@ -233,6 +285,7 @@ namespace Pyramid
 
     void OpenGLStateManager::ForgetFramebuffer(GLuint framebuffer)
     {
+        EnsureState();
         if (!framebuffer)
         {
             return;
@@ -252,6 +305,7 @@ namespace Pyramid
 
     void OpenGLStateManager::BindFramebuffer(GLenum target, GLuint framebuffer)
     {
+        EnsureState();
         // GL_FRAMEBUFFER is an alias that binds to both GL_DRAW_FRAMEBUFFER and GL_READ_FRAMEBUFFER
         if (target == GL_FRAMEBUFFER)
         {
@@ -289,12 +343,14 @@ namespace Pyramid
 
     GLuint OpenGLStateManager::GetBoundFramebuffer(GLenum target) const
     {
+        EnsureState();
         auto it = m_boundFramebuffers.find(target);
         return (it != m_boundFramebuffers.end()) ? it->second : 0;
     }
 
     void OpenGLStateManager::SetViewport(i32 x, i32 y, i32 width, i32 height)
     {
+        EnsureState();
         if (m_viewport.x != x || m_viewport.y != y ||
             m_viewport.width != width || m_viewport.height != height)
         {
@@ -309,6 +365,7 @@ namespace Pyramid
 
     void OpenGLStateManager::GetViewport(i32 &x, i32 &y, i32 &width, i32 &height) const
     {
+        EnsureState();
         x = m_viewport.x;
         y = m_viewport.y;
         width = m_viewport.width;
@@ -317,6 +374,7 @@ namespace Pyramid
 
     void OpenGLStateManager::EnableBlend(bool enable)
     {
+        EnsureState();
         if (m_blendState.enabled != enable)
         {
             if (enable)
@@ -330,6 +388,7 @@ namespace Pyramid
 
     void OpenGLStateManager::SetBlendFunc(GLenum sfactor, GLenum dfactor)
     {
+        EnsureState();
         if (m_blendState.srcRGB != sfactor || m_blendState.dstRGB != dfactor ||
             m_blendState.srcAlpha != sfactor || m_blendState.dstAlpha != dfactor)
         {
@@ -344,6 +403,7 @@ namespace Pyramid
 
     void OpenGLStateManager::SetBlendFuncSeparate(GLenum srcRGB, GLenum dstRGB, GLenum srcAlpha, GLenum dstAlpha)
     {
+        EnsureState();
         if (m_blendState.srcRGB != srcRGB || m_blendState.dstRGB != dstRGB ||
             m_blendState.srcAlpha != srcAlpha || m_blendState.dstAlpha != dstAlpha)
         {
@@ -358,16 +418,19 @@ namespace Pyramid
 
     void OpenGLStateManager::SetBlendEquation(GLenum mode)
     {
-        if (m_blendState.equation != mode)
+        EnsureState();
+        if (m_blendState.equation != mode || m_blendState.alphaEquation != mode)
         {
             glBlendEquation(mode);
             m_blendState.equation = mode;
+            m_blendState.alphaEquation = mode;
             m_stateChangeCount++;
         }
     }
 
     void OpenGLStateManager::EnableDepthTest(bool enable)
     {
+        EnsureState();
         if (m_depthState.testEnabled != enable)
         {
             if (enable)
@@ -381,6 +444,7 @@ namespace Pyramid
 
     void OpenGLStateManager::EnableDepthClamp(bool enable)
     {
+        EnsureState();
         if (m_depthState.clampEnabled != enable)
         {
             if (enable)
@@ -394,6 +458,7 @@ namespace Pyramid
 
     void OpenGLStateManager::SetDepthFunc(GLenum func)
     {
+        EnsureState();
         if (m_depthState.func != func)
         {
             glDepthFunc(func);
@@ -404,6 +469,7 @@ namespace Pyramid
 
     void OpenGLStateManager::SetDepthMask(bool flag)
     {
+        EnsureState();
         if (m_depthState.maskEnabled != flag)
         {
             glDepthMask(flag ? GL_TRUE : GL_FALSE);
@@ -414,6 +480,7 @@ namespace Pyramid
 
     void OpenGLStateManager::EnableStencilTest(bool enable)
     {
+        EnsureState();
         if (m_stencilState.testEnabled != enable)
         {
             if (enable)
@@ -427,30 +494,41 @@ namespace Pyramid
 
     void OpenGLStateManager::SetStencilFunc(GLenum func, i32 ref, u32 mask)
     {
-        if (m_stencilState.func != func || m_stencilState.ref != ref || m_stencilState.mask != mask)
+        EnsureState();
+        if (m_stencilState.func != func || m_stencilState.ref != ref || m_stencilState.mask != mask ||
+            m_stencilState.backFunc != func || m_stencilState.backRef != ref || m_stencilState.backMask != mask)
         {
             glStencilFunc(func, ref, mask);
             m_stencilState.func = func;
             m_stencilState.ref = ref;
             m_stencilState.mask = mask;
+            m_stencilState.backFunc = func;
+            m_stencilState.backRef = ref;
+            m_stencilState.backMask = mask;
             m_stateChangeCount++;
         }
     }
 
     void OpenGLStateManager::SetStencilOp(GLenum fail, GLenum zfail, GLenum zpass)
     {
-        if (m_stencilState.fail != fail || m_stencilState.zfail != zfail || m_stencilState.zpass != zpass)
+        EnsureState();
+        if (m_stencilState.fail != fail || m_stencilState.zfail != zfail || m_stencilState.zpass != zpass ||
+            m_stencilState.backFail != fail || m_stencilState.backZfail != zfail || m_stencilState.backZpass != zpass)
         {
             glStencilOp(fail, zfail, zpass);
             m_stencilState.fail = fail;
             m_stencilState.zfail = zfail;
             m_stencilState.zpass = zpass;
+            m_stencilState.backFail = fail;
+            m_stencilState.backZfail = zfail;
+            m_stencilState.backZpass = zpass;
             m_stateChangeCount++;
         }
     }
 
     void OpenGLStateManager::EnableCullFace(bool enable)
     {
+        EnsureState();
         if (m_cullState.enabled != enable)
         {
             if (enable)
@@ -464,6 +542,7 @@ namespace Pyramid
 
     void OpenGLStateManager::SetCullFace(GLenum mode)
     {
+        EnsureState();
         if (m_cullState.mode != mode)
         {
             glCullFace(mode);
@@ -474,6 +553,7 @@ namespace Pyramid
 
     void OpenGLStateManager::SetFrontFace(GLenum mode)
     {
+        EnsureState();
         if (m_cullState.frontFace != mode)
         {
             glFrontFace(mode);
@@ -484,6 +564,7 @@ namespace Pyramid
 
     void OpenGLStateManager::SetPolygonMode(GLenum mode)
     {
+        EnsureState();
         if (m_cullState.polygonMode != mode)
         {
             glPolygonMode(GL_FRONT_AND_BACK, mode);
@@ -494,6 +575,7 @@ namespace Pyramid
 
     void OpenGLStateManager::EnableScissorTest(bool enable)
     {
+        EnsureState();
         if (m_scissorState.enabled != enable)
         {
             if (enable)
@@ -507,6 +589,7 @@ namespace Pyramid
 
     void OpenGLStateManager::SetScissor(i32 x, i32 y, i32 width, i32 height)
     {
+        EnsureState();
         if (m_scissorState.x != x || m_scissorState.y != y ||
             m_scissorState.width != width || m_scissorState.height != height)
         {
@@ -521,6 +604,7 @@ namespace Pyramid
 
     void OpenGLStateManager::SetClearColor(f32 r, f32 g, f32 b, f32 a)
     {
+        EnsureState();
         if (m_clearState.colorR != r || m_clearState.colorG != g ||
             m_clearState.colorB != b || m_clearState.colorA != a)
         {
@@ -535,6 +619,7 @@ namespace Pyramid
 
     void OpenGLStateManager::SetClearDepth(f64 depth)
     {
+        EnsureState();
         if (m_clearState.depth != depth)
         {
             glClearDepth(depth);
@@ -545,6 +630,7 @@ namespace Pyramid
 
     void OpenGLStateManager::SetClearStencil(i32 stencil)
     {
+        EnsureState();
         if (m_clearState.stencil != stencil)
         {
             glClearStencil(stencil);
@@ -572,15 +658,13 @@ namespace Pyramid
 
     void OpenGLStateManager::ResetToDefaults()
     {
-        if (!m_initialized)
-        {
-            InitializeState();
-        }
+        EnsureState();
+
         // Reset to OpenGL default state
         UseProgram(0);
         BindVertexArray(0);
         BindBuffer(GL_ARRAY_BUFFER, 0);
-        BindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+        // VAO zero has no element-buffer binding in the core profile.
         ActiveTexture(GL_TEXTURE0);
         BindTexture(GL_TEXTURE_2D, 0);
         BindTexture(GL_TEXTURE_CUBE_MAP, 0);

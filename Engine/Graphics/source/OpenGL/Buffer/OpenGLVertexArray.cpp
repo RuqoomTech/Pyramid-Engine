@@ -5,6 +5,7 @@
 #include "Pyramid/Graphics/Buffer/BufferLayout.hpp" // Added
 #include <Pyramid/Util/Log.hpp>                     // Added for logging
 #include <glad/glad.h>
+#include <Pyramid/Graphics/OpenGL/OpenGLStateManager.hpp>
 #include <limits>
 
 namespace Pyramid
@@ -53,17 +54,20 @@ namespace Pyramid
     OpenGLVertexArray::~OpenGLVertexArray()
     {
         if (m_rendererID)
+        {
+            OpenGLStateManager::GetInstance().ForgetVertexArray(m_rendererID);
             glDeleteVertexArrays(1, &m_rendererID);
+        }
     }
 
     void OpenGLVertexArray::Bind() const
     {
-        glBindVertexArray(m_rendererID);
+        OpenGLStateManager::GetInstance().BindVertexArray(m_rendererID);
     }
 
     void OpenGLVertexArray::Unbind() const
     {
-        glBindVertexArray(0);
+        OpenGLStateManager::GetInstance().BindVertexArray(0);
     }
 
     void OpenGLVertexArray::AddVertexBuffer(const std::shared_ptr<IVertexBuffer> &vertexBuffer, const BufferLayout &layout)
@@ -74,7 +78,7 @@ namespace Pyramid
             return;
         }
 
-        glBindVertexArray(m_rendererID);
+        OpenGLStateManager::GetInstance().BindVertexArray(m_rendererID);
         vertexBuffer->Bind();
 
         u32 attributeIndex = m_nextAttributeIndex; // Use next available attribute index
@@ -197,7 +201,7 @@ namespace Pyramid
 
     void OpenGLVertexArray::SetIndexBuffer(const std::shared_ptr<IIndexBuffer> &indexBuffer)
     {
-        glBindVertexArray(m_rendererID);
+        OpenGLStateManager::GetInstance().BindVertexArray(m_rendererID);
         indexBuffer->Bind();
         m_indexBuffer = indexBuffer;
     }
@@ -210,7 +214,7 @@ namespace Pyramid
             return;
         }
 
-        glBindVertexArray(m_rendererID);
+        OpenGLStateManager::GetInstance().BindVertexArray(m_rendererID);
         instanceBuffer->Bind();
 
         u32 attributeIndex = startingAttributeIndex;

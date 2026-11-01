@@ -3,6 +3,8 @@
 #include <Pyramid/Graphics/Resources/ResourceRegistry.hpp>
 #include <Pyramid/Graphics/Shader/Shader.hpp>
 #include <Pyramid/Graphics/Texture.hpp>
+#include <Pyramid/Graphics/Material/Material.hpp>
+#include <Pyramid/Graphics/Shader/ShaderProgram.hpp>
 #include <Pyramid/Graphics/UI/UIRenderer.hpp>
 #include <Pyramid/Text/Text.hpp>
 #include <Pyramid/UI/UI.hpp>
@@ -221,11 +223,50 @@ int main()
         {10.25f, 4.25f, 69.5f, 49.5f});
 
     UI::FrameInfo frame{100.0f, 80.0f, 2.0f, 1.0f / 60.0f};
+    Tests::TestVertexArray worldVertexArray;
+    device.BindFramebufferHandle(47);
+    device.SetViewport(7, 11, 2048, 2048);
+    device.EnableBlend(true);
+    device.SetBlendFunc(GL_SRC_ALPHA, GL_ONE);
+    device.EnableDepthTest(true);
+    device.SetDepthFunc(GL_GREATER);
+    device.EnableCullFace(true);
+    device.SetCullFace(GL_FRONT);
+    device.SetPolygonMode(GL_LINE);
+    device.EnableScissorTest(true);
+    device.SetScissorRect(3, 5, 7, 11);
+    device.BindShader(compiledShader.get());
+    device.BindVertexArray(&worldVertexArray);
+    device.BindTexture(customTexture.get(), 0);
+    u32 uiDraws = 0;
+    bool uiDrawStateCorrect = true;
+    device.onDraw = [&]()
+    {
+        ++uiDraws;
+        const bool correctClip = uiDraws == 1
+            ? device.scissorX == 0 && device.scissorY == 0 &&
+                device.scissorWidth == 200 && device.scissorHeight == 160
+            : device.scissorX == 20 && device.scissorY == 8 &&
+                device.scissorWidth == 140 && device.scissorHeight == 100;
+        uiDrawStateCorrect = uiDrawStateCorrect && correctClip &&
+            device.boundFramebufferHandle == 0 && device.viewportX == 0 &&
+            device.viewportY == 0 && device.viewportWidth == 200 && device.viewportHeight == 160 &&
+            device.blendEnabled && device.blendSource == GL_SRC_ALPHA &&
+            device.blendDestination == GL_ONE_MINUS_SRC_ALPHA && !device.depthTestEnabled &&
+            !device.cullFaceEnabled && device.scissorEnabled && device.polygonMode == GL_FILL &&
+            !device.wireframeEnabled && device.boundShader && device.boundVertexArray &&
+            !device.boundTextures.empty() && device.boundTextures[0] && device.lastDrawIndexed;
+    };
     if (!renderer.Render(drawList, frame))
     {
         return Fail("valid draw list was rejected");
     }
 
+    device.onDraw = {};
+    if (uiDraws != 2 || !uiDrawStateCorrect)
+    {
+        return Fail("UI draws inherited off-screen/material state or lost their active clips");
+    }
     const UIRendererStats& stats = renderer.GetStats();
     if (stats.drawCalls != 2 || stats.batchesSubmitted != 2 ||
         stats.batchesSkipped != 0 || stats.verticesUploaded != 8 ||
@@ -235,7 +276,8 @@ int main()
     }
     if (device.scissorEnabled || device.blendEnabled || !device.depthTestEnabled ||
         !device.cullFaceEnabled || device.wireframeEnabled ||
-        device.boundShader != nullptr || device.boundVertexArray != nullptr)
+        device.boundShader != nullptr || device.boundVertexArray != nullptr ||
+        device.polygonMode != GL_FILL || device.boundTextures.empty() || device.boundTextures[0])
     {
         return Fail("render-state baseline was not restored");
     }
@@ -251,6 +293,63 @@ int main()
         return Fail("logical clip rectangle was not DPI-scaled");
     }
 
+    ShaderProgramSpecification worldShaderSpec;
+    worldShaderSpec.vertexSource = "#version 330 core\nvoid main() { gl_Position = vec4(0.0); }";
+    worldShaderSpec.fragmentSource = "#version 330 core\nout vec4 FragColor; void main() { FragColor = vec4(1.0); }";
+    const auto worldShader = resources.Shaders().GetOrCreate(worldShaderSpec);
+    MaterialSpecification worldMaterialSpec;
+    worldMaterialSpec.shader = worldShader;
+    worldMaterialSpec.renderState.blendMode = MaterialBlendMode::Additive;
+    worldMaterialSpec.renderState.depthTest = true;
+    worldMaterialSpec.renderState.depthCompare = MaterialDepthCompare::GreaterEqual;
+    worldMaterialSpec.renderState.cullMode = MaterialCullMode::Front;
+    worldMaterialSpec.renderState.polygonMode = MaterialPolygonMode::Point;
+    const auto worldMaterial = resources.Materials().GetOrCreate(worldMaterialSpec);
+    if (!worldMaterial) return Fail("following-world material fixture failed creation");
+    worldMaterial->Apply(device);
+    device.BindVertexArray(&worldVertexArray);
+    u32 worldDraws = 0;
+    bool worldDrawStateCorrect = false;
+    device.onDraw = [&]()
+    {
+        ++worldDraws;
+        worldDrawStateCorrect = !device.scissorEnabled && device.blendEnabled &&
+            device.blendSource == GL_SRC_ALPHA && device.blendDestination == GL_ONE &&
+            device.depthTestEnabled && device.depthFunction == GL_GEQUAL &&
+            device.cullFaceEnabled && device.cullFaceMode == GL_FRONT &&
+            device.polygonMode == GL_POINT && !device.wireframeEnabled &&
+            device.boundShader == worldShader.get() && device.boundVertexArray == &worldVertexArray;
+    };
+    device.DrawArrays(3, 0, PrimitiveTopology::Triangles);
+    device.onDraw = {};
+    if (worldDraws != 1 || !worldDrawStateCorrect)
+    {
+        return Fail("a following material draw inherited UI clipping or fixed state");
+    }
+
+    device.BindFramebufferHandle(91);
+    device.SetViewport(17, 19, 256, 128);
+    const u32 drawsBeforeNoWork = device.drawCalls;
+    const u32 viewportsBeforeNoWork = device.viewportChanges;
+    const u32 bindsBeforeNoWork = device.framebufferBindCalls;
+    const auto WorldStateUnchanged = [&]()
+    {
+        return device.drawCalls == drawsBeforeNoWork && device.viewportChanges == viewportsBeforeNoWork &&
+            device.framebufferBindCalls == bindsBeforeNoWork && device.boundFramebufferHandle == 91 &&
+            device.viewportX == 17 && device.viewportY == 19 && device.viewportWidth == 256 &&
+            device.viewportHeight == 128 && device.blendEnabled && device.polygonMode == GL_POINT &&
+            device.depthTestEnabled && device.cullFaceEnabled && !device.scissorEnabled &&
+            device.boundShader == worldShader.get() && device.boundVertexArray == &worldVertexArray;
+    };
+    UI::DrawList emptyList;
+    UI::FrameInfo invalidFrame = frame;
+    invalidFrame.width = 0;
+    if (!renderer.Render(emptyList, frame) || !WorldStateUnchanged() ||
+        renderer.Render(drawList, invalidFrame) || !WorldStateUnchanged())
+    {
+        return Fail("empty or rejected UI work changed the current world render state");
+    }
+
     UI::DrawList missingTextureList;
     missingTextureList.AddQuad(
         {0.0f, 0.0f, 10.0f, 10.0f},
@@ -262,6 +361,13 @@ int main()
         renderer.GetStats().batchesSkipped != 1)
     {
         return Fail("missing texture batch was not rejected deterministically");
+    }
+    if (device.drawCalls != drawsBeforeNoWork || device.scissorEnabled || device.blendEnabled ||
+        !device.depthTestEnabled || !device.cullFaceEnabled || device.polygonMode != GL_FILL ||
+        device.boundShader || device.boundVertexArray || device.boundTextures[0] ||
+        device.boundFramebufferHandle != 0 || device.viewportWidth != 200 || device.viewportHeight != 160)
+    {
+        return Fail("all-skipped UI batches did not clean their temporary surface state");
     }
 
     renderer.UnregisterTexture(23);

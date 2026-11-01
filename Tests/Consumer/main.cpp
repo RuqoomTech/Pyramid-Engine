@@ -1,4 +1,5 @@
 #include <Pyramid/Graphics/Framebuffer.hpp>
+#include <Pyramid/Graphics/OpenGL/OpenGLStateManager.hpp>
 #include <Pyramid/Core/Prerequisites.hpp>
 #include <Pyramid/Math/Math.hpp>
 #include <Pyramid/Platform/Input.hpp>
@@ -33,6 +34,10 @@ static_assert(Pyramid::Renderer::MaxShadowCascades == 8,
 
 namespace
 {
+    volatile decltype(&Pyramid::OpenGLStateManager::ForgetBuffer) g_forgetBuffer =
+        &Pyramid::OpenGLStateManager::ForgetBuffer;
+    volatile decltype(&Pyramid::OpenGLStateManager::ForgetVertexArray) g_forgetVertexArray =
+        &Pyramid::OpenGLStateManager::ForgetVertexArray;
     using SetShadowDataFunction = bool (Pyramid::Renderer::DeferredLightingPass::*)(
         const std::vector<std::shared_ptr<Pyramid::OpenGLFramebuffer>>&,
         const std::vector<Pyramid::Math::Mat4>&,
@@ -190,7 +195,7 @@ int main()
               << inputActions.GetActionValue2D("consumer-gameplay", "MoveForward").y
               << " | camera z: " << consumerCamera.GetPosition().z
               << " | released resources: " << released.GetTotal() << '\n';
-    return g_setShadowData && value.LengthSquared() > 0.0f && meshId.IsValid() && shaderId.IsValid() &&
+    return g_setShadowData && g_forgetBuffer && g_forgetVertexArray && value.LengthSquared() > 0.0f && meshId.IsValid() && shaderId.IsValid() &&
         textureId.IsValid() && materialId.IsValid() && meshHandle.IsValid() &&
         materialHandle.IsValid() && input.IsKeyDown(Pyramid::Key::W) &&
         input.WasKeyPressed(Pyramid::Key::W) && actionConfigured &&

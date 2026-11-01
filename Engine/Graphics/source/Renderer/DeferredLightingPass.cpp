@@ -131,6 +131,9 @@ namespace Pyramid
             (void)cmd;
             if (!m_device) return;
             m_device->BindFramebuffer(nullptr);
+            // The fullscreen pass replaces the surface regardless of the last material.
+            m_device->EnableBlend(false);
+            m_device->SetPolygonMode(GL_FILL);
             m_device->SetClearColor(0.0f, 0.0f, 0.0f, 1.0f);
             m_device->ClearBuffers(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             m_device->EnableDepthTest(false);

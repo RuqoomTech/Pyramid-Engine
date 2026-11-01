@@ -8,6 +8,7 @@
 #include <Pyramid/Graphics/Framebuffer.hpp>
 #include <Pyramid/Graphics/Texture.hpp>
 #include <Pyramid/Graphics/Shader/Shader.hpp>
+#include <glad/glad.h>
 
 #include <cstring>
 #include <functional>
@@ -286,8 +287,15 @@ namespace Pyramid::Tests
         std::string GetDeviceInfo() const override { return "TestGraphicsDevice"; }
         bool IsValid() const override { return true; }
         std::string GetLastError() const override { return {}; }
-        void SetWireframeMode(bool enable) override { wireframeEnabled = enable; }
-        void SetPolygonMode(u32 mode) override { polygonMode = mode; }
+        void SetWireframeMode(bool enable) override
+        {
+            SetPolygonMode(enable ? GL_LINE : GL_FILL);
+        }
+        void SetPolygonMode(u32 mode) override
+        {
+            polygonMode = mode;
+            wireframeEnabled = mode == GL_LINE;
+        }
         void BindFramebuffer(IFramebuffer* framebuffer) override
         {
             ++framebufferBindCalls;
@@ -360,7 +368,7 @@ namespace Pyramid::Tests
         bool cullFaceEnabled = false;
         u32 cullFaceMode = 0;
         bool wireframeEnabled = false;
-        u32 polygonMode = 0;
+        u32 polygonMode = GL_FILL;
         IShader* boundShader = nullptr;
         std::vector<ITexture2D*> boundTextures;
         struct NativeTextureBinding
@@ -376,6 +384,7 @@ namespace Pyramid::Tests
         u32 shaderCreations = 0;
         u32 textureCreations = 0;
         u32 textureFileCreations = 0;
+        std::function<void()> onDraw;
         std::function<std::shared_ptr<IShader>()> shaderFactory;
         std::function<std::shared_ptr<IUniformBuffer>(size_t, BufferUsage)> uniformBufferFactory;
         std::function<std::shared_ptr<ITexture2D>(const TextureSpecification&, const void*)>
@@ -397,6 +406,7 @@ namespace Pyramid::Tests
             lastInstanceCount = instanceCount;
             lastFirstVertex = firstVertex;
             lastTopology = topology;
+            if (onDraw) onDraw();
         }
     };
 }
