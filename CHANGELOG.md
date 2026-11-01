@@ -4,6 +4,14 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 
 ## [Unreleased]
 
+### Game-owned RTS unit state
+
+- Added reference-layer ownership/team, bounded health, selectability, and movement-target state tied to original non-owning entity lifetimes, keeping transforms and rendering scene-authoritative.
+- Added transactional command admission, saturating damage, order cancellation on death/ownership changes, and explicit stale-state pruning; malformed, unauthorized, dead, and stale requests preserve accepted state.
+- Retained entity lifetime identity through selection and queued requests, preventing reused IDs or active-scene changes from reviving old selections/orders. Manually constructed local requests must now populate the captured `entityRef`; no installed engine API or scene format changed.
+- Added CPU state/admission, component-authored input, lifetime-reuse, queued-request, scene-switch, and selection/death regressions within the existing RTS interaction target.
+- Registered BasicGame's cube as player/team 1 and routed local requests through admission. This records intent only; fixed-step execution, networking, and gameplay persistence remain pending. Visual/native-driver checks remain deferred.
+
 ### Occlusion placeholder removal
 
 - Removed the unused `SceneManager::SetOcclusionCullingEnabled(bool)` method, private flag/predicate and always-false filtering branch so scene settings no longer advertise unsupported culling.

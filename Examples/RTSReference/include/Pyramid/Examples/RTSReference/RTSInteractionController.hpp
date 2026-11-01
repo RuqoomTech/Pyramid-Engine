@@ -50,10 +50,13 @@ namespace Pyramid
             bool clearSelectionOnMiss = true;
         };
 
+        /** Local intent, not a wire format; admission must validate the captured facade. */
         struct RTSCommandRequest
         {
             EntityId entity;
             Math::Vec3 target = Math::Vec3::Zero;
+            /** Must be live and match entity, including its original lifetime identity. */
+            Entity entityRef;
         };
 
         /**
@@ -129,7 +132,11 @@ namespace Pyramid
 
             [[nodiscard]] InputActionVector2 GetEdgeScrollAxis(const InputState& input) const;
 
-            [[nodiscard]] EntityId GetSelectedEntityId() const { return m_selectedEntity; }
+            [[nodiscard]] EntityId GetSelectedEntityId() const
+            {
+                return m_selectedEntity ? m_selectedEntity.GetId() : EntityId{};
+            }
+            /** Returns empty outside the captured scene or when selection eligibility changed. */
             [[nodiscard]] Entity GetSelectedEntity(const SceneManagement::SceneManager& sceneManager) const;
             void ClearSelection() { m_selectedEntity = {}; }
 
@@ -137,6 +144,7 @@ namespace Pyramid
             {
                 return m_pendingCommand.has_value();
             }
+            /** One-shot local intent; consumers must revalidate its captured entity and authority. */
             [[nodiscard]] std::optional<RTSCommandRequest> ConsumeCommand();
 
         private:
@@ -148,7 +156,7 @@ namespace Pyramid
                 const InputState& input,
                 RTSCameraController& cameraController,
                 f32 deltaTime) const;
-            [[nodiscard]] EntityId PickEntity(
+            [[nodiscard]] Entity PickEntity(
                 const Camera& camera,
                 SceneManagement::SceneManager& sceneManager,
                 f32 screenX,
@@ -163,7 +171,7 @@ namespace Pyramid
             RTSInteractionActions m_actions;
             RTSInteractionSettings m_settings;
             SelectablePredicate m_selectablePredicate;
-            EntityId m_selectedEntity;
+            Entity m_selectedEntity;
             std::optional<RTSCommandRequest> m_pendingCommand;
             u32 m_viewportWidth = 0;
             u32 m_viewportHeight = 0;

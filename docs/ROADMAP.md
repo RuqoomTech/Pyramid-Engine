@@ -145,13 +145,19 @@ Target outcome: one playable two-player Windows LAN/direct-IP Ruqoom RTS vertica
 3. [x] reusable, action-driven free-fly, target-orbit, and optional strategy camera controllers with validated settings and home-pose reset;
 4. [x] RTS reference-game input features built above the generic engine: edge scrolling, selection, and command input;
 5. [x] owned OBJ/MTL model import feeding existing mesh, diffuse-texture, and immutable material resources, with scene-hierarchy instantiation still pending;
-6. RTS components such as selectable, team/owner, movement target, health, and basic unit state;
+6. [x] Game-owned RTS components such as selectable, team/owner, movement target, health, and basic unit state:
+   1. [x] Add a game-owned, non-owning unit-state store keyed by scene entity identity; validate owner/team metadata, bounded health, selectability, and finite movement targets without duplicating transforms.
+   2. [x] Preserve captured entity lifetime identity through selection and queued requests; reject stale/reused IDs, foreign scenes, dead units, and unauthorized commands without changing accepted state.
+   3. [x] Register the BasicGame reference unit and admit its local-owner commands through the store; record movement intent without executing simulation.
+   4. [x] Validate CPU state/admission and input integration, build GCC Debug/Release, run both complete suites and an installed-engine consumer, and keep visual/native-driver acceptance explicitly deferred.
 7. fixed-step simulation and a command queue, with per-frame input edges consumed once and explicit overload behavior;
 8. two-player LAN/direct-IP sessions, a bounded native transport, protocol/content compatibility checks, host-authoritative gameplay, validated ownership, snapshot presentation, and explicit disconnect behavior;
 9. terrain/large-map rendering and scalable visibility/spatial updates;
 10. [x] debug statistics and inspection UI as the first editor foundation;
 11. versioned scene extensions for camera/environment, game-owned persistence for gameplay components, and editor-owned metadata;
 12. measured 1080p/60 FPS acceptance with 500 total units on declared reference hardware, a separate 2,000-unit stress workload, and a verified Windows `0.7.0-pre-alpha` vertical slice, then Linux platform work. These are proposed performance targets, not demonstrated results.
+
+Unit-state validation (2026-11-01): GCC Debug/Release builds and `ctest --preset test-gcc-debug` / `ctest --preset test-gcc-release` passed 58/58 each, including unit admission, stale/reused IDs, queued requests, scene switching, and selection eligibility. A fresh Release install and `Tests/Consumer` configure/build/run passed without exporting the RTS reference target. BasicGame integration is built, with visual/native-driver checks deferred; movement execution and multiplayer are still pending.
 
 A full editor follows the validated runtime model. Baa integration starts as gameplay scripting only after its runtime, ABI/FFI, debugger, and hot-reload semantics are defined; engine reimplementation is a later compatibility project, not a blind source translation.
 

@@ -30,6 +30,7 @@
 
 namespace
 {
+    constexpr Pyramid::u32 kLocalPlayerId = 1;
     constexpr std::string_view kInputContext = "basic-game";
     constexpr std::string_view kQuitAction = "Quit";
     constexpr std::string_view kPauseAction = "Pause";
@@ -1005,11 +1006,19 @@ void BasicGame::onCreate()
         return;
     }
 
-    const Pyramid::EntityId selectableUnit = m_cubeEntity.GetId();
+    Pyramid::Examples::RTSReference::RTSUnitState cubeUnit;
+    cubeUnit.owner = kLocalPlayerId;
+    cubeUnit.team = kLocalPlayerId;
+    if (!m_units.AddUnit(m_cubeEntity, cubeUnit))
+    {
+        PYRAMID_LOG_CRITICAL("BasicGame aborted: failed to register the demo unit.");
+        quit();
+        return;
+    }
     m_interactionController->SetSelectablePredicate(
-        [selectableUnit](const Pyramid::Entity& entity)
+        [this](const Pyramid::Entity& entity)
         {
-            return entity.GetId() == selectableUnit;
+            return m_units.IsSelectable(entity);
         });
 
     Pyramid::Entity sun = m_scene->CreateEntity("Sun");
@@ -1118,10 +1127,18 @@ void BasicGame::onUpdate(float deltaTime)
 
         if (const auto command = m_interactionController->ConsumeCommand())
         {
-            PYRAMID_LOG_INFO(
-                "Command requested for entity ", command->entity.GetValue(),
-                " at (", command->target.x, ", ", command->target.y, ", ",
-                command->target.z, ")");
+            if (m_units.ApplyMoveCommand(kLocalPlayerId, *command))
+            {
+                PYRAMID_LOG_INFO(
+                    "Movement target accepted for entity ", command->entity.GetValue(),
+                    " at (", command->target.x, ", ", command->target.y, ", ",
+                    command->target.z, ")");
+            }
+            else
+            {
+                PYRAMID_LOG_WARN(
+                    "Movement target rejected for entity ", command->entity.GetValue());
+            }
         }
     }
 

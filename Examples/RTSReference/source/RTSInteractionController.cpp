@@ -107,7 +107,7 @@ namespace Pyramid::Examples::RTSReference
         cameraController.Update(camera, actions, deltaTime);
 
         const Entity selected = GetSelectedEntity(sceneManager);
-        if (m_selectedEntity && !selected)
+        if (!selected)
         {
             m_selectedEntity = {};
         }
@@ -119,9 +119,9 @@ namespace Pyramid::Examples::RTSReference
 
         if (WasPressed(actions, m_actions.select))
         {
-            const EntityId picked = hasPointer
+            const Entity picked = hasPointer
                 ? PickEntity(camera, sceneManager, screenX, screenY)
-                : EntityId{};
+                : Entity{};
             if (hasPointer && (picked || m_settings.clearSelectionOnMiss))
             {
                 m_selectedEntity = picked;
@@ -133,7 +133,8 @@ namespace Pyramid::Examples::RTSReference
             Math::Vec3 target;
             if (ProjectCommandTarget(camera, screenX, screenY, target))
             {
-                m_pendingCommand = RTSCommandRequest{m_selectedEntity, target};
+                m_pendingCommand = RTSCommandRequest{
+                    m_selectedEntity.GetId(), target, m_selectedEntity};
             }
         }
     }
@@ -180,8 +181,9 @@ namespace Pyramid::Examples::RTSReference
         const SceneManagement::SceneManager& sceneManager) const
     {
         const auto scene = sceneManager.GetActiveScene();
-        return scene && m_selectedEntity
-            ? scene->FindEntity(m_selectedEntity)
+        return scene && m_selectedEntity &&
+            scene.get() == m_selectedEntity.GetScene() && IsSelectable(m_selectedEntity)
+            ? m_selectedEntity
             : Entity{};
     }
 
@@ -255,7 +257,7 @@ namespace Pyramid::Examples::RTSReference
             cameraController.GetFocusPoint() + direction * (speed * deltaTime));
     }
 
-    EntityId RTSInteractionController::PickEntity(
+    Entity RTSInteractionController::PickEntity(
         const Camera& camera,
         SceneManagement::SceneManager& sceneManager,
         f32 screenX,
@@ -288,7 +290,7 @@ namespace Pyramid::Examples::RTSReference
             const Entity entity = scene->FindEntity(object->entityId);
             if (IsSelectable(entity))
             {
-                return entity.GetId();
+                return entity;
             }
         }
 

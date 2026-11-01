@@ -20,7 +20,7 @@ Pyramid is a C++17 engine ecosystem with a Win32/WGL `Pyramid::Engine` target an
 | PyramidInput | `Pyramid` | Physical input snapshots and generic named action mapping |
 | PyramidImage | `Pyramid::Util` | Standalone image dispatch, TGA/BMP subsets, PNG, DEFLATE/zlib, and owned JPEG decoding |
 | PyramidModel | `Pyramid::Model` | Renderer-independent imported-model data and bounded OBJ/MTL parsing |
-| RTS reference | `Pyramid::Examples::RTSReference` | Game-side edge scrolling, selectable filtering, ray picking, and command requests; not installed with `Pyramid::Engine` |
+| RTS reference | `Pyramid::Examples::RTSReference` | Game-side interaction and non-owning unit state/admission; not installed with `Pyramid::Engine` |
 
 Direct Win32 keyboard/mouse polling, engine-generic action mapping, reusable free-fly/orbit/strategy camera controllers, and a separate game-side RTS interaction reference are present. Audio, physics, editor, scripting, and the asset pipeline are not currently present.
 
@@ -49,6 +49,10 @@ The base interface owns a replaceable resize callback and emits platform-neutral
 `InputState` is platform-neutral and owned by the native window. At the start of each `Window::ProcessMessages()` call, transient press/release flags, pointer deltas, and wheel deltas are cleared. Win32 then translates `WM_KEY*`, `WM_MOUSE*`, capture, and focus messages into the state object.
 
 Held states persist across frames. Repeated native key-down messages do not create repeated presses. Focus loss releases every held key and mouse button, clears mouse motion, and resets the next pointer sample baseline. After message processing, `Game` evaluates its `InputActionSystem` before `onUpdate()`. Named contexts map the snapshot to button, one-dimensional, and two-dimensional actions. Context priority and control consumption allow modal UI/editor/gameplay layers without embedding game-specific concepts in the platform backend. The controller layer consumes configurable context/action references and does not create physical bindings. Separate delta and rate action references preserve correct semantics for mouse movement versus held axes. `BasicGame` demonstrates the strategy controller plus the separate `Examples/RTSReference` layer for edge scrolling, selection, and command requests; `BasicRendering` remains the lower-level strategy-camera rendering reference. Pointer validity is explicit through `InputState::HasMousePosition()`, preventing edge motion or click rays before the first client-space sample. RTS action names, selectable policy, and command semantics remain outside the engine library.
+
+`RTSUnitStore` keeps game-owned owner/team, bounded integer health, selectability, and optional movement intent beside the authoritative scene. It stores non-owning `Entity` facades, never positions or renderer proxies. Selection and local requests retain the original facade so entity destruction, scene replacement, and reused numeric IDs cannot redirect an order. Command admission revalidates identity, owner, health, and finite target; recording intent does not update transforms. BasicGame registers only its reference cube as player/team 1. Fixed-step execution, navigation, networking, and game-state persistence remain later work.
+
+The reference store and controller are confined to the game thread. Borrowed state pointers must not survive record removal, pruning, clearing, or store destruction, and callers must re-resolve through the store after entity lifetime changes. The controller must be destroyed before a store captured by its predicate. Owner/team mutation and damage are trusted game/host operations; when networking is added, the host must derive the issuer from the session rather than trust a player identifier supplied by a client.
 
 ## Graphics device
 

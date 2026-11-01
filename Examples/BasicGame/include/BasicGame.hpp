@@ -2,6 +2,7 @@
 
 #include <Pyramid/Core/Game.hpp>
 #include <Pyramid/Examples/RTSReference/RTSInteractionController.hpp>
+#include <Pyramid/Examples/RTSReference/RTSUnitStore.hpp>
 #include <Pyramid/Graphics/Camera.hpp>
 #include <Pyramid/Graphics/CameraController.hpp>
 #include <Pyramid/Graphics/Material/Material.hpp>
@@ -62,6 +63,7 @@ private:
     Pyramid::UI::ScreenStack m_gameScreens;
     std::shared_ptr<Pyramid::Scene> m_scene;
     std::unique_ptr<Pyramid::SceneManagement::SceneManager> m_sceneManager;
+    Pyramid::Examples::RTSReference::RTSUnitStore m_units;
     std::unique_ptr<Pyramid::Camera> m_camera;
     std::unique_ptr<Pyramid::RTSCameraController> m_cameraController;
     std::unique_ptr<Pyramid::Examples::RTSReference::RTSInteractionController>
