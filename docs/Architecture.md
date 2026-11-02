@@ -20,7 +20,8 @@ Pyramid is a C++17 engine ecosystem with a Win32/WGL `Pyramid::Engine` target an
 | PyramidInput | `Pyramid` | Physical input snapshots and generic named action mapping |
 | PyramidImage | `Pyramid::Util` | Standalone image dispatch, TGA/BMP subsets, PNG, DEFLATE/zlib, and owned JPEG decoding |
 | PyramidModel | `Pyramid::Model` | Renderer-independent imported-model data and bounded OBJ/MTL parsing |
-| RTS reference | `Pyramid::Examples::RTSReference` | Game-side interaction and non-owning unit state/admission; not installed with `Pyramid::Engine` |
+| RTS reference | `Pyramid::Examples::RTSReference` | Game-side interaction, unit state/simulation and local host admission/capture; not installed with `Pyramid::Engine` |
+| RTS protocol | `Pyramid::Examples::RTSReference::Protocol` | CPU-only versioned command/snapshot framing and validation; links Foundation/Math, with no scene/native/graphics dependency |
 
 Direct Win32 keyboard/mouse polling, engine-generic action mapping, reusable free-fly/orbit/strategy camera controllers, and a separate game-side RTS interaction reference are present. Audio, physics, editor, scripting, and the asset pipeline are not currently present.
 
@@ -55,6 +56,10 @@ Held states persist across frames. Repeated native key-down messages do not crea
 Input edges and camera updates run once per rendered/update frame. Simulation reads `Game::GetFrameElapsedSeconds()` instead of the capped camera/UI delta. A call executes at most 8 ticks, retaining fractional time and reporting discarded whole ticks; the FIFO rejects new requests beyond 256. BasicGame suspends on menu/focus/minimize and discards the resumed boundary interval, preserving admitted movement intent while clearing unexecuted requests. Scene/spatial synchronization occurs before picking and after fixed ticks. Units traverse in ascending ID order; double calculations avoid float-distance overflow, but root-only movement cancels invalid/unsupported or unrepresentable progress. This is a bounded local reference, not lockstep or a navigation system.
 
 The reference store, simulation, and controller are confined to the game thread. Borrowed state pointers must not survive record removal, pruning, clearing, or store destruction, and callers must re-resolve through the store after entity lifetime changes. The controller must be destroyed before a store captured by its predicate. Owner/team mutation and damage are trusted game/host operations; when networking is added, the host must derive the issuer from the session rather than trust a player identifier supplied by a client.
+
+`Pyramid::RTSProtocol` is a separate, non-installed CPU target linked only to Foundation/Math. Version-1 Hello, MoveCommand, and full-root-unit snapshots use explicit little-endian fields, a 256 KiB frame cap and 2,048-unit roster cap. Encode/decode publish only after complete validation of size/count/numeric state and canonical IDs. Decode success alone authorizes no mutation. The fingerprint is an opaque caller-supplied compatibility token, with no automatic content hashing or authentication.
+
+`RTSHostSession` assigns at most two native peers distinct owners, mints session-scoped network IDs bound to original non-owning entity lifetimes, and checks epoch, increasing sequence, current ownership/health, and root transforms before queueing. The fixed tick still revalidates the captured local request. Capturing an ID-sorted full roster copies scene-authoritative root transforms and game state into a temporary message; it does not create another authoritative scene. Destroyed/unregistered units are omitted. Snapshot sequence acknowledgement means queued, not executed. Ending/destroying this exclusive host adapter clears pending simulation work and bound movement intent; disconnect therefore ends the whole reference session. Sockets, client membership/presentation, authoritative host pause policy, execution acknowledgements, and two-machine acceptance remain separate work.
 
 ## Graphics device
 

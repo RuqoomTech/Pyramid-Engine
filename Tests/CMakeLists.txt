@@ -66,6 +66,11 @@ target_link_libraries(RTSInteractionTests PRIVATE Pyramid::RTSReference)
 set_target_properties(RTSInteractionTests PROPERTIES FOLDER "Tests/Examples")
 add_test(NAME Examples.RTSInteraction COMMAND $<TARGET_FILE:RTSInteractionTests>)
 
+add_executable(RTSProtocolTests RTSProtocolTests.cpp)
+target_link_libraries(RTSProtocolTests PRIVATE Pyramid::RTSProtocol)
+set_target_properties(RTSProtocolTests PROPERTIES FOLDER "Tests/Examples")
+add_test(NAME Examples.RTSProtocol COMMAND $<TARGET_FILE:RTSProtocolTests>)
+
 add_executable(FramebufferResizeTests FramebufferResizeTests.cpp)
 target_link_libraries(FramebufferResizeTests PRIVATE Pyramid::Engine)
 set_target_properties(FramebufferResizeTests PROPERTIES FOLDER "Tests/Graphics")

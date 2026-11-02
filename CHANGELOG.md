@@ -4,6 +4,14 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 
 ## [Unreleased]
 
+### Bounded RTS protocol and local host adapter
+
+- Added a non-installed CPU-only Hello/move/full-snapshot codec with explicit version-1 little-endian framing, bounded state/count/size validation, structured diagnostics, and transactional output publication. Native facades, player claims, and graphics handles never cross the wire.
+- Added local host compatibility/owner assignment, non-reused session-scoped unit bindings, replay/sequence gates with queue-full retry, and atomic scene-authoritative snapshot capture. Snapshot acknowledgement explicitly reports queue admission rather than execution.
+- Added golden-byte, malformed/truncated, limit, 2,000-unit, atomic-publication, and real command-to-tick-to-snapshot regressions, with independent CPU-only codec linkage.
+- GCC Debug/Release each passed 59/59 tests; a fresh installed-engine consumer passed, and the game-specific protocol/host support remains outside installed exports.
+- Defined whole-session termination to discard pending requests and bound movement intent; transport, client snapshot application, BasicGame multiplayer, and visual/two-machine validation remain pending.
+
 ### Fixed-step RTS movement
 
 - Added a game-owned 32 Hz simulation coordinator, a 256-request FIFO, execution-time command admission, and an 8-tick catch-up limit with fractional retention and reported dropped time. Suspension clears queued intent/time without replaying input edges.

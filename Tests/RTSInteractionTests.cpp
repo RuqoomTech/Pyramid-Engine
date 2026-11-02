@@ -1,4 +1,5 @@
 #include <Pyramid/Examples/RTSReference/RTSInteractionController.hpp>
+#include <Pyramid/Examples/RTSReference/RTSHostSession.hpp>
 #include <Pyramid/Examples/RTSReference/RTSUnitStore.hpp>
 #include <Pyramid/Examples/RTSReference/RTSSimulation.hpp>
 #include <Pyramid/Graphics/Scene.hpp>
@@ -552,6 +553,268 @@ namespace
                 !units.FindUnit(malformed)->movementTarget,
             "invalid active positions must reject new orders and cancel existing movement safely");
     }
+
+    void TestHostProtocolIntegration()
+    {
+        using namespace Pyramid;
+        using namespace Pyramid::Examples::RTSReference;
+        Scene scene("Host Protocol Integration");
+        RTSUnitStore units;
+        RTSSimulation simulation(units);
+        RTSHostSession host(units, simulation);
+        Protocol::ContentId content{};
+        content[0] = 0x31;
+        content[15] = 0xA7;
+        Protocol::Hello hello;
+        hello.content = content;
+        std::string error;
+        const auto requireHost = [&error](bool condition, const char* message)
+        {
+            if (!condition)
+            {
+                std::cerr << "Host diagnostic: " << error << '\n';
+            }
+            Require(condition, message);
+        };
+        Require(!host.Begin(0, content, error) && !error.empty() &&
+                !host.Begin(4001, {}, error) && !host.IsActive(),
+            "invalid host epochs/content must not begin a session");
+        requireHost(host.Begin(4001, content, error), "host session creation failed");
+        Require(host.IsActive() && !host.Begin(4002, content, error),
+            "an active host session must not be replaced implicitly");
+        Protocol::Hello incompatible = hello;
+        incompatible.content[0] ^= 1;
+        Require(!host.AddPeer(101, 1, incompatible, error) && !error.empty(),
+            "peer content mismatch was accepted");
+        incompatible = hello;
+        ++incompatible.gameplayVersion;
+        Require(!host.AddPeer(101, 1, incompatible, error),
+            "peer gameplay-version mismatch was accepted");
+        incompatible = hello;
+        ++incompatible.ticksPerSecond;
+        Require(!host.AddPeer(101, 1, incompatible, error),
+            "peer tick-rate mismatch was accepted");
+        Require(!host.AddPeer(0, 1, hello, error) && !host.AddPeer(101, 0, hello, error),
+            "zero peer/player identities must be rejected");
+        requireHost(host.AddPeer(101, 1, hello, error), "first peer assignment failed");
+        Require(!host.AddPeer(101, 2, hello, error) && !host.AddPeer(202, 1, hello, error),
+            "duplicate peer or owner assignment must not replace an admitted peer");
+        requireHost(host.AddPeer(202, 2, hello, error), "second peer assignment failed");
+        Require(!host.AddPeer(303, 3, hello, error), "two-peer host limit was not enforced");
+
+        Entity unit = scene.CreateEntityWithId(EntityId(1001), "Player One");
+        const Entity enemy = scene.CreateEntityWithId(EntityId(1002), "Player Two");
+        RTSUnitState firstPlayer;
+        firstPlayer.owner = 1;
+        firstPlayer.team = 7;
+        RTSUnitState secondPlayer = firstPlayer;
+        secondPlayer.owner = 2;
+        secondPlayer.team = 8;
+        Require(unit && enemy && units.AddUnit(unit, firstPlayer) && units.AddUnit(enemy, secondPlayer),
+            "host unit-state fixtures failed");
+        u64 networkUnit = 0;
+        u64 networkEnemy = 0;
+        requireHost(host.BindUnit(unit, 7, networkUnit, error), "first network unit binding failed");
+        requireHost(host.BindUnit(enemy, 8, networkEnemy, error), "second network unit binding failed");
+        Require(networkUnit != 0 && networkUnit != unit.GetId().GetValue() && networkEnemy > networkUnit,
+            "network identity must be host-issued and independent of scene IDs");
+        u64 untouchedId = 9999;
+        Require(!host.BindUnit(unit, 7, untouchedId, error) && untouchedId == 9999 &&
+                !host.BindUnit({}, 7, untouchedId, error) &&
+                !host.BindUnit(unit, 0, untouchedId, error),
+            "invalid or duplicate binding must preserve the assigned-ID output");
+
+        Protocol::Message request;
+        request.session = 4001;
+        request.body = Protocol::MoveCommand{1, networkUnit, Math::Vec3(10.0f, 0.0f, 0.0f)};
+        Protocol::Error protocolError;
+        std::vector<u8> bytes;
+        Require(Protocol::Encode(request, bytes, protocolError), "wire move fixture encode failed");
+        Protocol::Message decoded;
+        Require(Protocol::Decode(bytes.data(), bytes.size(), decoded, protocolError),
+            "wire move fixture decode failed");
+        requireHost(host.SubmitMove(101, decoded, error), "decoded owner command was not queued");
+        Require(simulation.GetPendingCommandCount() == 1 && !units.FindUnit(unit)->movementTarget,
+            "host queue admission must not execute a command immediately");
+        Protocol::Message snapshot;
+        requireHost(host.CaptureSnapshot(101, snapshot, error), "pre-tick snapshot capture failed");
+        const auto& queuedSnapshot = std::get<Protocol::FullSnapshot>(snapshot.body);
+        Require(queuedSnapshot.tick == 0 && queuedSnapshot.lastQueuedSequence == 1 &&
+                queuedSnapshot.units.size() == 2 && !queuedSnapshot.units[0].movementTarget,
+            "snapshot acknowledgement must describe queue admission rather than execution");
+        const auto tick = simulation.Advance(RTSSimulation::FixedStepSeconds);
+        Require(tick.acceptedCommands == 1 && tick.rejectedCommands == 0 &&
+                NearlyEqual(unit.GetWorldPosition(), Math::Vec3(0.125f, 0.0f, 0.0f)),
+            "decoded host command did not advance through the real fixed tick");
+        requireHost(host.CaptureSnapshot(101, snapshot, error), "post-tick snapshot capture failed");
+        Require(Protocol::Encode(snapshot, bytes, protocolError) &&
+                Protocol::Decode(bytes.data(), bytes.size(), decoded, protocolError),
+            "host snapshot wire round trip failed");
+        const auto& presented = std::get<Protocol::FullSnapshot>(decoded.body);
+        Require(decoded.session == 4001 && presented.tick == 1 && presented.lastQueuedSequence == 1 &&
+                presented.units.size() == 2 && presented.units[0].unit == networkUnit &&
+                presented.units[0].catalog == 7 && presented.units[0].owner == 1 &&
+                presented.units[0].team == 7 && presented.units[0].health == 100 &&
+                NearlyEqual(presented.units[0].position, unit.GetWorldPosition()) &&
+                presented.units[0].movementTarget &&
+                NearlyEqual(*presented.units[0].movementTarget, Math::Vec3(10.0f, 0.0f, 0.0f)),
+            "snapshot must carry authoritative state and session-scoped identity after simulation");
+
+        const auto reject = [&](u64 peer, const Protocol::Message& candidate, const char* message)
+        {
+            const std::size_t pending = simulation.GetPendingCommandCount();
+            Require(!host.SubmitMove(peer, candidate, error) && !error.empty() &&
+                    simulation.GetPendingCommandCount() == pending, message);
+        };
+        reject(101, request, "duplicate command sequence must not queue a second command");
+        Protocol::Message rejected = request;
+        rejected.session = 4002;
+        reject(101, rejected, "wrong-session commands must not queue intent");
+        rejected = request;
+        std::get<Protocol::MoveCommand>(rejected.body).sequence = 2;
+        reject(999, rejected, "unknown peers must not queue intent");
+        reject(202, rejected, "wire commands must derive ownership from their assigned peer");
+        std::get<Protocol::MoveCommand>(rejected.body).unit = 123456789;
+        reject(101, rejected, "unknown network units must not queue intent");
+        rejected = request;
+        std::get<Protocol::MoveCommand>(rejected.body).sequence = 0;
+        reject(101, rejected, "zero/old sequence must be rejected");
+        rejected = request;
+        std::get<Protocol::MoveCommand>(rejected.body).sequence = 2;
+        std::get<Protocol::MoveCommand>(rejected.body).target.x = std::numeric_limits<f32>::quiet_NaN();
+        reject(101, rejected, "malformed native command values must be revalidated at host admission");
+        rejected.body = hello;
+        reject(101, rejected, "non-command messages must not enter the command queue");
+        request.body = Protocol::MoveCommand{7, networkUnit, Math::Vec3(20.0f, 0.0f, 0.0f)};
+        requireHost(host.SubmitMove(101, request, error), "strictly increasing sequence gaps should be allowed");
+        reject(101, request, "queued sequence must not be accepted twice");
+        Require(simulation.Advance(RTSSimulation::FixedStepSeconds).acceptedCommands == 1,
+            "sequence-gap command was not executed once");
+
+        for (std::size_t index = 0; index < RTSSimulation::MaximumQueuedCommands; ++index)
+        {
+            Require(simulation.QueueMoveCommand(1,
+                {unit.GetId(), Math::Vec3(30.0f, 0.0f, 0.0f), unit}),
+                "host queue-pressure fixture failed");
+        }
+        request.body = Protocol::MoveCommand{8, networkUnit, Math::Vec3(40.0f, 0.0f, 0.0f)};
+        reject(101, request, "full simulation queue must reject the newest host request");
+        requireHost(host.CaptureSnapshot(101, snapshot, error), "queue-pressure snapshot capture failed");
+        Require(std::get<Protocol::FullSnapshot>(snapshot.body).lastQueuedSequence == 7,
+            "queue-full failure must not burn the sequence acknowledgement");
+        Require(simulation.Advance(RTSSimulation::FixedStepSeconds).acceptedCommands ==
+                RTSSimulation::MaximumQueuedCommands,
+            "host queue-pressure fixture did not drain");
+        requireHost(host.SubmitMove(101, request, error), "queue-full sequence retry should succeed after drain");
+        reject(101, request, "successful retry must remain once-only");
+        Require(simulation.Advance(RTSSimulation::FixedStepSeconds).acceptedCommands == 1,
+            "retried host request did not execute once");
+
+        request.body = Protocol::MoveCommand{9, networkUnit, Math::Vec3(50.0f, 0.0f, 0.0f)};
+        requireHost(host.SubmitMove(101, request, error), "ownership-change fixture enqueue failed");
+        Require(units.SetOwnership(unit, 2, 2) &&
+                simulation.Advance(RTSSimulation::FixedStepSeconds).rejectedCommands == 1 &&
+                units.SetOwnership(unit, 1, 7),
+            "execution must revalidate ownership after host queue admission");
+        Protocol::Message enemyRequest;
+        enemyRequest.session = 4001;
+        enemyRequest.body = Protocol::MoveCommand{1, networkEnemy, Math::Vec3(5.0f, 0.0f, 0.0f)};
+        requireHost(host.SubmitMove(202, enemyRequest, error), "death fixture enqueue failed");
+        Require(units.ApplyDamage(enemy, 100) &&
+                simulation.Advance(RTSSimulation::FixedStepSeconds).rejectedCommands == 1,
+            "execution must revalidate health after host queue admission");
+
+        request.body = Protocol::MoveCommand{10, networkUnit, Math::Vec3(60.0f, 0.0f, 0.0f)};
+        requireHost(host.SubmitMove(101, request, error), "replacement fixture enqueue failed");
+        const Entity old = unit;
+        Require(scene.DestroyEntity(old), "host replacement fixture destruction failed");
+        unit = scene.CreateEntityWithId(old.GetId(), "Same-ID Replacement");
+        Require(unit && units.PruneInvalidEntities() == 1 && units.AddUnit(unit, firstPlayer) &&
+                simulation.Advance(RTSSimulation::FixedStepSeconds).rejectedCommands == 1,
+            "queued host references must not redirect to a same-ID replacement");
+        requireHost(host.CaptureSnapshot(101, snapshot, error), "stale-membership snapshot capture failed");
+        const auto& staleSnapshot = std::get<Protocol::FullSnapshot>(snapshot.body);
+        Require(staleSnapshot.units.size() == 1 && staleSnapshot.units[0].unit == networkEnemy &&
+                staleSnapshot.units[0].health == 0 && !staleSnapshot.units[0].movementTarget,
+            "full snapshots must omit expired bindings while retaining dead live entities");
+        std::get<Protocol::MoveCommand>(request.body).sequence = 11;
+        reject(101, request, "old wire identities must not resolve replacement scene IDs");
+        Require(host.PruneInvalidUnits() == 1, "expired network binding was not pruned");
+        u64 replacementId = 0;
+        requireHost(host.BindUnit(unit, 7, replacementId, error), "replacement network binding failed");
+        Require(replacementId > networkEnemy && replacementId != networkUnit,
+            "network unit IDs must not be reused within a session");
+        request.body = Protocol::MoveCommand{11, replacementId, Math::Vec3(70.0f, 0.0f, 0.0f)};
+        requireHost(host.SubmitMove(101, request, error), "replacement's fresh wire identity was not admitted");
+        Require(simulation.Advance(RTSSimulation::FixedStepSeconds).acceptedCommands == 1,
+            "replacement's fresh wire request was not executed");
+        Entity parent = scene.CreateEntity("Unsupported Snapshot Parent");
+        Require(unit.SetParent(parent), "snapshot parent fixture failed");
+        snapshot.session = 9999;
+        snapshot.body = hello;
+        Require(!host.CaptureSnapshot(101, snapshot, error) && !error.empty() && snapshot.session == 9999 &&
+                std::holds_alternative<Protocol::Hello>(snapshot.body),
+            "unsupported snapshot transforms must fail without publishing partial state");
+        Require(unit.ClearParent(), "snapshot parent fixture restore failed");
+        request.body = Protocol::MoveCommand{12, replacementId, Math::Vec3(80.0f, 0.0f, 0.0f)};
+        requireHost(host.SubmitMove(101, request, error), "session-end pending fixture failed");
+        const Math::Vec3 positionAtEnd = unit.GetWorldPosition();
+        host.End();
+        Require(!host.IsActive() && simulation.GetPendingCommandCount() == 0 &&
+                !units.FindUnit(unit)->movementTarget &&
+                simulation.Advance(RTSSimulation::FixedStepSeconds).acceptedCommands == 0 &&
+                NearlyEqual(unit.GetWorldPosition(), positionAtEnd),
+            "ending the reference session must cancel queued and bound admitted movement");
+        reject(101, request, "ended sessions must not admit old peer commands");
+        Require(!host.Begin(4001, content, error) && !host.Begin(4000, content, error),
+            "host session epochs must increase rather than revive old sessions");
+        requireHost(host.Begin(4002, content, error), "new host epoch creation failed");
+        requireHost(host.AddPeer(101, 1, hello, error), "new host peer assignment failed");
+        u64 newSessionUnit = 0;
+        requireHost(host.BindUnit(unit, 7, newSessionUnit, error), "new host unit binding failed");
+        request.body = Protocol::MoveCommand{1, newSessionUnit, Math::Vec3(90.0f, 0.0f, 0.0f)};
+        reject(101, request, "old-session requests must not redirect through new epoch bindings");
+        request.session = 4002;
+        requireHost(host.SubmitMove(101, request, error), "new session should have a fresh command sequence");
+        host.End();
+    }
+
+    void TestHostBindingLimit()
+    {
+        using namespace Pyramid;
+        using namespace Pyramid::Examples::RTSReference;
+        Scene scene("Host Binding Limit");
+        RTSUnitStore units;
+        RTSSimulation simulation(units);
+        RTSHostSession host(units, simulation);
+        Protocol::ContentId content{};
+        content[0] = 1;
+        std::string error;
+        Require(host.Begin(1, content, error), "binding-limit host creation failed");
+        RTSUnitState initial;
+        initial.owner = 1;
+        Entity first;
+        u64 lastId = 0;
+        for (std::size_t index = 0; index < Protocol::MaximumUnits; ++index)
+        {
+            const Entity entity = scene.CreateEntity("Bound Unit");
+            Require(entity && units.AddUnit(entity, initial) && host.BindUnit(entity, 1, lastId, error),
+                "host rejected a valid binding below capacity");
+            if (index == 0)
+            {
+                first = entity;
+            }
+        }
+        const Entity extra = scene.CreateEntity("Extra Bound Unit");
+        Require(units.AddUnit(extra, initial), "extra binding fixture registration failed");
+        u64 unchangedId = 9999;
+        Require(!host.BindUnit(extra, 1, unchangedId, error) && !error.empty() && unchangedId == 9999,
+            "host binding capacity must reject without publishing an assigned ID");
+        Require(scene.DestroyEntity(first) && host.PruneInvalidUnits() == 1 &&
+                host.BindUnit(extra, 1, unchangedId, error) && unchangedId > lastId,
+            "pruning an expired binding must free capacity without reusing its network ID");
+    }
+
     void ReleaseMouse(Pyramid::InputState& input)
     {
         input.ProcessMouseButton(Pyramid::MouseButton::Left, false);
@@ -570,6 +833,8 @@ int main()
     TestSimulationTimingAndQueue();
     TestQueuedAuthorityChanges();
     TestUnitMovement();
+    TestHostProtocolIntegration();
+    TestHostBindingLimit();
 
     InputState input;
     InputActionSystem actions;
