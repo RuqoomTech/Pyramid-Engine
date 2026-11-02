@@ -1,6 +1,7 @@
 #include <Pyramid/Graphics/Framebuffer.hpp>
 #include <Pyramid/Graphics/OpenGL/OpenGLStateManager.hpp>
 #include <Pyramid/Core/Prerequisites.hpp>
+#include <Pyramid/Core/Game.hpp>
 #include <Pyramid/Math/Math.hpp>
 #include <Pyramid/Platform/Input.hpp>
 #include <Pyramid/Input/InputActions.hpp>
@@ -61,6 +62,15 @@ namespace
     volatile SetShadowDataFunction g_setShadowData =
         &Pyramid::Renderer::DeferredLightingPass::SetShadowData;
 
+    class ConsumerGameProbe final : public Pyramid::Game
+    {
+    public:
+        using Pyramid::Game::GetFrameElapsedSeconds;
+    };
+
+    volatile decltype(&ConsumerGameProbe::GetFrameElapsedSeconds) g_getFrameElapsedSeconds =
+        &ConsumerGameProbe::GetFrameElapsedSeconds;
+
     class ConsumerFramebuffer final : public Pyramid::IFramebuffer
     {
     public:
@@ -101,6 +111,11 @@ namespace
 
 int main()
 {
+    if (!g_getFrameElapsedSeconds)
+    {
+        std::cerr << "Installed uncapped frame-time accessor is unavailable\n";
+        return 1;
+    }
     ConsumerFramebuffer framebuffer;
     Pyramid::IFramebuffer& framebufferInterface = framebuffer;
     if (framebufferInterface.IsInitialized())

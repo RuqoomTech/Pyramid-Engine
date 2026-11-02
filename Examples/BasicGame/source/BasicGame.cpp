@@ -1074,6 +1074,8 @@ void BasicGame::onUpdate(float deltaTime)
 
     m_gameScreens.Update(deltaTime);
     const bool gameplayBlocked = m_gameScreens.BlocksGameplayInput();
+    const bool simulationActive = m_gameplayStarted && !gameplayBlocked &&
+        GetInput().HasFocus() && IsRenderSurfaceAvailable();
 
     if (!gameplayBlocked &&
         actions.WasActionPressed(kInputContext, kToggleAnimationAction))
@@ -1097,7 +1099,7 @@ void BasicGame::onUpdate(float deltaTime)
             0.0f));
     }
 
-    if (!gameplayBlocked && m_camera && m_cameraController &&
+    if (simulationActive && m_camera && m_cameraController &&
         m_interactionController && m_sceneManager)
     {
         m_sceneManager->Update(deltaTime);
@@ -1127,18 +1129,56 @@ void BasicGame::onUpdate(float deltaTime)
 
         if (const auto command = m_interactionController->ConsumeCommand())
         {
-            if (m_units.ApplyMoveCommand(kLocalPlayerId, *command))
+            if (m_simulation.QueueMoveCommand(kLocalPlayerId, *command))
             {
                 PYRAMID_LOG_INFO(
-                    "Movement target accepted for entity ", command->entity.GetValue(),
+                    "Movement request queued for entity ", command->entity.GetValue(),
                     " at (", command->target.x, ", ", command->target.y, ", ",
                     command->target.z, ")");
             }
             else
             {
                 PYRAMID_LOG_WARN(
-                    "Movement target rejected for entity ", command->entity.GetValue());
+                    "Movement request rejected (queue full or invalid) for entity ",
+                    command->entity.GetValue());
             }
+        }
+    }
+
+    if (simulationActive)
+    {
+        // The first active frame can span time spent paused or unfocused.
+        const auto result = m_simulation.Advance(
+            m_simulationWasActive ? GetFrameElapsedSeconds() : 0.0);
+        m_simulationWasActive = true;
+        if (!result.valid)
+        {
+            PYRAMID_LOG_ERROR("RTS simulation rejected invalid frame elapsed time.");
+        }
+        if (result.acceptedCommands > 0)
+        {
+            PYRAMID_LOG_INFO("RTS orders applied on fixed ticks: ", result.acceptedCommands);
+        }
+        if (result.rejectedCommands > 0 || result.cancelledMoves > 0 ||
+            result.droppedSeconds > 0.0)
+        {
+            PYRAMID_LOG_WARN(
+                "RTS simulation: rejected orders=", result.rejectedCommands,
+                ", cancelled moves=", result.cancelledMoves,
+                ", dropped elapsed seconds=", result.droppedSeconds);
+        }
+        if (result.steps > 0 && m_sceneManager)
+        {
+            m_sceneManager->Update(0.0f);
+        }
+    }
+    else
+    {
+        m_simulation.Suspend();
+        m_simulationWasActive = false;
+        if (m_interactionController)
+        {
+            (void)m_interactionController->ConsumeCommand();
         }
     }
 

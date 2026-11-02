@@ -2,6 +2,7 @@
 
 #include <Pyramid/Core/Game.hpp>
 #include <Pyramid/Examples/RTSReference/RTSInteractionController.hpp>
+#include <Pyramid/Examples/RTSReference/RTSSimulation.hpp>
 #include <Pyramid/Examples/RTSReference/RTSUnitStore.hpp>
 #include <Pyramid/Graphics/Camera.hpp>
 #include <Pyramid/Graphics/CameraController.hpp>
@@ -64,6 +65,7 @@ private:
     std::shared_ptr<Pyramid::Scene> m_scene;
     std::unique_ptr<Pyramid::SceneManagement::SceneManager> m_sceneManager;
     Pyramid::Examples::RTSReference::RTSUnitStore m_units;
+    Pyramid::Examples::RTSReference::RTSSimulation m_simulation{m_units};
     std::unique_ptr<Pyramid::Camera> m_camera;
     std::unique_ptr<Pyramid::RTSCameraController> m_cameraController;
     std::unique_ptr<Pyramid::Examples::RTSReference::RTSInteractionController>
@@ -83,6 +85,7 @@ private:
     bool m_runtimeArabicFontLoaded = false;
     bool m_runtimeSymbolFontLoaded = false;
     bool m_gameplayStarted = false;
+    bool m_simulationWasActive = false;
     bool m_animationPaused = false;
     bool m_performanceSectionOpen = true;
     bool m_resourcesSectionOpen = true;

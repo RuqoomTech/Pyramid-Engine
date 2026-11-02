@@ -60,6 +60,7 @@ namespace
     {
     public:
         using Pyramid::Game::GetInput;
+        using Pyramid::Game::GetFrameElapsedSeconds;
         using Pyramid::Game::GetInputActions;
         using Pyramid::Game::GetClipboard;
         using Pyramid::Game::GetUIInputConsumption;
@@ -553,6 +554,8 @@ namespace
         static_cast<GetRegistryTextures>(&Pyramid::ResourceRegistry::Textures);
     volatile GetRegistryMaterials g_getRegistryMaterials =
         static_cast<GetRegistryMaterials>(&Pyramid::ResourceRegistry::Materials);
+    volatile decltype(&GameLinkageProbe::GetFrameElapsedSeconds) g_getGameFrameElapsedSeconds =
+        &GameLinkageProbe::GetFrameElapsedSeconds;
     volatile decltype(&GameLinkageProbe::GetInput) g_getGameInput =
         &GameLinkageProbe::GetInput;
     volatile decltype(&GameLinkageProbe::GetClipboard) g_getGameClipboard =
@@ -829,6 +832,7 @@ int main()
                    g_addInputAction &&
                    g_addInputBinding &&
                    g_rebindInputAction &&
+                   g_getGameFrameElapsedSeconds &&
                    g_getGameInput &&
                    g_getGameClipboard &&
                    g_getGameInputActions &&

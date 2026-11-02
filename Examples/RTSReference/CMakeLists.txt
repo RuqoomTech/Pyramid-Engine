@@ -1,6 +1,7 @@
 add_library(PyramidRTSReference STATIC
     source/RTSInteractionController.cpp
     source/RTSUnitStore.cpp
+    source/RTSSimulation.cpp
 )
 add_library(Pyramid::RTSReference ALIAS PyramidRTSReference)
 

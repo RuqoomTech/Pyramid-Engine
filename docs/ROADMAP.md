@@ -150,14 +150,20 @@ Target outcome: one playable two-player Windows LAN/direct-IP Ruqoom RTS vertica
    2. [x] Preserve captured entity lifetime identity through selection and queued requests; reject stale/reused IDs, foreign scenes, dead units, and unauthorized commands without changing accepted state.
    3. [x] Register the BasicGame reference unit and admit its local-owner commands through the store; record movement intent without executing simulation.
    4. [x] Validate CPU state/admission and input integration, build GCC Debug/Release, run both complete suites and an installed-engine consumer, and keep visual/native-driver acceptance explicitly deferred.
-7. fixed-step simulation and a command queue, with per-frame input edges consumed once and explicit overload behavior;
+7. [x] Fixed-step simulation and a command queue, with per-frame input edges consumed once and explicit overload behavior:
+   1. [x] Add a game-owned 32 Hz coordinator, FIFO capacity of 256 requests, and at most 8 catch-up ticks per advance; retain fractional time, report dropped whole ticks, and revalidate orders at execution.
+   2. [x] Advance root-unit straight-line world-space movement through authoritative entity transforms with bounded speeds, exact arrival, finite arithmetic, and explicit cancellation for unsupported/invalid movement.
+   3. [x] Expose uncapped monotonic frame elapsed time without changing the capped update callback; enqueue input once, suspend on menu/focus/minimize, and synchronize spatial state after movement in BasicGame.
+   4. [x] Test timing partitions, queue limits/order/one-shot execution, stale authority, movement and hierarchy boundaries; run Debug/Release and installed-consumer checks, leaving visual acceptance deferred.
 8. two-player LAN/direct-IP sessions, a bounded native transport, protocol/content compatibility checks, host-authoritative gameplay, validated ownership, snapshot presentation, and explicit disconnect behavior;
 9. terrain/large-map rendering and scalable visibility/spatial updates;
 10. [x] debug statistics and inspection UI as the first editor foundation;
 11. versioned scene extensions for camera/environment, game-owned persistence for gameplay components, and editor-owned metadata;
 12. measured 1080p/60 FPS acceptance with 500 total units on declared reference hardware, a separate 2,000-unit stress workload, and a verified Windows `0.7.0-pre-alpha` vertical slice, then Linux platform work. These are proposed performance targets, not demonstrated results.
 
-Unit-state validation (2026-11-01): GCC Debug/Release builds and `ctest --preset test-gcc-debug` / `ctest --preset test-gcc-release` passed 58/58 each, including unit admission, stale/reused IDs, queued requests, scene switching, and selection eligibility. A fresh Release install and `Tests/Consumer` configure/build/run passed without exporting the RTS reference target. BasicGame integration is built, with visual/native-driver checks deferred; movement execution and multiplayer are still pending.
+Unit-state validation (2026-11-01): GCC Debug/Release builds and `ctest --preset test-gcc-debug` / `ctest --preset test-gcc-release` passed 58/58 each, including unit admission, stale/reused IDs, queued requests, scene switching, and selection eligibility. A fresh Release install and `Tests/Consumer` configure/build/run passed without exporting the RTS reference target. At that milestone BasicGame integration was built with visual/native-driver checks deferred; movement execution and multiplayer were still pending.
+
+Fixed-step validation (2026-11-02): `cmake --build --preset build-gcc-debug-tests --parallel 3` and `cmake --build --preset build-gcc-release-tests --parallel 2` passed; `ctest --preset test-gcc-debug` and `ctest --preset test-gcc-release` passed 58/58 each. A fresh Release install and `Tests/Consumer` configure/build/run passed with the uncapped elapsed-time symbol and no exported RTS support. Timing/queue/authority/movement regressions are CPU evidence; native frame timing, BasicGame motion, focus/minimize behavior, and visual acceptance remain unexecuted/deferred. No measured 500-unit performance or multiplayer result is claimed.
 
 A full editor follows the validated runtime model. Baa integration starts as gameplay scripting only after its runtime, ABI/FFI, debugger, and hot-reload semantics are defined; engine reimplementation is a later compatibility project, not a blind source translation.
 

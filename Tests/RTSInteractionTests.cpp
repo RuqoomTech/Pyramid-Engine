@@ -1,5 +1,6 @@
 #include <Pyramid/Examples/RTSReference/RTSInteractionController.hpp>
 #include <Pyramid/Examples/RTSReference/RTSUnitStore.hpp>
+#include <Pyramid/Examples/RTSReference/RTSSimulation.hpp>
 #include <Pyramid/Graphics/Scene.hpp>
 #include <Pyramid/Graphics/Scene/SceneManager.hpp>
 
@@ -233,6 +234,324 @@ namespace
             "unit state must not extend a scene or entity lifetime");
     }
 
+    void TestSimulationTimingAndQueue()
+    {
+        using namespace Pyramid;
+        using namespace Pyramid::Examples::RTSReference;
+        constexpr f64 step = RTSSimulation::FixedStepSeconds;
+
+        const auto runPartitioned = [](bool divided)
+        {
+            Scene scene("Partitioned Simulation");
+            RTSUnitStore units;
+            const Entity unit = scene.CreateEntity("Moving Unit");
+            RTSUnitState initial;
+            initial.owner = 1;
+            Require(units.AddUnit(unit, initial), "partition fixture registration failed");
+            RTSSimulation simulation(units);
+            Require(simulation.QueueMoveCommand(1, {unit.GetId(), Math::Vec3(100.0f, 0.0f, 0.0f), unit}),
+                "partition fixture enqueue failed");
+            std::size_t accepted = 0;
+            if (divided)
+            {
+                for (u32 frame = 0; frame < 12; ++frame)
+                {
+                    const auto result = simulation.Advance(RTSSimulation::FixedStepSeconds * 0.5);
+                    Require(result.valid && result.droppedSeconds == 0.0,
+                        "subtick partition unexpectedly failed or dropped time");
+                    accepted += result.acceptedCommands;
+                }
+            }
+            else
+            {
+                const auto result = simulation.Advance(RTSSimulation::FixedStepSeconds * 6.0);
+                Require(result.valid && result.steps == 6 && result.droppedSeconds == 0.0,
+                    "single-frame partition did not execute six ticks");
+                accepted = result.acceptedCommands;
+            }
+            Require(simulation.GetTickCount() == 6 && accepted == 1 &&
+                    simulation.GetPendingCommandCount() == 0,
+                "elapsed-time partitions must execute the request exactly once");
+            return unit.GetWorldPosition();
+        };
+        Require(NearlyEqual(runPartitioned(false), runPartitioned(true)),
+            "equal elapsed time must produce equal movement across frame partitions");
+
+        Scene scene("Simulation Queue");
+        RTSUnitStore units;
+        const Entity unit = scene.CreateEntity("Queued Unit");
+        RTSUnitState initial;
+        initial.owner = 1;
+        Require(units.AddUnit(unit, initial), "queue fixture registration failed");
+        RTSSimulation simulation(units);
+        const RTSCommandRequest first{unit.GetId(), Math::Vec3(-100.0f, 0.0f, 0.0f), unit};
+        const RTSCommandRequest last{unit.GetId(), Math::Vec3(100.0f, 0.0f, 0.0f), unit};
+        Require(simulation.QueueMoveCommand(1, first) &&
+                simulation.QueueMoveCommand(2, first) && simulation.QueueMoveCommand(1, last),
+            "FIFO fixture enqueue failed");
+        const auto noTime = simulation.Advance(0.0);
+        const auto half = simulation.Advance(step * 0.5);
+        Require(noTime.valid && noTime.steps == 0 && half.steps == 0 &&
+                simulation.GetPendingCommandCount() == 3 && !units.FindUnit(unit)->movementTarget &&
+                NearlyEqual(unit.GetWorldPosition(), Math::Vec3::Zero),
+            "zero/subtick frames must preserve queued intent without executing movement");
+        const auto tick = simulation.Advance(step * 0.5);
+        Require(tick.valid && tick.steps == 1 && tick.acceptedCommands == 2 &&
+                tick.rejectedCommands == 1 && simulation.GetPendingCommandCount() == 0 &&
+                units.FindUnit(unit)->movementTarget &&
+                NearlyEqual(*units.FindUnit(unit)->movementTarget, last.target) &&
+                NearlyEqual(unit.GetWorldPosition(), Math::Vec3(0.125f, 0.0f, 0.0f)),
+            "tick must drain FIFO once, reject unauthorized intent, then move toward the last accepted target");
+        const auto following = simulation.Advance(step * 3.0);
+        Require(following.steps == 3 && following.acceptedCommands == 0 &&
+                following.rejectedCommands == 0 && simulation.GetTickCount() == 4,
+            "catch-up ticks must not replay input edges or consumed commands");
+
+        RTSCommandRequest malformed = last;
+        Require(!simulation.QueueMoveCommand(0, last), "neutral issuer was enqueued");
+        malformed.entityRef = {};
+        Require(!simulation.QueueMoveCommand(1, malformed), "ID-only request was enqueued");
+        malformed = last;
+        malformed.entity = EntityId(999999);
+        Require(!simulation.QueueMoveCommand(1, malformed), "mismatched request was enqueued");
+        malformed = last;
+        malformed.target.x = std::numeric_limits<f32>::infinity();
+        Require(!simulation.QueueMoveCommand(1, malformed) && simulation.GetPendingCommandCount() == 0,
+            "malformed queue insertion must fail without publishing intent");
+
+        for (std::size_t index = 0; index < RTSSimulation::MaximumQueuedCommands; ++index)
+        {
+            const Math::Vec3 target(1000.0f + static_cast<f32>(index), 0.0f, 0.0f);
+            Require(simulation.QueueMoveCommand(1, {unit.GetId(), target, unit}),
+                "queue rejected a request below capacity");
+        }
+        Require(simulation.GetPendingCommandCount() == RTSSimulation::MaximumQueuedCommands &&
+                !simulation.QueueMoveCommand(1, first),
+            "full queue must reject the newest request without replacing accepted intent");
+        const auto full = simulation.Advance(step);
+        Require(full.acceptedCommands == RTSSimulation::MaximumQueuedCommands &&
+                full.rejectedCommands == 0 && simulation.GetPendingCommandCount() == 0 &&
+                NearlyEqual(units.FindUnit(unit)->movementTarget->x,
+                    1000.0f + static_cast<f32>(RTSSimulation::MaximumQueuedCommands - 1)) &&
+                simulation.QueueMoveCommand(1, last),
+            "draining a full FIFO must preserve its final order and free capacity");
+
+        const u64 ticksBeforeInvalid = simulation.GetTickCount();
+        const Math::Vec3 positionBeforeInvalid = unit.GetWorldPosition();
+        for (f64 elapsed : {-1.0, std::numeric_limits<f64>::quiet_NaN(),
+                std::numeric_limits<f64>::infinity()})
+        {
+            const auto invalid = simulation.Advance(elapsed);
+            Require(!invalid.valid && invalid.steps == 0 && invalid.acceptedCommands == 0 &&
+                    simulation.GetTickCount() == ticksBeforeInvalid &&
+                    simulation.GetPendingCommandCount() == 1 &&
+                    NearlyEqual(unit.GetWorldPosition(), positionBeforeInvalid),
+                "invalid elapsed time must preserve the accumulator, queue, ticks, and scene");
+        }
+        Require(simulation.Advance(step).acceptedCommands == 1,
+            "invalid time must not corrupt the next valid simulation tick");
+        simulation.Suspend();
+        const u64 ticksBeforeSpike = simulation.GetTickCount();
+        const auto spike = simulation.Advance(step * (RTSSimulation::MaximumStepsPerAdvance + 5.5));
+        Require(spike.valid && spike.steps == RTSSimulation::MaximumStepsPerAdvance &&
+                spike.droppedSeconds == step * 5.0 &&
+                simulation.GetTickCount() == ticksBeforeSpike + RTSSimulation::MaximumStepsPerAdvance,
+            "overload must cap executed ticks and report dropped whole-step time");
+        Require(simulation.Advance(step * 0.5).steps == 1,
+            "overload must retain its fractional remainder for the next frame");
+        simulation.Suspend();
+        const auto huge = simulation.Advance(std::numeric_limits<f64>::max());
+        Require(huge.valid && huge.steps == RTSSimulation::MaximumStepsPerAdvance &&
+                std::isfinite(huge.droppedSeconds) && huge.droppedSeconds > 0.0 &&
+                simulation.Advance(0.0).steps == 0,
+            "huge finite elapsed time must remain bounded without overflowing timing state");
+
+        simulation.Suspend();
+        Require(simulation.QueueMoveCommand(1, first) && simulation.Advance(step * 0.5).steps == 0,
+            "suspension fixture enqueue failed");
+        const u64 ticksBeforeSuspend = simulation.GetTickCount();
+        const Math::Vec3 admittedTarget = *units.FindUnit(unit)->movementTarget;
+        simulation.Suspend();
+        Require(simulation.GetPendingCommandCount() == 0 &&
+                simulation.GetTickCount() == ticksBeforeSuspend &&
+                NearlyEqual(*units.FindUnit(unit)->movementTarget, admittedTarget) &&
+                simulation.Advance(step * 0.5).steps == 0,
+            "suspension must discard pending intent and fractional time while retaining admitted state");
+        const auto resumed = simulation.Advance(step * 0.5);
+        Require(resumed.steps == 1 && resumed.acceptedCommands == 0 &&
+                NearlyEqual(*units.FindUnit(unit)->movementTarget, admittedTarget),
+            "resume must not catch up suspended time or replay abandoned requests");
+    }
+
+    void TestQueuedAuthorityChanges()
+    {
+        using namespace Pyramid;
+        using namespace Pyramid::Examples::RTSReference;
+        Scene scene("Queued Authority Changes");
+        RTSUnitStore units;
+        RTSUnitState initial;
+        initial.owner = 1;
+        const Entity transferred = scene.CreateEntity("Transferred");
+        const Entity dead = scene.CreateEntity("Dead Before Tick");
+        const Entity old = scene.CreateEntity("Replaced Before Tick");
+        Require(units.AddUnit(transferred, initial) && units.AddUnit(dead, initial) &&
+                units.AddUnit(old, initial), "authority fixture registration failed");
+        RTSSimulation simulation(units);
+        for (Entity entity : {transferred, dead, old})
+        {
+            Require(simulation.QueueMoveCommand(1, {entity.GetId(), Math::Vec3(8.0f), entity}),
+                "authority fixture enqueue failed");
+        }
+        Require(units.SetOwnership(transferred, 2, 2) && units.ApplyDamage(dead, 100) &&
+                scene.DestroyEntity(old), "queued authority mutation failed");
+        const Entity replacement = scene.CreateEntityWithId(old.GetId(), "Replacement");
+        Require(replacement && units.PruneInvalidEntities() == 1 && units.AddUnit(replacement, initial),
+            "queued replacement registration failed");
+        const auto result = simulation.Advance(RTSSimulation::FixedStepSeconds);
+        Require(result.steps == 1 && result.acceptedCommands == 0 && result.rejectedCommands == 3 &&
+                simulation.GetPendingCommandCount() == 0 &&
+                !units.FindUnit(transferred)->movementTarget && !units.FindUnit(dead)->movementTarget &&
+                !units.FindUnit(replacement)->movementTarget &&
+                NearlyEqual(replacement.GetWorldPosition(), Math::Vec3::Zero),
+            "execution must revalidate current ownership, health, and original entity lifetime");
+        Require(simulation.QueueMoveCommand(1, {replacement.GetId(), Math::Vec3(8.0f), replacement}),
+            "scene-clear request fixture failed");
+        scene.Clear();
+        const auto cleared = simulation.Advance(RTSSimulation::FixedStepSeconds);
+        Require(cleared.acceptedCommands == 0 && cleared.rejectedCommands == 1 &&
+                simulation.GetPendingCommandCount() == 0,
+            "scene clear must reject and consume queued intent without reviving entities");
+    }
+
+    void TestUnitMovement()
+    {
+        using namespace Pyramid;
+        using namespace Pyramid::Examples::RTSReference;
+        constexpr f64 step = RTSSimulation::FixedStepSeconds;
+        Scene scene("Movement Boundaries");
+        RTSUnitStore units;
+        Entity unit = scene.CreateEntity("Moving Root");
+        const Math::Quat rotation = Math::Quat::FromEuler(0.2f, 0.3f, 0.4f);
+        const Math::Vec3 scale(2.0f, 3.0f, 4.0f);
+        Require(unit.SetLocalRotation(rotation) && unit.SetLocalScale(scale),
+            "movement transform fixture failed");
+        Entity visualChild = scene.CreateEntity("Visual Child");
+        AttachRenderable(visualChild, Math::Vec3(1.0f, 0.0f, 0.0f));
+        Require(visualChild.SetParent(unit), "visual child parenting failed");
+        const Math::Vec3 childBefore = visualChild.GetWorldPosition();
+        RTSUnitState initial;
+        initial.owner = 1;
+        Require(units.AddUnit(unit, initial), "movement unit registration failed");
+        RTSSimulation simulation(units);
+        Require(simulation.QueueMoveCommand(1, {unit.GetId(), Math::Vec3(3.0f, 0.0f, 4.0f), unit}),
+            "diagonal movement enqueue failed");
+        const auto diagonal = simulation.Advance(step);
+        const Math::Vec3 expected(0.075f, 0.0f, 0.1f);
+        const TransformComponent* transform = unit.GetTransform();
+        Require(diagonal.acceptedCommands == 1 && diagonal.cancelledMoves == 0 &&
+                NearlyEqual(unit.GetWorldPosition(), expected) &&
+                NearlyEqual(visualChild.GetWorldPosition() - childBefore, expected) &&
+                transform && NearlyEqual(transform->scale, scale) &&
+                NearlyEqual(transform->rotation.x, rotation.x) &&
+                NearlyEqual(transform->rotation.y, rotation.y) &&
+                NearlyEqual(transform->rotation.z, rotation.z) &&
+                NearlyEqual(transform->rotation.w, rotation.w),
+            "normalized movement must preserve rotation/scale and propagate through scene hierarchy");
+        const Math::Vec3 arrival = expected + Math::Vec3(0.02f, 0.0f, 0.0f);
+        Require(simulation.QueueMoveCommand(1, {unit.GetId(), arrival, unit}),
+            "arrival movement enqueue failed");
+        const auto arrived = simulation.Advance(step);
+        Require(arrived.cancelledMoves == 0 && NearlyEqual(unit.GetWorldPosition(), arrival) &&
+                !units.FindUnit(unit)->movementTarget,
+            "movement must snap to a nearby target without overshoot and clear the completed order");
+        (void)simulation.Advance(step * 2.0);
+        Require(NearlyEqual(unit.GetWorldPosition(), arrival), "idle ticks changed an arrived unit");
+
+        Entity immobile = scene.CreateEntity("Immobile");
+        RTSUnitState stationary = initial;
+        stationary.movementSpeed = 0.0f;
+        Require(units.AddUnit(immobile, stationary) &&
+                simulation.QueueMoveCommand(1, {immobile.GetId(), Math::Vec3(4.0f), immobile}),
+            "zero-speed fixture registration failed");
+        const auto stopped = simulation.Advance(step);
+        Require(stopped.cancelledMoves == 0 && units.FindUnit(immobile)->movementTarget &&
+                NearlyEqual(immobile.GetWorldPosition(), Math::Vec3::Zero),
+            "zero speed must preserve intent without cancellation or movement");
+        Require(simulation.QueueMoveCommand(1, {immobile.GetId(), Math::Vec3::Zero, immobile}),
+            "zero-distance enqueue failed");
+        (void)simulation.Advance(step);
+        Require(!units.FindUnit(immobile)->movementTarget,
+            "a zero-distance order must finish even when movement speed is zero");
+        const Entity invalidSpeed = scene.CreateEntity("Invalid Speed");
+        for (f32 speed : {-1.0f, std::numeric_limits<f32>::infinity(),
+                std::numeric_limits<f32>::quiet_NaN()})
+        {
+            RTSUnitState invalid = initial;
+            invalid.movementSpeed = speed;
+            Require(!units.AddUnit(invalidSpeed, invalid) && !units.FindUnit(invalidSpeed),
+                "negative or nonfinite movement speed must fail transactional registration");
+        }
+
+        Entity child = scene.CreateEntity("Parented Unit");
+        Require(child.SetParent(unit), "parented movement fixture failed");
+        RTSUnitState withTarget = initial;
+        withTarget.movementTarget = Math::Vec3(6.0f);
+        Require(!units.AddUnit(child, withTarget) && units.AddUnit(child, initial) &&
+                !units.ApplyMoveCommand(1, {child.GetId(), Math::Vec3(6.0f), child}),
+            "parented units must reject world-space movement without writing local coordinates");
+        Require(simulation.QueueMoveCommand(1, {child.GetId(), Math::Vec3(6.0f), child}),
+            "parented request should reach execution admission");
+        Require(simulation.Advance(step).rejectedCommands == 1 && !units.FindUnit(child)->movementTarget,
+            "tick admission must reject unsupported parented movement");
+        Entity reparented = scene.CreateEntity("Reparented Unit");
+        Require(units.AddUnit(reparented, initial) &&
+                simulation.QueueMoveCommand(1, {reparented.GetId(), Math::Vec3(6.0f), reparented}) &&
+                reparented.SetParent(unit), "queued reparent fixture failed");
+        Require(simulation.Advance(step).rejectedCommands == 1 &&
+                !units.FindUnit(reparented)->movementTarget && reparented.ClearParent(),
+            "reparenting after enqueue must invalidate execution admission");
+        Require(simulation.QueueMoveCommand(1, {reparented.GetId(), Math::Vec3(6.0f), reparented}) &&
+                simulation.Advance(step).acceptedCommands == 1 && reparented.SetParent(unit),
+            "active reparent fixture failed");
+        const Math::Vec3 localBefore = reparented.GetTransform()->position;
+        Require(simulation.Advance(step).cancelledMoves == 1 &&
+                !units.FindUnit(reparented)->movementTarget &&
+                NearlyEqual(reparented.GetTransform()->position, localBefore),
+            "reparenting an active unit must cancel intent without corrupting its local transform");
+
+        Entity extreme = scene.CreateEntity("Extreme Coordinates");
+        const f32 largest = std::numeric_limits<f32>::max();
+        Require(extreme.SetLocalPosition(Math::Vec3(largest, 0.0f, 0.0f)),
+            "extreme coordinate fixture failed");
+        RTSUnitState fast = initial;
+        fast.movementSpeed = largest;
+        Require(units.AddUnit(extreme, fast) &&
+                simulation.QueueMoveCommand(1, {extreme.GetId(), Math::Vec3(-largest, 0.0f, 0.0f), extreme}),
+            "extreme coordinate move fixture failed");
+        const auto extremeTick = simulation.Advance(step);
+        Require(extremeTick.cancelledMoves == 0 && std::isfinite(extreme.GetWorldPosition().x) &&
+                extreme.GetWorldPosition().x < largest && extreme.GetWorldPosition().x > 0.0f,
+            "finite opposite-extreme coordinates must not overflow float subtraction or normalization");
+        Entity precisionLimited = scene.CreateEntity("Float Precision Limit");
+        Require(precisionLimited.SetLocalPosition(Math::Vec3(largest, 0.0f, 0.0f)) &&
+                units.AddUnit(precisionLimited, initial) &&
+                simulation.QueueMoveCommand(1,
+                    {precisionLimited.GetId(), Math::Vec3(-largest, 0.0f, 0.0f), precisionLimited}),
+            "precision limit fixture failed");
+        Require(simulation.Advance(step).cancelledMoves == 1 &&
+                !units.FindUnit(precisionLimited)->movementTarget &&
+                precisionLimited.GetWorldPosition().x == largest,
+            "unrepresentable float progress must cancel visibly rather than claim movement");
+        Entity malformed = scene.CreateEntity("Malformed Position");
+        Require(units.AddUnit(malformed, initial) &&
+                units.ApplyMoveCommand(1, {malformed.GetId(), Math::Vec3(1.0f), malformed}) &&
+                malformed.SetLocalPosition(Math::Vec3(std::numeric_limits<f32>::quiet_NaN(), 0.0f, 0.0f)),
+            "malformed active position fixture failed");
+        Require(!units.ApplyMoveCommand(1, {malformed.GetId(), Math::Vec3(2.0f), malformed}) &&
+                simulation.Advance(step).cancelledMoves == 1 &&
+                !units.FindUnit(malformed)->movementTarget,
+            "invalid active positions must reject new orders and cancel existing movement safely");
+    }
     void ReleaseMouse(Pyramid::InputState& input)
     {
         input.ProcessMouseButton(Pyramid::MouseButton::Left, false);
@@ -248,6 +567,9 @@ int main()
 
     TestUnitState();
     TestUnitLifetimes();
+    TestSimulationTimingAndQueue();
+    TestQueuedAuthorityChanges();
+    TestUnitMovement();
 
     InputState input;
     InputActionSystem actions;
@@ -401,10 +723,13 @@ int main()
     Require(command->entity == unit.GetId(), "command should target the selected entity");
     Require(NearlyEqual(command->target, Math::Vec3::Zero, 0.01f),
         "center-screen command should project to the ground-plane origin");
-    Require(command->entityRef == unit && units.ApplyMoveCommand(1, *command) &&
-            units.FindUnit(unit)->movementTarget &&
-            NearlyEqual(*units.FindUnit(unit)->movementTarget, command->target),
-        "real controller requests must retain identity and pass owner admission");
+    RTSSimulation inputSimulation(units);
+    Require(command->entityRef == unit && inputSimulation.QueueMoveCommand(1, *command),
+        "real controller requests must retain identity and enter the simulation queue");
+    const auto inputTicks = inputSimulation.Advance(RTSSimulation::FixedStepSeconds * 3.0);
+    Require(inputTicks.steps == 3 && inputTicks.acceptedCommands == 1 &&
+            inputTicks.rejectedCommands == 0 && inputSimulation.GetPendingCommandCount() == 0,
+        "one real input edge must execute exactly once across multiple catch-up ticks");
     Require(!interaction.ConsumeCommand().has_value(),
         "command requests should be one-shot after consumption");
 

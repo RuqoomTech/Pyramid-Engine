@@ -74,6 +74,13 @@ protected:
     virtual void onUpdate(float deltaTime);
 
     /**
+     * Uncapped monotonic elapsed seconds sampled for the current update frame.
+     * Zero before run() samples a frame. Simulation consumers own pause/catch-up
+     * policy; onUpdate's float argument remains capped at 1/30 second.
+     */
+    [[nodiscard]] f64 GetFrameElapsedSeconds() const;
+
+    /**
      * @brief Called every frame to render the game
      * Override this to implement your game rendering
      * @note The base implementation clears the screen and presents the frame
@@ -180,6 +187,7 @@ private:
     bool m_isRunning;
     bool m_initialized; // Track if initialization was successful
     bool m_renderSurfaceAvailable;
+    f64 m_frameElapsedSeconds = 0.0;
 };
 
 } // namespace Pyramid

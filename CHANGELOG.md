@@ -4,13 +4,21 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 
 ## [Unreleased]
 
+### Fixed-step RTS movement
+
+- Added a game-owned 32 Hz simulation coordinator, a 256-request FIFO, execution-time command admission, and an 8-tick catch-up limit with fractional retention and reported dropped time. Suspension clears queued intent/time without replaying input edges.
+- Added finite nonnegative movement speeds and scene-authoritative root-unit straight-line movement, exact arrival, stable entity-ID traversal, and cancellation diagnostics for reparented/invalid or unrepresentable movement. Navigation, collision, and interpolation remain unsupported.
+- Exposed uncapped monotonic `Game::GetFrameElapsedSeconds()` while preserving capped update callback behavior, with source and installed-consumer linkage checks. Consumers must rebuild for the changed pre-alpha `Game` layout; persistent formats are unchanged.
+- Added CPU timing-partition, FIFO/capacity, invalid/huge time, suspension, stale-authority, hierarchy, and finite-extreme movement regressions; GCC Debug/Release each passed 58/58 tests, and the fresh installed consumer passed.
+- Routed BasicGame input through the queue once per frame, gated local simulation on menu/focus/minimize state, discarded resumed boundary time, and synchronized spatial state after movement. Multiplayer host pause/tick/transport policy remains pending; visual/native-driver checks remain deferred.
+
 ### Game-owned RTS unit state
 
 - Added reference-layer ownership/team, bounded health, selectability, and movement-target state tied to original non-owning entity lifetimes, keeping transforms and rendering scene-authoritative.
 - Added transactional command admission, saturating damage, order cancellation on death/ownership changes, and explicit stale-state pruning; malformed, unauthorized, dead, and stale requests preserve accepted state.
 - Retained entity lifetime identity through selection and queued requests, preventing reused IDs or active-scene changes from reviving old selections/orders. Manually constructed local requests must now populate the captured `entityRef`; no installed engine API or scene format changed.
 - Added CPU state/admission, component-authored input, lifetime-reuse, queued-request, scene-switch, and selection/death regressions within the existing RTS interaction target.
-- Registered BasicGame's cube as player/team 1 and routed local requests through admission. This records intent only; fixed-step execution, networking, and gameplay persistence remain pending. Visual/native-driver checks remain deferred.
+- Registered BasicGame's cube as player/team 1 and routed local requests through admission. That initial integration recorded intent only; fixed-step execution follows in the entry above, while networking and gameplay persistence remain pending. Visual/native-driver checks remain deferred.
 
 ### Occlusion placeholder removal
 

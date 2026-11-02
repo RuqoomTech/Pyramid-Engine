@@ -140,6 +140,11 @@ namespace Pyramid
         // Note: Screen clearing should be done in onRender(), not here
     }
 
+    f64 Game::GetFrameElapsedSeconds() const
+    {
+        return m_frameElapsedSeconds;
+    }
+
     void Game::onRender()
     {
         // Default implementation - clear screen and present
@@ -280,7 +285,8 @@ namespace Pyramid
         }
 
         // Initialize timing
-        auto lastTime = std::chrono::high_resolution_clock::now();
+        m_frameElapsedSeconds = 0.0;
+        auto lastTime = std::chrono::steady_clock::now();
         const float maxDeltaTime = 1.0f / 30.0f; // Cap at 30 FPS minimum (33ms max frame time)
 
         PYRAMID_LOG_INFO("Entering main game loop");
@@ -296,12 +302,14 @@ namespace Pyramid
             }
 
             // Calculate frame time
-            auto currentTime = std::chrono::high_resolution_clock::now();
-            float deltaTime = std::chrono::duration<float>(currentTime - lastTime).count();
+            const auto currentTime = std::chrono::steady_clock::now();
+            m_frameElapsedSeconds =
+                std::chrono::duration<f64>(currentTime - lastTime).count();
             lastTime = currentTime;
 
-            // Clamp delta time to prevent large jumps (e.g., when debugging or system lag)
-            deltaTime = (std::min)(deltaTime, maxDeltaTime);
+            // Keep presentation callbacks capped; simulation reads the raw sample.
+            const float deltaTime = static_cast<float>((std::min)(
+                m_frameElapsedSeconds, static_cast<f64>(maxDeltaTime)));
 
             // Give retained UI contexts first refusal over physical controls so
             // clicks, wheel input and focused keyboard navigation do not leak into

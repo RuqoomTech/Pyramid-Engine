@@ -3,12 +3,13 @@
 #include <Pyramid/Graphics/Scene/Entity.hpp>
 
 #include <cstddef>
+#include <map>
 #include <optional>
-#include <unordered_map>
 
 namespace Pyramid::Examples::RTSReference
 {
     struct RTSCommandRequest;
+    class RTSSimulation;
 
     /** Game-owned state; transforms remain authoritative in the entity scene. */
     struct RTSUnitState
@@ -18,6 +19,8 @@ namespace Pyramid::Examples::RTSReference
         u32 maximumHealth = 100;
         u32 health = 100;
         bool selectable = true;
+        /** Finite nonnegative world units per second; zero deliberately holds position. */
+        f32 movementSpeed = 4.0f;
         std::optional<Math::Vec3> movementTarget;
 
         [[nodiscard]] bool IsAlive() const { return health > 0; }
@@ -34,6 +37,10 @@ namespace Pyramid::Examples::RTSReference
      * Owner zero is neutral and cannot issue commands. Team is metadata only;
      * selection does not imply command authority. State mutations other than move
      * admission are trusted game/host operations, not a network trust boundary.
+     * Movement is root-only; reparenting an active unit cancels its order on the
+     * next tick. Idle/dead units stay still, zero speed holds a live target, and
+     * invalid or unrepresentable displacement cancels the order with diagnostics
+     * counted by RTSSimulationResult::cancelledMoves. Entries advance by EntityId.
      */
     class RTSUnitStore final
     {
@@ -49,7 +56,7 @@ namespace Pyramid::Examples::RTSReference
         /** Changes to owner or team cancel the previous movement target. */
         [[nodiscard]] bool SetOwnership(Entity entity, u32 owner, u32 team);
         [[nodiscard]] bool SetSelectable(Entity entity, bool selectable);
-        /** Validates owner, lifetime, health, and finite target; records intent only. */
+        /** Validates owner, lifetime, health, root transform, and target; records intent only. */
         [[nodiscard]] bool ApplyMoveCommand(u32 issuer, const RTSCommandRequest& command);
         [[nodiscard]] bool ClearMovementTarget(Entity entity);
 
@@ -58,6 +65,8 @@ namespace Pyramid::Examples::RTSReference
         void Clear();
 
     private:
+        friend class RTSSimulation;
+
         struct Entry
         {
             Entity entity;
@@ -66,6 +75,9 @@ namespace Pyramid::Examples::RTSReference
 
         [[nodiscard]] RTSUnitState* FindMutableUnit(Entity entity);
 
-        std::unordered_map<EntityId, Entry, EntityIdHash> m_units;
+        /** Positive finite fixed step supplied only by RTSSimulation; returns cancelled orders. */
+        std::size_t StepMovement(f64 stepSeconds);
+
+        std::map<EntityId, Entry> m_units;
     };
 }
