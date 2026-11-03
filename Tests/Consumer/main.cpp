@@ -4,6 +4,7 @@
 #include <Pyramid/Core/Game.hpp>
 #include <Pyramid/Math/Math.hpp>
 #include <Pyramid/Platform/Input.hpp>
+#include <Pyramid/Platform/TCP.hpp>
 #include <Pyramid/Input/InputActions.hpp>
 #include <Pyramid/Graphics/Geometry/MeshCache.hpp>
 #include <Pyramid/Graphics/Shader/ShaderCache.hpp>
@@ -114,6 +115,25 @@ int main()
     if (!g_getFrameElapsedSeconds)
     {
         std::cerr << "Installed uncapped frame-time accessor is unavailable\n";
+        return 1;
+    }
+    static_assert(!std::is_copy_constructible_v<Pyramid::Platform::TcpStream> &&
+            std::is_nothrow_move_constructible_v<Pyramid::Platform::TcpStream> &&
+            !std::is_copy_constructible_v<Pyramid::Platform::TcpListener> &&
+            std::is_nothrow_move_assignable_v<Pyramid::Platform::TcpListener>,
+        "Installed TCP handles must retain move-only, nonthrowing ownership transfer");
+    Pyramid::Platform::TcpStream idleStream;
+    Pyramid::Platform::TcpStream movedStream(std::move(idleStream));
+    idleStream = std::move(movedStream);
+    idleStream.Close();
+    Pyramid::Platform::TcpListener idleListener;
+    Pyramid::Platform::TcpListener movedListener(std::move(idleListener));
+    idleListener = std::move(movedListener);
+    idleListener.Close();
+    if (idleStream.GetState() != Pyramid::Platform::TcpState::Closed ||
+        idleListener.IsListening() || idleListener.GetLocalPort() != 0)
+    {
+        std::cerr << "Installed TCP ownership or close state failed\n";
         return 1;
     }
     ConsumerFramebuffer framebuffer;

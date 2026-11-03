@@ -456,6 +456,164 @@ namespace
         RoundTrip(boundary);
     }
 
+    void TestIncrementalFraming()
+    {
+        Protocol::FrameDecoder decoder;
+        Protocol::Error error{Protocol::ErrorCode::InvalidValue, 99, "old error"};
+        std::size_t consumed = 99;
+        Protocol::Message output = MoveMessage();
+        Require(!decoder.HasMessage() && decoder.GetBufferedByteCount() == 0 &&
+                decoder.GetBytesNeeded() == Protocol::HeaderSize && !decoder.TakeMessage(output),
+            "new incremental decoder must await one header and preserve absent output");
+        RequireEqual(MoveMessage(), output);
+        Require(decoder.Feed(nullptr, 0, consumed, error) && consumed == 0 &&
+                error.code == Protocol::ErrorCode::None && error.message.empty(),
+            "empty incremental input must consume nothing and clear old diagnostics");
+
+        for (const auto& message : {HelloMessage(), MoveMessage(), SnapshotMessage()})
+        {
+            const auto bytes = Encode(message);
+            const std::size_t splits[] = {1, 19, 20, 21, bytes.size() - 1};
+            for (std::size_t split : splits)
+            {
+                decoder.Reset();
+                Require(decoder.Feed(bytes.data(), split, consumed, error) && consumed == split &&
+                        !decoder.HasMessage() && decoder.GetBufferedByteCount() == split &&
+                        decoder.GetBytesNeeded() ==
+                            (split < Protocol::HeaderSize ? Protocol::HeaderSize - split : bytes.size() - split),
+                    "fragmented header/body did not retain its exact bounded progress");
+                Require(decoder.Feed(bytes.data() + split, bytes.size() - split, consumed, error) &&
+                        consumed == bytes.size() - split && decoder.HasMessage() &&
+                        decoder.GetBytesNeeded() == 0 && decoder.GetBufferedByteCount() == bytes.size(),
+                    "fragmented frame did not become ready after its final byte");
+                Require(decoder.Feed(bytes.data(), bytes.size(), consumed, error) && consumed == 0 &&
+                        decoder.HasMessage(), "pending message must not consume following frame bytes");
+                Require(decoder.TakeMessage(output), "complete incremental message could not be taken");
+                RequireEqual(message, output);
+                Require(!decoder.HasMessage() && decoder.GetBufferedByteCount() == 0 &&
+                        decoder.GetBytesNeeded() == Protocol::HeaderSize && !decoder.TakeMessage(output),
+                    "taking a message must reset framing and preserve output on the next empty take");
+                RequireEqual(message, output);
+            }
+            decoder.Reset();
+            for (std::size_t offset = 0; offset < bytes.size(); ++offset)
+            {
+                Require(decoder.Feed(bytes.data() + offset, 1, consumed, error) && consumed == 1 &&
+                        decoder.HasMessage() == (offset + 1 == bytes.size()),
+                    "one-byte framing emitted early, stalled, or discarded input");
+            }
+            Require(decoder.TakeMessage(output), "one-byte framed message was not published");
+            RequireEqual(message, output);
+        }
+
+        const auto first = Encode(HelloMessage());
+        const auto second = Encode(MoveMessage());
+        const auto third = Encode(SnapshotMessage());
+        std::vector<u8> coalesced = first;
+        coalesced.insert(coalesced.end(), second.begin(), second.end());
+        coalesced.insert(coalesced.end(), third.begin(), third.end());
+        decoder.Reset();
+        Require(decoder.Feed(coalesced.data(), coalesced.size(), consumed, error) &&
+                consumed == first.size() && decoder.TakeMessage(output),
+            "coalesced input must stop at its first exact frame boundary");
+        RequireEqual(HelloMessage(), output);
+        std::size_t offset = consumed;
+        Require(decoder.Feed(coalesced.data() + offset, coalesced.size() - offset, consumed, error) &&
+                consumed == second.size() && decoder.TakeMessage(output),
+            "coalesced unread tail must preserve its next complete frame");
+        RequireEqual(MoveMessage(), output);
+        offset += consumed;
+        Require(decoder.Feed(coalesced.data() + offset, 19, consumed, error) && consumed == 19 &&
+                !decoder.HasMessage() && decoder.GetBufferedByteCount() == 19 &&
+                decoder.GetBytesNeeded() == 1,
+            "complete frames followed by an incomplete header lost their suffix");
+        offset += consumed;
+        Require(decoder.Feed(coalesced.data() + offset, coalesced.size() - offset, consumed, error) &&
+                consumed == third.size() - 19 && decoder.TakeMessage(output),
+            "coalesced partial suffix did not recover its complete frame");
+        RequireEqual(SnapshotMessage(), output);
+    }
+
+    void TestIncrementalFailures()
+    {
+        const auto valid = Encode(MoveMessage());
+        for (unsigned int variation = 0; variation < 7; ++variation)
+        {
+            auto header = valid;
+            header.resize(Protocol::HeaderSize);
+            switch (variation)
+            {
+                case 0: header[0] = 'X'; break;
+                case 1: header[4] = 2; break;
+                case 2: header[6] = 99; break;
+                case 3: header[7] = 1; break;
+                case 4:
+                    for (std::size_t index = 12; index < 20; ++index)
+                    {
+                        header[index] = 0;
+                    }
+                    break;
+                case 5: SetU32(header, 8, std::numeric_limits<u32>::max()); break;
+                case 6: SetU32(header, 8, 0); break;
+            }
+            Protocol::FrameDecoder decoder;
+            Protocol::Error error;
+            std::size_t consumed = 99;
+            Protocol::Message output = MoveMessage();
+            Require(!decoder.Feed(header.data(), header.size(), consumed, error) &&
+                    consumed == Protocol::HeaderSize && error.code != Protocol::ErrorCode::None &&
+                    !error.message.empty() && !decoder.HasMessage() &&
+                    decoder.GetBufferedByteCount() == Protocol::HeaderSize &&
+                    decoder.GetBytesNeeded() == 0 && !decoder.TakeMessage(output),
+                "hostile header must fail before payload buffering and without partial publication");
+            RequireEqual(MoveMessage(), output);
+            const auto code = error.code;
+            Require(!decoder.Feed(valid.data(), valid.size(), consumed, error) && consumed == 0 &&
+                    error.code == code && !error.message.empty(),
+                "failed decoder must remain terminal until explicit reset");
+            decoder.Reset();
+            Require(decoder.GetBufferedByteCount() == 0 &&
+                    decoder.GetBytesNeeded() == Protocol::HeaderSize &&
+                    decoder.Feed(valid.data(), valid.size(), consumed, error) &&
+                    consumed == valid.size() && decoder.TakeMessage(output),
+                "reset must discard failed frame state and accept a fresh valid frame");
+            RequireEqual(MoveMessage(), output);
+        }
+
+        Protocol::FrameDecoder decoder;
+        Protocol::Error error;
+        std::size_t consumed = 99;
+        Require(!decoder.Feed(nullptr, 1, consumed, error) && consumed == 0 &&
+                error.code == Protocol::ErrorCode::InvalidArgument && !error.message.empty() &&
+                !decoder.HasMessage() && decoder.GetBytesNeeded() == 0,
+            "nonempty null input must fail without reading memory or publishing a message");
+        decoder.Reset();
+        auto malformed = valid;
+        SetU32(malformed, 36, FloatBits(std::numeric_limits<f32>::quiet_NaN()));
+        Require(decoder.Feed(malformed.data(), Protocol::HeaderSize, consumed, error) &&
+                consumed == Protocol::HeaderSize && !decoder.HasMessage() &&
+                decoder.GetBytesNeeded() == malformed.size() - Protocol::HeaderSize,
+            "valid header must wait for complete bounded payload validation");
+        Require(!decoder.Feed(malformed.data() + Protocol::HeaderSize,
+                    malformed.size() - Protocol::HeaderSize, consumed, error) &&
+                error.code == Protocol::ErrorCode::InvalidValue && !error.message.empty() &&
+                !decoder.HasMessage() && decoder.GetBytesNeeded() == 0,
+            "invalid complete payload must not publish a stale or partial message");
+        decoder.Reset();
+        auto maximumHeader = valid;
+        maximumHeader.resize(Protocol::HeaderSize);
+        SetU32(maximumHeader, 8, static_cast<u32>(Protocol::MaximumFrameBytes - Protocol::HeaderSize));
+        Require(decoder.Feed(maximumHeader.data(), maximumHeader.size(), consumed, error) &&
+                consumed == Protocol::HeaderSize && !decoder.HasMessage() &&
+                decoder.GetBufferedByteCount() == Protocol::HeaderSize &&
+                decoder.GetBytesNeeded() == Protocol::MaximumFrameBytes - Protocol::HeaderSize,
+            "maximum bounded header must retain only actual bytes while awaiting its payload");
+        decoder.Reset();
+        Require(decoder.Feed(nullptr, 0, consumed, error) && consumed == 0 &&
+                decoder.GetBufferedByteCount() == 0 && decoder.GetBytesNeeded() == Protocol::HeaderSize,
+            "reset must recover from an abandoned maximum-sized partial frame");
+    }
+
     void TestSnapshotVolumeLimits()
     {
         Protocol::Message message;
@@ -497,6 +655,8 @@ int main()
     TestGoldenBytesAndCompatibility();
     TestFramingFailures();
     TestStateValidation();
+    TestIncrementalFraming();
+    TestIncrementalFailures();
     TestSnapshotVolumeLimits();
     std::cout << "RTS protocol tests passed\n";
     return EXIT_SUCCESS;

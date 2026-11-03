@@ -120,6 +120,34 @@ namespace Pyramid::Examples::RTSReference::Protocol
      */
     [[nodiscard]] bool Decode(const u8* data, std::size_t size, Message& output, Error& error);
 
+    /**
+     * Bounded incremental decoder for one frame at a time. Feed stops at a complete
+     * frame even when input contains more frames; consumed identifies the unread tail.
+     * A pending message consumes no further bytes until TakeMessage or Reset.
+     * Malformed input is terminal until Reset, without publishing a partial message.
+     * The caller owns readable input memory; no input pointer survives a Feed call.
+     */
+    class FrameDecoder final
+    {
+    public:
+        /** Zero-size input may be null; nonzero null input fails without reading it. */
+        [[nodiscard]] bool Feed(const u8* data, std::size_t size, std::size_t& consumed, Error& error);
+        [[nodiscard]] bool HasMessage() const { return m_message.has_value(); }
+        /** Publishes the complete message and starts the next frame; false preserves output. */
+        [[nodiscard]] bool TakeMessage(Message& output);
+        [[nodiscard]] std::size_t GetBufferedByteCount() const { return m_bytes.size(); }
+        /** Remaining header/body bytes, or zero when a message is pending or decoding failed. */
+        [[nodiscard]] std::size_t GetBytesNeeded() const;
+        /** Discards partial/ready/error state; retained buffer capacity never exceeds the frame cap. */
+        void Reset();
+
+    private:
+        std::vector<u8> m_bytes;
+        std::optional<Message> m_message;
+        std::size_t m_expected = HeaderSize;
+        Error m_failure;
+    };
+
     /** Exact rules/tick/content comparison; the opaque fingerprint is not authentication. */
     [[nodiscard]] bool ValidateCompatibility(
         const Hello& hello,

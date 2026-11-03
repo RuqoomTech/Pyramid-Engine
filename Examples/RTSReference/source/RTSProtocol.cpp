@@ -216,6 +216,52 @@ namespace Pyramid::Examples::RTSReference::Protocol
             std::size_t m_position = 0;
         };
 
+        struct FrameHeader
+        {
+            u8 kind = 0;
+            u32 payloadSize = 0;
+            u64 session = 0;
+        };
+
+        bool ReadHeader(Reader& reader, FrameHeader& header, Error& error)
+        {
+            u32 magic = 0;
+            u16 version = 0;
+            u8 reserved = 0;
+            if (!reader.U32(magic, error) || !reader.U16(version, error) ||
+                !reader.Byte(header.kind, error) || !reader.Byte(reserved, error) ||
+                !reader.U32(header.payloadSize, error) || !reader.U64(header.session, error))
+            {
+                return false;
+            }
+            if (magic != 0x53545250U)
+            {
+                return Fail(error, ErrorCode::BadMagic, 0, "Protocol magic must be PRTS");
+            }
+            if (version != Version)
+            {
+                return Fail(error, ErrorCode::UnsupportedVersion, 4, "Unsupported protocol version");
+            }
+            if (header.kind < static_cast<u8>(MessageKind::Hello) ||
+                header.kind > static_cast<u8>(MessageKind::FullSnapshot))
+            {
+                return Fail(error, ErrorCode::UnsupportedMessage, 6, "Unsupported protocol message kind");
+            }
+            if (reserved != 0)
+            {
+                return Fail(error, ErrorCode::InvalidValue, 7, "Reserved header flags must be zero");
+            }
+            if (header.payloadSize > MaximumFrameBytes - HeaderSize)
+            {
+                return Fail(error, ErrorCode::SizeLimit, 8, "Declared payload exceeds the protocol limit");
+            }
+            if (header.session == 0)
+            {
+                return Fail(error, ErrorCode::InvalidValue, 12, "Session identifier must be nonzero");
+            }
+            return true;
+        }
+
         std::size_t PayloadSize(const Message& message)
         {
             if (std::holds_alternative<Hello>(message.body)) return 24;
@@ -355,52 +401,20 @@ namespace Pyramid::Examples::RTSReference::Protocol
             return Fail(error, ErrorCode::Truncated, size, "Protocol header is truncated");
         }
         Reader reader(data, size);
-        u32 magic = 0;
-        u16 version = 0;
-        u8 kind = 0;
-        u8 reserved = 0;
-        u32 payloadSize = 0;
-        Message parsed;
-        if (!reader.U32(magic, error) || !reader.U16(version, error) ||
-            !reader.Byte(kind, error) || !reader.Byte(reserved, error) ||
-            !reader.U32(payloadSize, error) || !reader.U64(parsed.session, error))
-        {
-            return false;
-        }
-        if (magic != 0x53545250U)
-        {
-            return Fail(error, ErrorCode::BadMagic, 0, "Protocol magic must be PRTS");
-        }
-        if (version != Version)
-        {
-            return Fail(error, ErrorCode::UnsupportedVersion, 4, "Unsupported protocol version");
-        }
-        if (kind < static_cast<u8>(MessageKind::Hello) ||
-            kind > static_cast<u8>(MessageKind::FullSnapshot))
-        {
-            return Fail(error, ErrorCode::UnsupportedMessage, 6, "Unsupported protocol message kind");
-        }
-        if (reserved != 0)
-        {
-            return Fail(error, ErrorCode::InvalidValue, 7, "Reserved header flags must be zero");
-        }
-        if (payloadSize > MaximumFrameBytes - HeaderSize)
-        {
-            return Fail(error, ErrorCode::SizeLimit, 8, "Declared payload exceeds the protocol limit");
-        }
-        if (payloadSize > reader.Remaining())
+        FrameHeader header;
+        if (!ReadHeader(reader, header, error)) return false;
+        if (header.payloadSize > reader.Remaining())
         {
             return Fail(error, ErrorCode::Truncated, size, "Declared protocol payload is truncated");
         }
-        if (payloadSize < reader.Remaining())
+        if (header.payloadSize < reader.Remaining())
         {
-            return Fail(error, ErrorCode::InvalidValue, HeaderSize + payloadSize,
+            return Fail(error, ErrorCode::InvalidValue, HeaderSize + header.payloadSize,
                 "Trailing bytes after protocol frame");
         }
-        if (parsed.session == 0)
-        {
-            return Fail(error, ErrorCode::InvalidValue, 12, "Session identifier must be nonzero");
-        }
+        const u8 kind = header.kind;
+        Message parsed;
+        parsed.session = header.session;
 
         if (kind == static_cast<u8>(MessageKind::Hello))
         {
@@ -478,6 +492,91 @@ namespace Pyramid::Examples::RTSReference::Protocol
         output = std::move(parsed);
         error = {};
         return true;
+    }
+
+    bool FrameDecoder::Feed(
+        const u8* data, std::size_t size, std::size_t& consumed, Error& error)
+    {
+        consumed = 0;
+        if (m_failure.code != ErrorCode::None)
+        {
+            error = m_failure;
+            return false;
+        }
+        if (!data && size != 0)
+        {
+            m_message.reset();
+            Fail(m_failure, ErrorCode::InvalidArgument, m_bytes.size(),
+                "Incremental frame input pointer is null");
+            error = m_failure;
+            return false;
+        }
+        if (m_message)
+        {
+            error = {};
+            return true;
+        }
+        while (consumed < size)
+        {
+            const std::size_t amount = (std::min)(GetBytesNeeded(), size - consumed);
+            m_bytes.insert(m_bytes.end(), data + consumed, data + consumed + amount);
+            consumed += amount;
+            if (m_expected == HeaderSize && m_bytes.size() == HeaderSize)
+            {
+                Reader reader(m_bytes.data(), m_bytes.size());
+                FrameHeader header;
+                if (!ReadHeader(reader, header, m_failure))
+                {
+                    error = m_failure;
+                    return false;
+                }
+                m_expected = HeaderSize + header.payloadSize;
+                // Allocate only after the complete header passed the shared bounds.
+                m_bytes.reserve(m_expected);
+            }
+            if (m_bytes.size() == m_expected)
+            {
+                Message parsed;
+                if (!Decode(m_bytes.data(), m_bytes.size(), parsed, m_failure))
+                {
+                    error = m_failure;
+                    return false;
+                }
+                m_message = std::move(parsed);
+                error = {};
+                return true;
+            }
+        }
+        error = {};
+        return true;
+    }
+
+    bool FrameDecoder::TakeMessage(Message& output)
+    {
+        if (!m_message)
+        {
+            return false;
+        }
+        output = std::move(*m_message);
+        m_message.reset();
+        m_bytes.clear();
+        m_expected = HeaderSize;
+        return true;
+    }
+
+    std::size_t FrameDecoder::GetBytesNeeded() const
+    {
+        return m_message || m_failure.code != ErrorCode::None
+            ? 0
+            : m_expected - m_bytes.size();
+    }
+
+    void FrameDecoder::Reset()
+    {
+        m_bytes.clear();
+        m_message.reset();
+        m_expected = HeaderSize;
+        m_failure = {};
     }
 
     bool ValidateCompatibility(const Hello& hello, const ContentId& expected, Error& error)

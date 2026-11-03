@@ -35,6 +35,8 @@ namespace Pyramid::Examples::RTSReference
         [[nodiscard]] bool Begin(u64 session, const Protocol::ContentId& content, std::string& error);
         void End();
         [[nodiscard]] bool IsActive() const { return m_active; }
+        [[nodiscard]] u64 GetSessionId() const { return m_session; }
+        [[nodiscard]] const Protocol::ContentId& GetContentId() const { return m_content; }
 
         /** Native connection assignment supplies owner; it never comes from a command. */
         [[nodiscard]] bool AddPeer(

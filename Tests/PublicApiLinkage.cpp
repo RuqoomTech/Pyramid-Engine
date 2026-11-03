@@ -1,5 +1,6 @@
 #include <Pyramid/Core/Game.hpp>
 #include <Pyramid/Platform/Input.hpp>
+#include <Pyramid/Platform/TCP.hpp>
 #include <Pyramid/Platform/RuntimePath.hpp>
 #include <Pyramid/Platform/Clipboard.hpp>
 #include <Pyramid/Input/InputActions.hpp>
@@ -55,6 +56,29 @@ namespace
 
     static_assert(!HasOcclusionCullingSetting<Pyramid::SceneManagement::SceneManager>::value,
         "SceneManager must not advertise unsupported occlusion culling");
+
+    volatile decltype(&Pyramid::Platform::TcpStream::Connect) g_tcpConnect =
+        &Pyramid::Platform::TcpStream::Connect;
+    volatile decltype(&Pyramid::Platform::TcpStream::PollConnect) g_tcpPollConnect =
+        &Pyramid::Platform::TcpStream::PollConnect;
+    volatile decltype(&Pyramid::Platform::TcpStream::Send) g_tcpSend =
+        &Pyramid::Platform::TcpStream::Send;
+    volatile decltype(&Pyramid::Platform::TcpStream::Receive) g_tcpReceive =
+        &Pyramid::Platform::TcpStream::Receive;
+    volatile decltype(&Pyramid::Platform::TcpStream::Close) g_tcpClose =
+        &Pyramid::Platform::TcpStream::Close;
+    volatile decltype(&Pyramid::Platform::TcpStream::GetState) g_tcpState =
+        &Pyramid::Platform::TcpStream::GetState;
+    volatile decltype(&Pyramid::Platform::TcpListener::Listen) g_tcpListen =
+        &Pyramid::Platform::TcpListener::Listen;
+    volatile decltype(&Pyramid::Platform::TcpListener::Accept) g_tcpAccept =
+        &Pyramid::Platform::TcpListener::Accept;
+    volatile decltype(&Pyramid::Platform::TcpListener::Close) g_tcpListenerClose =
+        &Pyramid::Platform::TcpListener::Close;
+    volatile decltype(&Pyramid::Platform::TcpListener::IsListening) g_tcpListening =
+        &Pyramid::Platform::TcpListener::IsListening;
+    volatile decltype(&Pyramid::Platform::TcpListener::GetLocalPort) g_tcpPort =
+        &Pyramid::Platform::TcpListener::GetLocalPort;
 
     class GameLinkageProbe final : public Pyramid::Game
     {
@@ -626,7 +650,10 @@ namespace
 
 int main()
 {
-    return g_updateInputActionsWithConsumption &&
+    return g_tcpConnect && g_tcpPollConnect && g_tcpSend && g_tcpReceive &&
+                   g_tcpClose && g_tcpState && g_tcpListen && g_tcpAccept &&
+                   g_tcpListenerClose && g_tcpListening && g_tcpPort &&
+                   g_updateInputActionsWithConsumption &&
                    g_mergeInputConsumption &&
                    g_consumeAllMouse &&
                    g_consumeAllKeys &&

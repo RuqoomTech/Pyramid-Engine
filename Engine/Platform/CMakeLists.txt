@@ -3,8 +3,10 @@ target_sources(PyramidEngine
         source/RuntimePath.cpp
         source/SystemFont.cpp
         source/Windows/Win32OpenGLWindow.cpp
+        source/Windows/TCP.cpp
     PRIVATE
         include/Pyramid/Platform/RuntimePath.hpp
+        include/Pyramid/Platform/TCP.hpp
         include/Pyramid/Platform/SystemFont.hpp
         include/Pyramid/Platform/Window.hpp
         include/Pyramid/Platform/Windows/Win32OpenGLWindow.hpp

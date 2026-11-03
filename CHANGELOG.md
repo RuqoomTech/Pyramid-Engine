@@ -4,6 +4,14 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 
 ## [Unreleased]
 
+### Windows TCP and RTS connection lifecycle
+
+- Added move-only nonblocking numeric-IPv4 TCP streams/listeners under Platform, explicit partial/would-block/EOF/error results, independent accepted-socket Winsock lifetime, and installed static-consumer `ws2_32` linkage.
+- Added bounded CPU incremental protocol framing sharing whole-frame header validation, plus game-owned host/client handshakes, initial-snapshot acceptance, matching-Hello keepalives, queue/work budgets, absolute deadlines, and terminal host-session cleanup.
+- Kept gameplay admission rejection nonterminal with diagnostics; preserved execution-time ownership/lifetime validation, newer-tick snapshot publication, and client tick/queue-ack checks. Received snapshots are not yet applied to scenes.
+- GCC Debug/Release each passed 61/61 tests; a fresh installed consumer passed with public TCP ownership and transitive Winsock linkage, while the CPU codec remained independent of native/graphics integration.
+- Added native and connection loopback tests, fragmentation/coalescing, backpressure, slow-frame/EOF/deadline/heartbeat cases, 2,000-unit snapshot transfer, and public/installed ownership linkage. BasicGame host/join/client presentation, two-PC validation, and deferred visual checks remain pending.
+
 ### Bounded RTS protocol and local host adapter
 
 - Added a non-installed CPU-only Hello/move/full-snapshot codec with explicit version-1 little-endian framing, bounded state/count/size validation, structured diagnostics, and transactional output publication. Native facades, player claims, and graphics handles never cross the wire.

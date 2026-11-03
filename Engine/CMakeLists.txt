@@ -42,6 +42,7 @@ if(WIN32)
             OpenGL::GL
             gdi32
             user32
+            ws2_32
     )
 endif()
 

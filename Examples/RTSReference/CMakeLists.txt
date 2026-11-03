@@ -14,6 +14,7 @@ add_library(PyramidRTSReference STATIC
     source/RTSUnitStore.cpp
     source/RTSSimulation.cpp
     source/RTSHostSession.cpp
+    source/RTSConnection.cpp
 )
 add_library(Pyramid::RTSReference ALIAS PyramidRTSReference)
 
