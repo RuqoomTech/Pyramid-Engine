@@ -4,13 +4,22 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 
 ## [Unreleased]
 
+### Client scene replication and BasicGame LAN matches
+
+- Added a game-owned full-snapshot replica with local scene-ID allocation, stable captured entity lifetimes, catalog/resource-generation validation, epoch/freshness gates, staged ordinary-failure publication, and managed-only cleanup. Scene transforms/components and the unit store remain authoritative; successful replica publication invalidates borrowed unit-state pointers.
+- Added a headless-testable offline/host/client match coordinator. Offline mode pauses locally; the two-player host advances at 32 Hz after readiness through local menus/focus/minimize and publishes full snapshots after at least four new ticks (nominally 8 Hz). Clients apply snapshots without local simulation, and commands recheck local ownership and current match identity.
+- Integrated BasicGame LAN host/join controls, numeric IPv4/port validation, owner/health/tick/status diagnostics, and disconnect/reset through the shared UI runtime while preserving cached assets and unrelated live scene props. Demo content compatibility uses an explicit manually maintained catalog/rules revision.
+- Distinguished snapshot queue backpressure from permanent host publication failures so invalid state ends the match. Reordered main/LAN actions ahead of scrollable details to keep essential controls reachable with the production font at 1280x720 and 640x480.
+- GCC Debug/Release each passed 64/64 tests; a fresh installed-engine consumer configured, built, and ran. New replica, match, and CPU-only BasicGame UI regressions cover stale resources/lifetimes, atomic rejection, actual loopback-to-client-scene flow, local pause/disconnect/reset, terminal publication failure, and menu callbacks.
+- Native BasicGame rendering/input, two-PC LAN, and measured unit-count performance remain unverified/deferred. Navigation, combat, terrain-following, prediction/interpolation, reconnect, internet services, and host migration remain later work.
+
 ### Windows TCP and RTS connection lifecycle
 
 - Added move-only nonblocking numeric-IPv4 TCP streams/listeners under Platform, explicit partial/would-block/EOF/error results, independent accepted-socket Winsock lifetime, and installed static-consumer `ws2_32` linkage.
 - Added bounded CPU incremental protocol framing sharing whole-frame header validation, plus game-owned host/client handshakes, initial-snapshot acceptance, matching-Hello keepalives, queue/work budgets, absolute deadlines, and terminal host-session cleanup.
-- Kept gameplay admission rejection nonterminal with diagnostics; preserved execution-time ownership/lifetime validation, newer-tick snapshot publication, and client tick/queue-ack checks. Received snapshots are not yet applied to scenes.
+- Kept gameplay admission rejection nonterminal with diagnostics; preserved execution-time ownership/lifetime validation, newer-tick snapshot publication, and client tick/queue-ack checks. At that milestone, received snapshots were not yet applied to scenes.
 - GCC Debug/Release each passed 61/61 tests; a fresh installed consumer passed with public TCP ownership and transitive Winsock linkage, while the CPU codec remained independent of native/graphics integration.
-- Added native and connection loopback tests, fragmentation/coalescing, backpressure, slow-frame/EOF/deadline/heartbeat cases, 2,000-unit snapshot transfer, and public/installed ownership linkage. BasicGame host/join/client presentation, two-PC validation, and deferred visual checks remain pending.
+- Added native and connection loopback tests, fragmentation/coalescing, backpressure, slow-frame/EOF/deadline/heartbeat cases, 2,000-unit snapshot transfer, and public/installed ownership linkage. At that milestone BasicGame host/join/client presentation, two-PC validation, and deferred visual checks remained pending.
 
 ### Bounded RTS protocol and local host adapter
 
@@ -18,7 +27,7 @@ All notable changes to Pyramid Engine are documented here. The project is pre-al
 - Added local host compatibility/owner assignment, non-reused session-scoped unit bindings, replay/sequence gates with queue-full retry, and atomic scene-authoritative snapshot capture. Snapshot acknowledgement explicitly reports queue admission rather than execution.
 - Added golden-byte, malformed/truncated, limit, 2,000-unit, atomic-publication, and real command-to-tick-to-snapshot regressions, with independent CPU-only codec linkage.
 - GCC Debug/Release each passed 59/59 tests; a fresh installed-engine consumer passed, and the game-specific protocol/host support remains outside installed exports.
-- Defined whole-session termination to discard pending requests and bound movement intent; transport, client snapshot application, BasicGame multiplayer, and visual/two-machine validation remain pending.
+- Defined whole-session termination to discard pending requests and bound movement intent; at that milestone transport, client snapshot application, BasicGame multiplayer, and visual/two-machine validation remained pending.
 
 ### Fixed-step RTS movement
 

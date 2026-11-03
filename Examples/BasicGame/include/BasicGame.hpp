@@ -2,6 +2,7 @@
 
 #include <Pyramid/Core/Game.hpp>
 #include <Pyramid/Examples/RTSReference/RTSInteractionController.hpp>
+#include <Pyramid/Examples/RTSReference/RTSMatch.hpp>
 #include <Pyramid/Examples/RTSReference/RTSSimulation.hpp>
 #include <Pyramid/Examples/RTSReference/RTSUnitStore.hpp>
 #include <Pyramid/Graphics/Camera.hpp>
@@ -47,6 +48,10 @@ private:
     void BuildGameUI(float deltaTime);
     void ShowMainMenu();
     void StartGameplay();
+    void StartOfflineGameplay();
+    void OpenLANMenu();
+    void ClearMatchInteraction();
+    std::string GetMatchStatus() const;
     void OpenPauseMenu();
     void OpenSettings();
     void CloseSettings();
@@ -66,6 +71,8 @@ private:
     std::unique_ptr<Pyramid::SceneManagement::SceneManager> m_sceneManager;
     Pyramid::Examples::RTSReference::RTSUnitStore m_units;
     Pyramid::Examples::RTSReference::RTSSimulation m_simulation{m_units};
+    std::unique_ptr<Pyramid::Examples::RTSReference::RTSMatch> m_match;
+    Pyramid::MeshRendererComponent m_unitRenderer;
     std::unique_ptr<Pyramid::Camera> m_camera;
     std::unique_ptr<Pyramid::RTSCameraController> m_cameraController;
     std::unique_ptr<Pyramid::Examples::RTSReference::RTSInteractionController>
@@ -85,12 +92,13 @@ private:
     bool m_runtimeArabicFontLoaded = false;
     bool m_runtimeSymbolFontLoaded = false;
     bool m_gameplayStarted = false;
-    bool m_simulationWasActive = false;
+    Pyramid::u64 m_hostEpoch = 0;
     bool m_animationPaused = false;
     bool m_performanceSectionOpen = true;
     bool m_resourcesSectionOpen = true;
     bool m_inputSectionOpen = true;
     bool m_uiSectionOpen = true;
+    std::string m_matchMessage;
     std::string m_playerName = "Omar";
     std::string m_kingdomName = "Pyramid Kingdom";
     std::string m_profileNotes = "Unicode text input is ready.";

@@ -1,4 +1,5 @@
 #include "BasicGame.hpp"
+#include "BasicGameLANScreen.hpp"
 
 #include <Pyramid/Graphics/Buffer/BufferLayout.hpp>
 #include <Pyramid/Graphics/Geometry/Vertex.hpp>
@@ -27,10 +28,28 @@
 #include <iomanip>
 #include <sstream>
 #include <string>
+#include <limits>
 
 namespace
 {
-    constexpr Pyramid::u32 kLocalPlayerId = 1;
+    // Bump this explicit demo catalog/rules revision when compatible content changes.
+    Pyramid::Examples::RTSReference::Protocol::ContentId DemoContentId()
+    {
+        return {{0x50, 0x59, 0x52, 0x41, 0x4D, 0x49, 0x44, 0x2D,
+            0x52, 0x54, 0x53, 0x2D, 0x30, 0x30, 0x30, 0x31}};
+    }
+
+    const char* MatchModeName(Pyramid::Examples::RTSReference::RTSMatchMode mode)
+    {
+        using Pyramid::Examples::RTSReference::RTSMatchMode;
+        switch (mode)
+        {
+            case RTSMatchMode::Offline: return "OFFLINE";
+            case RTSMatchMode::Host: return "HOST";
+            case RTSMatchMode::Client: return "CLIENT";
+            default: return "NONE";
+        }
+    }
     constexpr std::string_view kInputContext = "basic-game";
     constexpr std::string_view kQuitAction = "Quit";
     constexpr std::string_view kPauseAction = "Pause";
@@ -323,73 +342,6 @@ namespace
             "] " + entry.message;
     }
 
-    class MainMenuScreen final : public Pyramid::UI::Screen
-    {
-    public:
-        MainMenuScreen(
-            std::function<void()> start,
-            std::function<void()> settings,
-            std::function<void()> quit)
-            : m_start(std::move(start))
-            , m_settings(std::move(settings))
-            , m_quit(std::move(quit))
-        {
-        }
-
-        std::string_view GetName() const override { return "MainMenu"; }
-        Pyramid::UI::ScreenPresentation GetPresentation() const override
-        {
-            return Pyramid::UI::ScreenPresentation::Opaque;
-        }
-
-        void Build(Pyramid::UI::Context& ui) override
-        {
-            const auto& frame = ui.GetFrameInfo();
-            ui.Overlay("MAIN MENU BACKDROP", Pyramid::Color(0.025f, 0.03f, 0.05f, 0.90f), true);
-            const Pyramid::UI::Rect root{0.0f, 0.0f, frame.width, frame.height};
-            const Pyramid::UI::Rect rect = Pyramid::UI::ResolveAnchoredRect(
-                root,
-                Pyramid::Math::Vec2(440.0f, 370.0f),
-                Pyramid::UI::Anchor::Center,
-                {18.0f, 18.0f, 18.0f, 18.0f});
-
-            Pyramid::UI::PanelOptions panel;
-            panel.position = Pyramid::Math::Vec2(rect.x, rect.y);
-            panel.size = Pyramid::Math::Vec2(rect.width, rect.height);
-            if (ui.BeginPanel("PYRAMID ENGINE", panel))
-            {
-                ui.WrappedLabel(
-                    "Owned retained game screens running on the same UI runtime as the debug tools.");
-                ui.Spacer(12.0f);
-                if (ui.Button("START GAME") && m_start)
-                {
-                    m_start();
-                }
-                if (ui.Button("PROFILE SETTINGS") && m_settings)
-                {
-                    m_settings();
-                }
-                ui.Spacer();
-                ui.Caption("F1  DEBUG OVERLAY");
-                ui.Caption("ESC  PAUSE DURING GAMEPLAY");
-                ui.Label(u8"UNICODE  é  Ω  ✓");
-                ui.Label(u8"ARABIC  مملكة الهرم ١٢٣");
-                ui.WrappedLabel(u8"MIXED BIDI  Kingdom 123 - مملكة الهرم");
-                ui.Spacer();
-                if (ui.Button("QUIT") && m_quit)
-                {
-                    m_quit();
-                }
-                ui.EndPanel();
-            }
-        }
-
-    private:
-        std::function<void()> m_start;
-        std::function<void()> m_settings;
-        std::function<void()> m_quit;
-    };
-
     class SettingsScreen final : public Pyramid::UI::Screen
     {
     public:
@@ -503,9 +455,13 @@ namespace
     public:
         GameplayHUDScreen(
             std::function<void()> pause,
-            std::function<std::string()> selection)
+            std::function<void()> disconnect,
+            std::function<std::string()> selection,
+            std::function<std::string()> match)
             : m_pause(std::move(pause))
+            , m_disconnect(std::move(disconnect))
             , m_selection(std::move(selection))
+            , m_match(std::move(match))
         {
         }
 
@@ -520,42 +476,52 @@ namespace
             const auto& frame = ui.GetFrameInfo();
             const Pyramid::UI::Rect root{0.0f, 0.0f, frame.width, frame.height};
             const Pyramid::UI::Rect pauseRect = Pyramid::UI::ResolveAnchoredRect(
-                root,
-                Pyramid::Math::Vec2(180.0f, 92.0f),
-                Pyramid::UI::Anchor::TopRight,
-                {12.0f, 12.0f, 12.0f, 12.0f});
+                root, Pyramid::Math::Vec2(240.0f, 140.0f),
+                Pyramid::UI::Anchor::TopRight, {12.0f, 12.0f, 12.0f, 12.0f});
             Pyramid::UI::PanelOptions pausePanel;
             pausePanel.position = Pyramid::Math::Vec2(pauseRect.x, pauseRect.y);
             pausePanel.size = Pyramid::Math::Vec2(pauseRect.width, pauseRect.height);
             if (ui.BeginPanel("GAME", pausePanel))
             {
-                if (ui.Button("PAUSE  [ESC]") && m_pause)
+                if (ui.Button("MENU  [ESC]") && m_pause)
                 {
                     m_pause();
+                }
+                if (ui.Button("DISCONNECT / EXIT") && m_disconnect)
+                {
+                    m_disconnect();
                 }
                 ui.EndPanel();
             }
 
             const Pyramid::UI::Rect statusRect = Pyramid::UI::ResolveAnchoredRect(
-                root,
-                Pyramid::Math::Vec2(320.0f, 126.0f),
-                Pyramid::UI::Anchor::BottomLeft,
-                {12.0f, 12.0f, 12.0f, 12.0f});
+                root, Pyramid::Math::Vec2(440.0f, 190.0f),
+                Pyramid::UI::Anchor::BottomLeft, {12.0f, 12.0f, 12.0f, 12.0f});
             Pyramid::UI::PanelOptions statusPanel;
             statusPanel.position = Pyramid::Math::Vec2(statusRect.x, statusRect.y);
             statusPanel.size = Pyramid::Math::Vec2(statusRect.width, statusRect.height);
-            if (ui.BeginPanel("SELECTION", statusPanel))
+            if (ui.BeginPanel("MATCH", statusPanel))
             {
-                ui.LabelValue("ENTITY", m_selection ? m_selection() : "NONE");
-                ui.Label("LEFT CLICK SELECT");
-                ui.Label("RIGHT CLICK COMMAND");
+                const auto& theme = ui.GetTheme();
+                Pyramid::UI::ScrollAreaOptions details;
+                details.height = (std::max)(1.0f, statusRect.height -
+                    theme.defaultRowHeight - 2.0f * theme.padding - theme.spacing);
+                if (ui.BeginScrollArea("MATCH DETAILS", details))
+                {
+                    ui.WrappedLabel(m_match ? m_match() : "NO MATCH");
+                    ui.WrappedLabel(m_selection ? m_selection() : "NONE");
+                    ui.WrappedLabel("LEFT CLICK SELECT   RIGHT CLICK COMMAND");
+                    ui.EndScrollArea();
+                }
                 ui.EndPanel();
             }
         }
 
     private:
         std::function<void()> m_pause;
+        std::function<void()> m_disconnect;
         std::function<std::string()> m_selection;
+        std::function<std::string()> m_match;
     };
 
     class PauseScreen final : public Pyramid::UI::Screen
@@ -565,11 +531,13 @@ namespace
             std::function<void()> resume,
             std::function<void()> resetCamera,
             std::function<void()> mainMenu,
-            std::function<void()> quit)
+            std::function<void()> quit,
+            bool networkMatch)
             : m_resume(std::move(resume))
             , m_resetCamera(std::move(resetCamera))
             , m_mainMenu(std::move(mainMenu))
             , m_quit(std::move(quit))
+            , m_networkMatch(networkMatch)
         {
         }
 
@@ -585,14 +553,12 @@ namespace
             ui.Overlay("PAUSE BACKDROP", Pyramid::Color(0.01f, 0.015f, 0.025f, 0.72f), true);
             const Pyramid::UI::Rect root{0.0f, 0.0f, frame.width, frame.height};
             const Pyramid::UI::Rect rect = Pyramid::UI::ResolveAnchoredRect(
-                root,
-                Pyramid::Math::Vec2(390.0f, 320.0f),
-                Pyramid::UI::Anchor::Center,
-                {16.0f, 16.0f, 16.0f, 16.0f});
+                root, Pyramid::Math::Vec2(410.0f, 360.0f),
+                Pyramid::UI::Anchor::Center, {16.0f, 16.0f, 16.0f, 16.0f});
             Pyramid::UI::PanelOptions panel;
             panel.position = Pyramid::Math::Vec2(rect.x, rect.y);
             panel.size = Pyramid::Math::Vec2(rect.width, rect.height);
-            if (ui.BeginPanel("PAUSED", panel))
+            if (ui.BeginPanel(m_networkMatch ? "MATCH MENU" : "PAUSED", panel))
             {
                 if (ui.Button("RESUME") && m_resume)
                 {
@@ -610,6 +576,18 @@ namespace
                 {
                     m_quit();
                 }
+                const auto& theme = ui.GetTheme();
+                Pyramid::UI::ScrollAreaOptions details;
+                details.height = (std::max)(1.0f, rect.height - theme.defaultRowHeight -
+                    2.0f * theme.padding - theme.spacing -
+                    4.0f * (theme.defaultRowHeight + theme.spacing));
+                if (ui.BeginScrollArea("PAUSE DETAILS", details))
+                {
+                    ui.WrappedLabel(m_networkMatch
+                        ? "MATCH CONTINUES WHILE THIS MENU IS OPEN"
+                        : "OFFLINE SIMULATION PAUSED");
+                    ui.EndScrollArea();
+                }
                 ui.EndPanel();
             }
         }
@@ -619,6 +597,7 @@ namespace
         std::function<void()> m_resetCamera;
         std::function<void()> m_mainMenu;
         std::function<void()> m_quit;
+        bool m_networkMatch = false;
     };
 
     constexpr const char* kForwardVertexShader = R"(
@@ -674,6 +653,14 @@ BasicGame::BasicGame()
 
 BasicGame::~BasicGame()
 {
+    if (m_match)
+    {
+        std::string error;
+        if (!m_match->Stop(error))
+        {
+            PYRAMID_LOG_ERROR("BasicGame match shutdown failed: ", error);
+        }
+    }
     UnregisterUIContext(&m_debugUI);
     UnregisterUIContext(&m_gameUI);
 }
@@ -1006,15 +993,17 @@ void BasicGame::onCreate()
         return;
     }
 
-    Pyramid::Examples::RTSReference::RTSUnitState cubeUnit;
-    cubeUnit.owner = kLocalPlayerId;
-    cubeUnit.team = kLocalPlayerId;
-    if (!m_units.AddUnit(m_cubeEntity, cubeUnit))
+    m_match = std::make_unique<Pyramid::Examples::RTSReference::RTSMatch>(
+        *m_scene, m_units, m_simulation, resources);
+    std::string matchError;
+    if (!m_match->SetCatalog(1, m_unitRenderer, matchError) ||
+        !m_match->StartOffline(matchError))
     {
-        PYRAMID_LOG_CRITICAL("BasicGame aborted: failed to register the demo unit.");
+        PYRAMID_LOG_CRITICAL("BasicGame aborted: reference match setup failed: ", matchError);
         quit();
         return;
     }
+    m_cubeEntity = m_match->GetPrimaryEntity();
     m_interactionController->SetSelectablePredicate(
         [this](const Pyramid::Entity& entity)
         {
@@ -1049,18 +1038,20 @@ void BasicGame::onUpdate(float deltaTime)
         quit();
         return;
     }
-
     if (actions.WasActionPressed(kInputContext, kToggleDebugUIAction))
     {
         m_debugUIVisible = !m_debugUIVisible;
         m_debugUI.SetEnabled(m_debugUIVisible);
     }
-
     if (actions.WasActionPressed(kInputContext, kPauseAction))
     {
         if (m_gameScreens.GetTopName() == "Settings")
         {
             CloseSettings();
+        }
+        else if (m_gameScreens.GetTopName() == "LAN")
+        {
+            ReturnToMainMenu();
         }
         else if (m_gameScreens.GetTopName() == "Pause")
         {
@@ -1073,92 +1064,88 @@ void BasicGame::onUpdate(float deltaTime)
     }
 
     m_gameScreens.Update(deltaTime);
-    const bool gameplayBlocked = m_gameScreens.BlocksGameplayInput();
-    const bool simulationActive = m_gameplayStarted && !gameplayBlocked &&
-        GetInput().HasFocus() && IsRenderSurfaceAvailable();
+    bool gameplayBlocked = m_gameScreens.BlocksGameplayInput();
+    const bool localPaused = !m_gameplayStarted || gameplayBlocked ||
+        !GetInput().HasFocus() || !IsRenderSurfaceAvailable();
+    bool matchUpdated = false;
+    if (m_match && m_match->GetMode() != Pyramid::Examples::RTSReference::RTSMatchMode::None)
+    {
+        std::string error;
+        // Networking always polls; local pause/focus gates only offline simulation and interaction.
+        matchUpdated = m_match->Update(GetFrameElapsedSeconds(), localPaused, error);
+        if (!matchUpdated)
+        {
+            m_matchMessage = error;
+            PYRAMID_LOG_ERROR("Reference match ended: ", error);
+            ClearMatchInteraction();
+            ShowMainMenu();
+            gameplayBlocked = true;
+        }
+    }
 
-    if (!gameplayBlocked &&
+    const bool offline = m_match &&
+        m_match->GetMode() == Pyramid::Examples::RTSReference::RTSMatchMode::Offline;
+    const bool interactionActive = m_gameplayStarted && !gameplayBlocked &&
+        GetInput().HasFocus() && IsRenderSurfaceAvailable() && m_match && m_match->IsReady();
+    m_cubeEntity = m_match ? m_match->GetPrimaryEntity() : Pyramid::Entity{};
+    if (offline && interactionActive &&
         actions.WasActionPressed(kInputContext, kToggleAnimationAction))
     {
         m_animationPaused = !m_animationPaused;
-        PYRAMID_LOG_INFO(
-            "Cube animation ",
-            m_animationPaused ? "paused" : "resumed");
+        PYRAMID_LOG_INFO("Cube animation ", m_animationPaused ? "paused" : "resumed");
     }
-
-    if (m_gameplayStarted && !gameplayBlocked && !m_animationPaused)
+    if (offline && interactionActive && !m_animationPaused)
     {
         m_elapsedTime += deltaTime;
     }
-
-    if (m_cubeEntity)
+    if (offline && m_cubeEntity)
     {
         m_cubeEntity.SetLocalRotation(Pyramid::Math::Quat::FromEuler(
-            0.35f * m_elapsedTime,
-            0.8f * m_elapsedTime,
-            0.0f));
+            0.35f * m_elapsedTime, 0.8f * m_elapsedTime, 0.0f));
     }
 
-    if (simulationActive && m_camera && m_cameraController &&
+    // Generated proxies and octree queries follow the just-published authoritative state.
+    if (m_sceneManager)
+    {
+        m_sceneManager->Update(0.0f);
+    }
+    if (interactionActive && m_camera && m_cameraController &&
         m_interactionController && m_sceneManager)
     {
-        m_sceneManager->Update(deltaTime);
         m_interactionController->Update(
-            GetInput(),
-            GetInputActions(),
-            GetUIInputConsumption(),
-            *m_camera,
-            *m_sceneManager,
-            *m_cameraController,
-            deltaTime);
+            GetInput(), GetInputActions(), GetUIInputConsumption(), *m_camera,
+            *m_sceneManager, *m_cameraController, deltaTime);
 
-        const Pyramid::EntityId selected =
-            m_interactionController->GetSelectedEntityId();
+        const Pyramid::EntityId selected = m_interactionController->GetSelectedEntityId();
         if (selected != m_reportedSelection)
         {
-            if (selected)
-            {
-                PYRAMID_LOG_INFO("Selected entity ", selected.GetValue());
-            }
-            else
-            {
-                PYRAMID_LOG_INFO("Selection cleared");
-            }
+            PYRAMID_LOG_INFO(selected ? "Selected entity " : "Selection cleared ",
+                selected.GetValue());
             m_reportedSelection = selected;
         }
-
         if (const auto command = m_interactionController->ConsumeCommand())
         {
-            if (m_simulation.QueueMoveCommand(kLocalPlayerId, *command))
+            std::string error;
+            if (m_match->QueueCommand(*command, error))
             {
-                PYRAMID_LOG_INFO(
-                    "Movement request queued for entity ", command->entity.GetValue(),
-                    " at (", command->target.x, ", ", command->target.y, ", ",
-                    command->target.z, ")");
+                m_matchMessage.clear();
+                PYRAMID_LOG_INFO("Movement request queued for entity ", command->entity.GetValue());
             }
             else
             {
-                PYRAMID_LOG_WARN(
-                    "Movement request rejected (queue full or invalid) for entity ",
-                    command->entity.GetValue());
+                m_matchMessage = error;
+                PYRAMID_LOG_WARN("Movement request rejected: ", error);
             }
         }
     }
-
-    if (simulationActive)
+    else if (m_interactionController)
     {
-        // The first active frame can span time spent paused or unfocused.
-        const auto result = m_simulation.Advance(
-            m_simulationWasActive ? GetFrameElapsedSeconds() : 0.0);
-        m_simulationWasActive = true;
-        if (!result.valid)
-        {
-            PYRAMID_LOG_ERROR("RTS simulation rejected invalid frame elapsed time.");
-        }
-        if (result.acceptedCommands > 0)
-        {
-            PYRAMID_LOG_INFO("RTS orders applied on fixed ticks: ", result.acceptedCommands);
-        }
+        (void)m_interactionController->ConsumeCommand();
+    }
+
+    if (matchUpdated && m_match)
+    {
+        const auto& result = m_match->GetLastSimulationResult();
         if (result.rejectedCommands > 0 || result.cancelledMoves > 0 ||
             result.droppedSeconds > 0.0)
         {
@@ -1167,21 +1154,7 @@ void BasicGame::onUpdate(float deltaTime)
                 ", cancelled moves=", result.cancelledMoves,
                 ", dropped elapsed seconds=", result.droppedSeconds);
         }
-        if (result.steps > 0 && m_sceneManager)
-        {
-            m_sceneManager->Update(0.0f);
-        }
     }
-    else
-    {
-        m_simulation.Suspend();
-        m_simulationWasActive = false;
-        if (m_interactionController)
-        {
-            (void)m_interactionController->ConsumeCommand();
-        }
-    }
-
     BuildGameUI(deltaTime);
     BuildDebugUI(deltaTime);
 }
@@ -1221,14 +1194,106 @@ void BasicGame::BuildGameUI(float deltaTime)
 void BasicGame::ShowMainMenu()
 {
     m_gameplayStarted = false;
-    auto screen = std::make_shared<MainMenuScreen>(
-        [this]() { StartGameplay(); },
+    auto screen = std::make_shared<Pyramid::Examples::BasicGameUI::MainMenuScreen>(
+        [this]() { StartOfflineGameplay(); },
+        [this]() { OpenLANMenu(); },
         [this]() { OpenSettings(); },
-        [this]() { quit(); });
+        [this]() { quit(); },
+        [this]() { return GetMatchStatus(); });
     m_gameScreens.Clear();
     (void)m_gameScreens.Push(
-        std::move(screen),
-        {Pyramid::UI::ScreenTransitionType::Fade, 0.20f});
+        std::move(screen), {Pyramid::UI::ScreenTransitionType::Fade, 0.20f});
+}
+
+void BasicGame::ClearMatchInteraction()
+{
+    m_reportedSelection = {};
+    if (m_interactionController)
+    {
+        m_interactionController->ClearSelection();
+        (void)m_interactionController->ConsumeCommand();
+    }
+    m_cubeEntity = {};
+    m_elapsedTime = 0.0f;
+}
+
+std::string BasicGame::GetMatchStatus() const
+{
+    const std::string state = m_match ? m_match->GetStatus() : "No active match";
+    return m_matchMessage.empty() || state.find(m_matchMessage) != std::string::npos
+        ? state : state + " | " + m_matchMessage;
+}
+
+void BasicGame::StartOfflineGameplay()
+{
+    if (!m_match)
+    {
+        return;
+    }
+    ClearMatchInteraction();
+    std::string error;
+    if (!m_match->StartOffline(error))
+    {
+        m_matchMessage = error;
+        PYRAMID_LOG_ERROR("Could not start offline reference: ", error);
+        return;
+    }
+    m_matchMessage.clear();
+    m_cubeEntity = m_match->GetPrimaryEntity();
+    StartGameplay();
+}
+
+void BasicGame::OpenLANMenu()
+{
+    if (!m_match || m_gameScreens.GetTopName() == "LAN")
+    {
+        return;
+    }
+    auto screen = std::make_shared<Pyramid::Examples::BasicGameUI::LANMenuScreen>(
+        [this](const std::string& portText, std::string& error)
+        {
+            Pyramid::u16 port = 0;
+            if (!Pyramid::Examples::RTSReference::ParseRTSPort(portText, port, error))
+            {
+                return false;
+            }
+            if (m_hostEpoch == (std::numeric_limits<Pyramid::u64>::max)())
+            {
+                error = "Host session epoch exhausted; restart the application.";
+                return false;
+            }
+            ClearMatchInteraction();
+            if (!m_match->Host({"0.0.0.0", port}, ++m_hostEpoch, DemoContentId(), error))
+            {
+                m_matchMessage = error;
+                return false;
+            }
+            m_matchMessage.clear();
+            m_cubeEntity = m_match->GetPrimaryEntity();
+            StartGameplay();
+            return true;
+        },
+        [this](const std::string& address, const std::string& portText, std::string& error)
+        {
+            Pyramid::u16 port = 0;
+            if (!Pyramid::Examples::RTSReference::ParseRTSPort(portText, port, error))
+            {
+                return false;
+            }
+            ClearMatchInteraction();
+            if (!m_match->Join({address, port}, DemoContentId(), error))
+            {
+                m_matchMessage = error;
+                return false;
+            }
+            m_matchMessage.clear();
+            StartGameplay();
+            return true;
+        },
+        [this]() { ReturnToMainMenu(); },
+        [this]() { return GetMatchStatus(); });
+    (void)m_gameScreens.Push(
+        std::move(screen), {Pyramid::UI::ScreenTransitionType::Fade, 0.12f});
 }
 
 void BasicGame::OpenSettings()
@@ -1270,21 +1335,34 @@ void BasicGame::StartGameplay()
     m_gameplayStarted = true;
     auto screen = std::make_shared<GameplayHUDScreen>(
         [this]() { OpenPauseMenu(); },
+        [this]() { ReturnToMainMenu(); },
         [this]()
         {
-            if (!m_interactionController)
+            if (!m_interactionController || !m_sceneManager)
             {
-                return std::string("NONE");
+                return std::string("NO SELECTION");
             }
-            const Pyramid::EntityId selected =
-                m_interactionController->GetSelectedEntityId();
-            return selected
-                ? std::string("ENTITY ") + std::to_string(selected.GetValue())
-                : std::string("NONE");
+            const Pyramid::Entity selected = m_interactionController->GetSelectedEntity(*m_sceneManager);
+            const auto* unit = m_units.FindUnit(selected);
+            return selected && unit
+                ? "ENTITY " + std::to_string(selected.GetId().GetValue()) +
+                    "  OWNER " + std::to_string(unit->owner) +
+                    "  HEALTH " + std::to_string(unit->health) + "/" + std::to_string(unit->maximumHealth)
+                : std::string("NO SELECTION");
+        },
+        [this]()
+        {
+            if (!m_match)
+            {
+                return std::string("NO MATCH");
+            }
+            return std::string(MatchModeName(m_match->GetMode())) +
+                "  LOCAL OWNER " + std::to_string(m_match->GetLocalOwner()) +
+                "  TICK " + std::to_string(m_match->GetTick()) + "\n" + GetMatchStatus();
         });
-    (void)m_gameScreens.Replace(
-        std::move(screen),
-        {Pyramid::UI::ScreenTransitionType::Fade, 0.15f});
+    m_gameScreens.Clear();
+    (void)m_gameScreens.Push(
+        std::move(screen), {Pyramid::UI::ScreenTransitionType::Fade, 0.15f});
 }
 
 void BasicGame::OpenPauseMenu()
@@ -1293,6 +1371,9 @@ void BasicGame::OpenPauseMenu()
     {
         return;
     }
+    const bool networkMatch = m_match &&
+        (m_match->GetMode() == Pyramid::Examples::RTSReference::RTSMatchMode::Host ||
+            m_match->GetMode() == Pyramid::Examples::RTSReference::RTSMatchMode::Client);
     auto screen = std::make_shared<PauseScreen>(
         [this]() { ResumeGameplay(); },
         [this]()
@@ -1303,10 +1384,10 @@ void BasicGame::OpenPauseMenu()
             }
         },
         [this]() { ReturnToMainMenu(); },
-        [this]() { quit(); });
+        [this]() { quit(); },
+        networkMatch);
     (void)m_gameScreens.Push(
-        std::move(screen),
-        {Pyramid::UI::ScreenTransitionType::Fade, 0.12f});
+        std::move(screen), {Pyramid::UI::ScreenTransitionType::Fade, 0.12f});
 }
 
 void BasicGame::ResumeGameplay()
@@ -1320,6 +1401,21 @@ void BasicGame::ResumeGameplay()
 
 void BasicGame::ReturnToMainMenu()
 {
+    ClearMatchInteraction();
+    if (m_match)
+    {
+        std::string error;
+        if (!m_match->Stop(error) || !m_match->StartOffline(error))
+        {
+            m_matchMessage = error;
+            PYRAMID_LOG_ERROR("Could not reset reference match: ", error);
+        }
+        else
+        {
+            m_matchMessage.clear();
+            m_cubeEntity = m_match->GetPrimaryEntity();
+        }
+    }
     ShowMainMenu();
 }
 
@@ -1618,14 +1714,8 @@ bool BasicGame::SetupScene()
     const auto cubeMaterialHandle = resources->GetHandle(m_cubeMaterial->GetAssetId());
     const auto floorMaterialHandle = resources->GetHandle(m_floorMaterial->GetAssetId());
 
-    m_cubeEntity = m_scene->CreateEntity("DemoCube");
-    Pyramid::MeshRendererComponent cubeRenderer;
-    cubeRenderer.mesh = cubeMeshHandle;
-    cubeRenderer.material = cubeMaterialHandle;
-    if (!m_cubeEntity.SetMeshRenderer(cubeRenderer, resources))
-    {
-        return false;
-    }
+    m_unitRenderer.mesh = cubeMeshHandle;
+    m_unitRenderer.material = cubeMaterialHandle;
 
     Pyramid::Entity floorEntity = m_scene->CreateEntity("Floor");
     floorEntity.SetLocalTransform(

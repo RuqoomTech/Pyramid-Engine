@@ -48,7 +48,10 @@ namespace Pyramid::Examples::RTSReference
         [[nodiscard]] bool AddUnit(Entity entity, const RTSUnitState& initial = {});
         [[nodiscard]] bool RemoveUnit(Entity entity);
 
-        /** Borrowed state; invalidated by removal, pruning, clear, or store destruction. */
+        /**
+         * Borrowed state; invalidated by removal, pruning, clear, or store destruction.
+         * Every successful replica Apply/Clear commit invalidates all borrowed state pointers.
+         */
         [[nodiscard]] const RTSUnitState* FindUnit(Entity entity) const;
         [[nodiscard]] bool IsSelectable(Entity entity) const;
 
@@ -66,6 +69,7 @@ namespace Pyramid::Examples::RTSReference
 
     private:
         friend class RTSSimulation;
+        friend class RTSSnapshotReplica;
 
         struct Entry
         {

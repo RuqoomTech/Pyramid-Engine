@@ -22,6 +22,15 @@ namespace Pyramid::Examples::RTSReference
         Failed
     };
 
+    /** Snapshot publication separates transient queue pressure from invalid host state. */
+    enum class RTSSnapshotPublication
+    {
+        Queued,
+        Backpressure,
+        NotReady,
+        InvalidState
+    };
+
     struct RTSConnectionLimits
     {
         static constexpr std::size_t MaximumQueuedFrames = 8;
@@ -61,7 +70,9 @@ namespace Pyramid::Examples::RTSReference
             std::string& error);
         /** Invalid elapsed time fails without changing connection state or buffered work. */
         [[nodiscard]] bool Poll(f64 elapsedSeconds, std::string& error);
-        /** Ready only; requires a newer host tick. Full queues reject without replacing work. */
+        /** Ready and newer tick required; only Backpressure is safe to retry unchanged. */
+        [[nodiscard]] RTSSnapshotPublication TryPublishSnapshot(std::string& error);
+        /** Compatibility wrapper; true only when TryPublishSnapshot returns Queued. */
         [[nodiscard]] bool PublishSnapshot(std::string& error);
         void Stop();
 

@@ -66,6 +66,13 @@ namespace Pyramid::Examples::RTSReference
             Failed
         };
 
+        enum class QueueResult
+        {
+            Queued,
+            Backpressure,
+            InvalidMessage
+        };
+
         struct QueuedFrame
         {
             std::vector<u8> bytes;
@@ -86,27 +93,36 @@ namespace Pyramid::Examples::RTSReference
             f64 idleAge = 0.0;
             f64 heartbeatAge = 0.0;
 
-            bool Queue(const Protocol::Message& message, std::string& error)
+            QueueResult TryQueue(const Protocol::Message& message, std::string& error)
             {
-                if (outgoing.size() >= RTSConnectionLimits::MaximumQueuedFrames)
-                {
-                    return Fail(error, "Connection outgoing frame queue is full; retry after polling.");
-                }
+                // Validate before queue admission so malformed state cannot hide
+                // indefinitely behind an unrelated full queue.
                 std::vector<u8> bytes;
                 Protocol::Error diagnostic;
                 if (!Protocol::Encode(message, bytes, diagnostic))
                 {
                     error = "Cannot queue protocol message: " + diagnostic.message;
-                    return false;
+                    return QueueResult::InvalidMessage;
+                }
+                if (outgoing.size() >= RTSConnectionLimits::MaximumQueuedFrames)
+                {
+                    error = "Connection outgoing frame queue is full; retry after polling.";
+                    return QueueResult::Backpressure;
                 }
                 if (bytes.size() > RTSConnectionLimits::MaximumQueuedBytes - queuedBytes)
                 {
-                    return Fail(error, "Connection outgoing byte budget is full; retry after polling.");
+                    error = "Connection outgoing byte budget is full; retry after polling.";
+                    return QueueResult::Backpressure;
                 }
                 queuedBytes += bytes.size();
                 outgoing.push_back({std::move(bytes), 0, 0.0});
                 error.clear();
-                return true;
+                return QueueResult::Queued;
+            }
+
+            bool Queue(const Protocol::Message& message, std::string& error)
+            {
+                return TryQueue(message, error) == QueueResult::Queued;
             }
 
             bool AdvanceTimers(f64 elapsedSeconds, bool ready, std::string& error)
@@ -493,32 +509,51 @@ namespace Pyramid::Examples::RTSReference
         return true;
     }
 
-    bool RTSHostConnection::PublishSnapshot(std::string& error)
+    RTSSnapshotPublication RTSHostConnection::TryPublishSnapshot(std::string& error)
     {
         if (m_impl->state != RTSConnectionState::Ready)
         {
-            return Fail(error, "PublishSnapshot requires a ready host connection.");
+            error = "PublishSnapshot requires a ready host connection.";
+            return RTSSnapshotPublication::NotReady;
         }
         if (!m_impl->session.IsActive() || m_impl->session.GetSessionId() != m_impl->epoch)
         {
-            return Fail(error, "Host session is no longer active for snapshot publication.");
+            error = "Host session is no longer active for snapshot publication.";
+            return RTSSnapshotPublication::InvalidState;
         }
         Protocol::Message snapshot;
         if (!m_impl->session.CaptureSnapshot(m_impl->remotePeer, snapshot, error))
         {
-            return false;
+            return RTSSnapshotPublication::InvalidState;
         }
-        const u64 tick = std::get<Protocol::FullSnapshot>(snapshot.body).tick;
+        const auto* fullSnapshot = std::get_if<Protocol::FullSnapshot>(&snapshot.body);
+        if (!fullSnapshot || snapshot.session != m_impl->epoch)
+        {
+            error = "Snapshot capture returned an invalid message kind or host session epoch.";
+            return RTSSnapshotPublication::InvalidState;
+        }
+        const u64 tick = fullSnapshot->tick;
         if (tick <= m_impl->lastPublishedTick)
         {
-            return Fail(error, "Snapshot publication requires a newer authoritative simulation tick.");
+            error = "Snapshot publication requires a newer authoritative simulation tick.";
+            return RTSSnapshotPublication::NotReady;
         }
-        if (!m_impl->channel.Queue(snapshot, error))
+        const QueueResult result = m_impl->channel.TryQueue(snapshot, error);
+        if (result == QueueResult::Backpressure)
         {
-            return false;
+            return RTSSnapshotPublication::Backpressure;
+        }
+        if (result != QueueResult::Queued)
+        {
+            return RTSSnapshotPublication::InvalidState;
         }
         m_impl->lastPublishedTick = tick;
-        return true;
+        return RTSSnapshotPublication::Queued;
+    }
+
+    bool RTSHostConnection::PublishSnapshot(std::string& error)
+    {
+        return TryPublishSnapshot(error) == RTSSnapshotPublication::Queued;
     }
 
     void RTSHostConnection::Stop()

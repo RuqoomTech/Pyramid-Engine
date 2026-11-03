@@ -71,6 +71,19 @@ target_link_libraries(RTSProtocolTests PRIVATE Pyramid::RTSProtocol)
 set_target_properties(RTSProtocolTests PROPERTIES FOLDER "Tests/Examples")
 add_test(NAME Examples.RTSProtocol COMMAND $<TARGET_FILE:RTSProtocolTests>)
 
+add_executable(RTSReplicaTests RTSReplicaTests.cpp)
+target_link_libraries(RTSReplicaTests PRIVATE Pyramid::RTSReference)
+set_target_properties(RTSReplicaTests PROPERTIES FOLDER "Tests/Examples")
+add_test(NAME Examples.RTSReplica COMMAND $<TARGET_FILE:RTSReplicaTests>)
+
+add_executable(BasicGameLANUITests BasicGameLANUITests.cpp)
+target_link_libraries(BasicGameLANUITests PRIVATE Pyramid::UI)
+target_compile_definitions(BasicGameLANUITests PRIVATE
+    PYRAMID_BASIC_GAME_UI_TEST_FONT="${PROJECT_SOURCE_DIR}/Examples/BasicGame/Assets/Fonts/PyramidSans-64-sdf.pfont")
+target_include_directories(BasicGameLANUITests PRIVATE "${PROJECT_SOURCE_DIR}/Examples/BasicGame/include")
+set_target_properties(BasicGameLANUITests PROPERTIES FOLDER "Tests/Examples")
+add_test(NAME Examples.BasicGameLANUI COMMAND $<TARGET_FILE:BasicGameLANUITests>)
+
 if(WIN32)
     add_executable(TCPTests TCPTests.cpp)
     target_link_libraries(TCPTests PRIVATE Pyramid::Engine)
@@ -83,6 +96,12 @@ if(WIN32)
     set_target_properties(RTSConnectionTests PROPERTIES FOLDER "Tests/Examples")
     add_test(NAME Examples.RTSConnection COMMAND $<TARGET_FILE:RTSConnectionTests>)
     set_tests_properties(Examples.RTSConnection PROPERTIES TIMEOUT 30)
+
+    add_executable(RTSMatchTests RTSMatchTests.cpp)
+    target_link_libraries(RTSMatchTests PRIVATE Pyramid::RTSReference)
+    set_target_properties(RTSMatchTests PROPERTIES FOLDER "Tests/Examples")
+    add_test(NAME Examples.RTSMatch COMMAND $<TARGET_FILE:RTSMatchTests>)
+    set_tests_properties(Examples.RTSMatch PROPERTIES TIMEOUT 30)
 endif()
 
 add_executable(FramebufferResizeTests FramebufferResizeTests.cpp)
